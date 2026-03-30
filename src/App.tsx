@@ -7,6 +7,7 @@ import { POSPage } from './pages/POSPage';
 import { CreditsPage } from './pages/CreditsPage';
 import { CashRegisterPage } from './pages/CashRegisterPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
@@ -55,6 +56,8 @@ export function App() {
         return <CashRegisterPage />;
       case 'reports':
         return <ReportsPage />;
+      case 'barcodeLabels':
+        return <BarcodeLabelPage />;
       default:
         return <ProductsPage />;
     }

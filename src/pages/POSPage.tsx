@@ -10,6 +10,7 @@ import {
   Users,
   Printer,
 } from 'lucide-react';
+import JsBarcode from 'jsbarcode';
 import { useProducts } from '../hooks/useProducts';
 import { useCustomers } from '../hooks/useCustomers';
 import { useSales } from '../hooks/useSales';
@@ -66,9 +67,28 @@ export function POSPage() {
     loadDefaults();
   }, []);
 
-  // Focus search on mount
+  // Focus search on mount and refocus after interactions
   useEffect(() => {
     searchInputRef.current?.focus();
+  }, []);
+
+  // Global keyboard listener: refocus search input when typing starts
+  // This ensures USB barcode scanners work even if focus was lost
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      // Ignore if focus is on another input/select/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Ignore modifier keys and special keys
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1) return;
+
+      // Redirect keystroke to search input
+      searchInputRef.current?.focus();
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
   function showNotification(type: 'success' | 'error', message: string) {
@@ -576,59 +596,93 @@ export function POSPage() {
       {ticketData && (
         <div className={styles['ticket-overlay']} onClick={() => setTicketData(null)}>
           <div className={styles.ticket} onClick={e => e.stopPropagation()}>
-            <div className={styles['ticket__header']}>
-              <div className={styles['ticket__store-name']}>{ticketData.storeName}</div>
-              {ticketData.storeAddress && (
-                <div className={styles['ticket__store-info']}>{ticketData.storeAddress}</div>
+            <div className={styles['ticket__printable']} id="ticket-printable">
+              <div className={styles['ticket__header']}>
+                <div className={styles['ticket__store-name']}>{ticketData.storeName}</div>
+                {ticketData.storeAddress && (
+                  <div className={styles['ticket__store-info']}>{ticketData.storeAddress}</div>
+                )}
+              </div>
+
+              <hr className={styles['ticket__divider']} />
+
+              <div className={styles['ticket__meta']}>
+                <span>Venta #{ticketData.sale.id}</span>
+                <span>{formatDateTime(ticketData.sale.created_at)}</span>
+              </div>
+
+              {ticketData.customer && (
+                <div className={styles['ticket__meta']} style={{ marginTop: 4 }}>
+                  <span>Cliente: {ticketData.customer.name}</span>
+                  <span style={{ textTransform: 'capitalize' }}>{ticketData.sale.sale_type === 'credit' ? 'Credito' : 'Contado'}</span>
+                </div>
+              )}
+
+              {ticketData.sale.sale_type === 'cash' && (
+                <div className={styles['ticket__type-badge']}>CONTADO</div>
+              )}
+              {ticketData.sale.sale_type === 'credit' && (
+                <div className={`${styles['ticket__type-badge']} ${styles['ticket__type-badge--credit']}`}>CREDITO</div>
+              )}
+
+              <hr className={styles['ticket__divider']} />
+
+              <div className={styles['ticket__items']}>
+                {ticketData.items.map(item => (
+                  <div key={item.product_id} className={styles['ticket__item']}>
+                    <div className={styles['ticket__item-row']}>
+                      <span className={styles['ticket__item-name']}>{item.name}</span>
+                      <span className={styles['ticket__item-total']}>
+                        {formatCurrency(item.unit_price * item.quantity)}
+                      </span>
+                    </div>
+                    <div className={styles['ticket__item-detail']}>
+                      {item.quantity} x {formatCurrency(item.unit_price)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <hr className={styles['ticket__divider']} />
+
+              <div className={styles['ticket__totals']}>
+                <div className={styles['ticket__total-row']}>
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(ticketData.sale.subtotal)}</span>
+                </div>
+                <div className={`${styles['ticket__total-row']} ${styles['ticket__total-row--grand']}`}>
+                  <span>Total:</span>
+                  <span>{formatCurrency(ticketData.sale.total)}</span>
+                </div>
+              </div>
+
+              <hr className={styles['ticket__divider']} />
+
+              {/* Barcode for sale ID */}
+              <div className={styles['ticket__barcode']}>
+                <svg ref={el => {
+                  if (el) {
+                    try {
+                      JsBarcode(el, String(ticketData.sale.id).padStart(6, '0'), {
+                        format: 'CODE128',
+                        width: 1.5,
+                        height: 40,
+                        displayValue: true,
+                        fontSize: 10,
+                        margin: 0,
+                        font: 'monospace',
+                      });
+                    } catch {
+                      // Barcode rendering failed silently
+                    }
+                  }
+                }} />
+              </div>
+
+              {ticketData.footerText && (
+                <div className={styles['ticket__footer']}>{ticketData.footerText}</div>
               )}
             </div>
-
-            <hr className={styles['ticket__divider']} />
-
-            <div className={styles['ticket__meta']}>
-              <span>Venta #{ticketData.sale.id}</span>
-              <span>{formatDateTime(ticketData.sale.created_at)}</span>
-            </div>
-
-            {ticketData.customer && (
-              <div className={styles['ticket__meta']} style={{ marginTop: 4 }}>
-                <span>Cliente: {ticketData.customer.name}</span>
-                <span style={{ textTransform: 'capitalize' }}>{ticketData.sale.sale_type === 'credit' ? 'Credito' : 'Contado'}</span>
-              </div>
-            )}
-
-            <hr className={styles['ticket__divider']} />
-
-            <div className={styles['ticket__items']}>
-              {ticketData.items.map(item => (
-                <div key={item.product_id} className={styles['ticket__item']}>
-                  <span className={styles['ticket__item-name']}>{item.name}</span>
-                  <span className={styles['ticket__item-qty']}>x{item.quantity}</span>
-                  <span className={styles['ticket__item-total']}>
-                    {formatCurrency(item.unit_price * item.quantity)}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <hr className={styles['ticket__divider']} />
-
-            <div className={styles['ticket__totals']}>
-              <div className={styles['ticket__total-row']}>
-                <span>Subtotal:</span>
-                <span>{formatCurrency(ticketData.sale.subtotal)}</span>
-              </div>
-              <div className={`${styles['ticket__total-row']} ${styles['ticket__total-row--grand']}`}>
-                <span>Total:</span>
-                <span>{formatCurrency(ticketData.sale.total)}</span>
-              </div>
-            </div>
-
-            <hr className={styles['ticket__divider']} />
-
-            {ticketData.footerText && (
-              <div className={styles['ticket__footer']}>{ticketData.footerText}</div>
-            )}
 
             <div className={styles['ticket__actions']}>
               <button

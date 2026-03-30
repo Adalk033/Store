@@ -1,0 +1,436 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--spacing-md);
+}
+
+.page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.page__header h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.page__subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.page__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.page__toggle input {
+  accent-color: var(--color-primary);
+}
+
+.page__btn-primary {
+  padding: 10px var(--spacing-md);
+  background-color: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page__btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.page__btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page__content {
+  display: flex;
+  gap: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
+}
+
+/* Left panel: product selector */
+.page__selector {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.page__search {
+  position: relative;
+}
+
+.page__search-icon {
+  position: absolute;
+  left: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.page__search-input {
+  width: 100%;
+  padding: 12px var(--spacing-sm) 12px 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background-color: var(--color-card);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.page__search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--input-focus-ring);
+}
+
+.page__results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.page__result-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-card);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.page__result-item:hover {
+  border-color: var(--color-primary);
+}
+
+.page__result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.page__result-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page__result-barcode {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.page__result-price {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.page__result-add {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* Selected items */
+.page__selected {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-card);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.page__selected-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page__selected-header h2 {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.page__btn-clear {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page__btn-clear:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.page__items {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xs);
+}
+
+.page__item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.page__item:hover {
+  background-color: var(--color-bg);
+}
+
+.page__item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.page__item-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page__item-barcode {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.page__item-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page__qty-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-card);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--transition-fast);
+}
+
+.page__qty-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.page__qty {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  min-width: 24px;
+  text-align: center;
+}
+
+.page__item-remove {
+  padding: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+
+.page__item-remove:hover {
+  color: var(--color-error);
+}
+
+.page__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-lg);
+  text-align: center;
+}
+
+/* Right panel: print preview */
+.page__preview-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.page__preview-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.page__preview {
+  flex: 1;
+  background-color: var(--color-card);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  min-height: 0;
+}
+
+.page__label-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+/* Individual label */
+.label {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-xs) 4px;
+  text-align: center;
+  background: #fff;
+  break-inside: avoid;
+}
+
+.label__name {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.label__barcode {
+  max-width: 100%;
+  height: auto;
+}
+
+.label__price {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+/* Notification toast */
+.notification {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.notification--success {
+  background-color: var(--color-success);
+}
+
+.notification--error {
+  background-color: var(--color-error);
+}
+
+/* Print styles for barcode labels */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .page__preview,
+  .page__preview * {
+    visibility: visible;
+  }
+
+  .page__preview {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 5mm;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    background: #fff;
+  }
+
+  .page__label-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+  }
+
+  .label {
+    border: 1px dashed #ccc;
+    padding: 2mm;
+    page-break-inside: avoid;
+  }
+
+  .label__name {
+    font-size: 9pt;
+  }
+
+  .label__price {
+    font-size: 10pt;
+  }
+}

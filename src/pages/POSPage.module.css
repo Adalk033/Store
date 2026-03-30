@@ -581,6 +581,12 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   width: 320px;
   padding: var(--spacing-md);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.ticket__printable {
+  /* Wraps the printable content */
 }
 
 .ticket__header {
@@ -612,15 +618,36 @@
   justify-content: space-between;
 }
 
+.ticket__type-badge {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  margin-top: 6px;
+  padding: 2px 8px;
+  background-color: var(--color-success);
+  color: #fff;
+  border-radius: 4px;
+  display: inline-block;
+  width: 100%;
+}
+
+.ticket__type-badge--credit {
+  background-color: var(--color-warning);
+  color: var(--color-text);
+}
+
 .ticket__items {
   margin: var(--spacing-xs) 0;
 }
 
 .ticket__item {
+  padding: 3px 0;
+}
+
+.ticket__item-row {
   display: flex;
   justify-content: space-between;
   font-size: var(--font-size-xs);
-  padding: 2px 0;
 }
 
 .ticket__item-name {
@@ -629,6 +656,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
+}
+
+.ticket__item-detail {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
 }
 
 .ticket__item-qty {
@@ -660,6 +694,16 @@
   border-top: 1px solid var(--color-border);
 }
 
+.ticket__barcode {
+  text-align: center;
+  margin: var(--spacing-xs) 0;
+}
+
+.ticket__barcode svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .ticket__footer {
   text-align: center;
   font-size: var(--font-size-xs);
@@ -675,6 +719,80 @@
 
 .ticket__actions button {
   flex: 1;
+}
+
+/* Print styles for thermal receipt (80mm paper) */
+@media print {
+  /* Hide everything except the ticket */
+  body * {
+    visibility: hidden;
+  }
+
+  .ticket-overlay,
+  .ticket-overlay * {
+    visibility: visible;
+  }
+
+  .ticket-overlay {
+    position: absolute;
+    inset: 0;
+    background: none;
+    display: block;
+  }
+
+  .ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72mm;
+    padding: 2mm;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  .ticket__actions {
+    display: none;
+  }
+
+  .ticket__store-name {
+    font-size: 14px;
+  }
+
+  .ticket__store-info {
+    font-size: 10px;
+  }
+
+  .ticket__meta {
+    font-size: 10px;
+  }
+
+  .ticket__item-row {
+    font-size: 10px;
+  }
+
+  .ticket__item-detail {
+    font-size: 9px;
+  }
+
+  .ticket__total-row {
+    font-size: 11px;
+  }
+
+  .ticket__total-row--grand {
+    font-size: 13px;
+  }
+
+  .ticket__footer {
+    font-size: 10px;
+  }
+
+  .ticket__type-badge {
+    font-size: 10px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* Notification toast */
