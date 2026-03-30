@@ -9,8 +9,15 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-electron
 dist-ssr
+release
 *.local
+
+# SQLite database files (runtime data, not source)
+*.db
+*.db-shm
+*.db-wal
 
 # Editor directories and files
 .vscode/*
