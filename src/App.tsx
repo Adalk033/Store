@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
+import { MainLayout } from './components/layout/MainLayout';
+import type { PageId } from './components/layout/Sidebar';
+import { ProductsPage } from './pages/ProductsPage';
+import { InventoryPage } from './pages/InventoryPage';
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
-  const [storeName, setStoreName] = useState('');
+  const [currentPage, setCurrentPage] = useState<PageId>('products');
 
   useEffect(() => {
     async function checkConnection() {
       try {
-        const name = await window.electronAPI.settings.get('store_name');
-        setStoreName(name ?? 'MichiPapeleria');
+        await window.electronAPI.settings.get('store_name');
         setDbStatus('connected');
       } catch (error) {
         console.error('Error connecting to database:', error);
@@ -18,17 +21,36 @@ export function App() {
     checkConnection();
   }, []);
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-      <h1>{storeName || 'MichiPapeleria'}</h1>
-      <p style={{ color: 'var(--color-text-secondary)' }}>Punto de Venta</p>
-      {dbStatus === 'loading' && <p>Conectando a la base de datos...</p>}
-      {dbStatus === 'connected' && (
-        <p style={{ color: 'var(--color-success)' }}>Base de datos conectada correctamente</p>
-      )}
-      {dbStatus === 'error' && (
+  if (dbStatus === 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <p>Conectando a la base de datos...</p>
+      </div>
+    );
+  }
+
+  if (dbStatus === 'error') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <p style={{ color: 'var(--color-error)' }}>Error al conectar con la base de datos</p>
-      )}
-    </div>
+      </div>
+    );
+  }
+
+  function renderPage() {
+    switch (currentPage) {
+      case 'products':
+        return <ProductsPage />;
+      case 'inventory':
+        return <InventoryPage />;
+      default:
+        return <ProductsPage />;
+    }
+  }
+
+  return (
+    <MainLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+      {renderPage()}
+    </MainLayout>
   );
 }
