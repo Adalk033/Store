@@ -109,6 +109,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => cashRegisterRepo.getCurrentPeriod());
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => cashRegisterRepo.getAllPeriods());
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, (_, data) => cashRegisterRepo.addCashMovement(data));
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => cashRegisterRepo.getMovementsByPeriod(cashRegisterId));
 
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_, key: string) => settingsRepo.getSetting(key));

@@ -48,6 +48,7 @@ export const IPC_CHANNELS = {
   CASH_REGISTER_GET_CURRENT: 'cashRegister:getCurrent',
   CASH_REGISTER_GET_ALL: 'cashRegister:getAll',
   CASH_REGISTER_ADD_MOVEMENT: 'cashRegister:addMovement',
+  CASH_REGISTER_GET_MOVEMENTS: 'cashRegister:getMovements',
 
   // Settings
   SETTINGS_GET: 'settings:get',

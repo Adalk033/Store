@@ -84,3 +84,10 @@ export function addCashMovement(data: {
     Number(result.lastInsertRowid)
   ) as CashMovement;
 }
+
+export function getMovementsByPeriod(cashRegisterId: number): CashMovement[] {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT * FROM cash_movements WHERE cash_register_id = ? ORDER BY created_at DESC'
+  ).all(cashRegisterId) as CashMovement[];
+}
