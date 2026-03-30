@@ -29,7 +29,7 @@ MichiPapeleria is a fully local, single-PC point-of-sale (POS) desktop applicati
 | Tickets | electron-pos-printer or jsPDF |
 | Charts | Recharts or Chart.js |
 
-Do NOT add Babel, Tailwind, styled-components, shadcn/ui, or any other styling/compilation library.
+Do NOT add Tailwind, styled-components, shadcn/ui, or any other styling/compilation library.
 
 ## Design System
 

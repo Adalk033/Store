@@ -27,7 +27,7 @@ MichiPapeleria is a fully local, offline desktop POS (point-of-sale) application
 - **Charts**: Recharts or Chart.js
 - **Tickets**: electron-pos-printer or jsPDF
 
-Do NOT introduce: Tailwind, styled-components, shadcn/ui, Babel, any ORM, any additional styling framework.
+Do NOT introduce: Tailwind, styled-components, shadcn/ui, any ORM, any additional styling framework.
 
 ## Design System
 
