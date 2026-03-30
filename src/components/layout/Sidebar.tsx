@@ -14,7 +14,7 @@ const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabl
   { id: 'pos', label: 'Punto de Venta', icon: ShoppingCart },
   { id: 'credits', label: 'Creditos', icon: Users },
   { id: 'cashRegister', label: 'Caja', icon: Calculator },
-  { id: 'reports', label: 'Reportes', icon: BarChart3, disabled: true },
+  { id: 'reports', label: 'Reportes', icon: BarChart3 },
   { id: 'settings', label: 'Configuracion', icon: Settings, disabled: true },
 ];
 

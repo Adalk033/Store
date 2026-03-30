@@ -6,6 +6,7 @@ import { InventoryPage } from './pages/InventoryPage';
 import { POSPage } from './pages/POSPage';
 import { CreditsPage } from './pages/CreditsPage';
 import { CashRegisterPage } from './pages/CashRegisterPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
@@ -52,6 +53,8 @@ export function App() {
         return <CreditsPage />;
       case 'cashRegister':
         return <CashRegisterPage />;
+      case 'reports':
+        return <ReportsPage />;
       default:
         return <ProductsPage />;
     }

@@ -116,6 +116,22 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
   },
 
+  // Reports
+  reports: {
+    salesByDate: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_SALES_BY_DATE, startDate, endDate),
+    topProducts: (startDate: string, endDate: string, limit?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, startDate, endDate, limit),
+    profit: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_PROFIT, startDate, endDate),
+    inventory: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_INVENTORY),
+    inventorySummary: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY),
+    creditsOverview: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW),
+  },
+
   // Settings
   settings: {
     get: (key: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET, key),

@@ -14,6 +14,7 @@ import * as creditsRepo from './database/repositories/credits';
 import * as inventoryRepo from './database/repositories/inventory';
 import * as cashRegisterRepo from './database/repositories/cashRegister';
 import * as settingsRepo from './database/repositories/settings';
+import * as reportsRepo from './database/repositories/reports';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -110,6 +111,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => cashRegisterRepo.getAllPeriods());
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, (_, data) => cashRegisterRepo.addCashMovement(data));
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => cashRegisterRepo.getMovementsByPeriod(cashRegisterId));
+
+  // Reports
+  ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => reportsRepo.getSalesByDateRange(startDate, endDate));
+  ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => reportsRepo.getTopProducts(startDate, endDate, limit));
+  ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, (_, startDate: string, endDate: string) => reportsRepo.getProfitReport(startDate, endDate));
+  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY, () => reportsRepo.getInventoryReport());
+  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY, () => reportsRepo.getInventorySummary());
+  ipcMain.handle(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW, () => reportsRepo.getCreditsOverview());
 
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_, key: string) => settingsRepo.getSetting(key));

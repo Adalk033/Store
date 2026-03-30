@@ -50,6 +50,14 @@ export const IPC_CHANNELS = {
   CASH_REGISTER_ADD_MOVEMENT: 'cashRegister:addMovement',
   CASH_REGISTER_GET_MOVEMENTS: 'cashRegister:getMovements',
 
+  // Reports
+  REPORTS_SALES_BY_DATE: 'reports:salesByDate',
+  REPORTS_TOP_PRODUCTS: 'reports:topProducts',
+  REPORTS_PROFIT: 'reports:profit',
+  REPORTS_INVENTORY: 'reports:inventory',
+  REPORTS_INVENTORY_SUMMARY: 'reports:inventorySummary',
+  REPORTS_CREDITS_OVERVIEW: 'reports:creditsOverview',
+
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_GET_ALL: 'settings:getAll',
