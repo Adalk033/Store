@@ -31,8 +31,10 @@ export const IPC_CHANNELS = {
 
   // Credits
   CREDITS_GET_ALL: 'credits:getAll',
+  CREDITS_GET_BY_ID: 'credits:getById',
   CREDITS_GET_BY_CUSTOMER: 'credits:getByCustomer',
   CREDITS_ADD_PAYMENT: 'credits:addPayment',
+  CREDITS_GET_PAYMENTS: 'credits:getPayments',
   CREDITS_CHECK_OVERDUE: 'credits:checkOverdue',
 
   // Inventory

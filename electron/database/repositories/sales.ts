@@ -10,6 +10,9 @@ interface CreateSaleData {
     unit_price: number;
   }>;
   cash_register_id?: number | null;
+  // Credit-specific fields (required when sale_type === 'credit')
+  credit_days?: number;
+  surcharge_percent?: number;
 }
 
 export function createSale(data: CreateSaleData): Sale {
@@ -54,6 +57,17 @@ export function createSale(data: CreateSaleData): Sale {
       insertItem.run(saleId, item.product_id, item.quantity, item.unit_price);
       updateStock.run(item.quantity, item.product_id);
       insertMovement.run(item.product_id, -item.quantity, saleId);
+    }
+
+    // Create credit record for credit sales
+    if (data.sale_type === 'credit' && data.customer_id) {
+      const creditDays = data.credit_days ?? 5;
+      const surchargePercent = data.surcharge_percent ?? 0;
+
+      db.prepare(`
+        INSERT INTO credits (sale_id, customer_id, original_amount, due_date, surcharge_percent, total_due)
+        VALUES (?, ?, ?, date('now', 'localtime', '+' || ? || ' days'), ?, ?)
+      `).run(saleId, data.customer_id, subtotal, creditDays, surchargePercent, subtotal);
     }
 
     return saleId;

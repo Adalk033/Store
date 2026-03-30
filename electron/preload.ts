@@ -62,6 +62,8 @@ const electronAPI = {
       customer_id?: number | null;
       items: Array<{ product_id: number; quantity: number; unit_price: number }>;
       cash_register_id?: number | null;
+      credit_days?: number;
+      surcharge_percent?: number;
     }) => ipcRenderer.invoke(IPC_CHANNELS.SALES_CREATE, data),
     getAll: (limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),
@@ -71,10 +73,13 @@ const electronAPI = {
   // Credits
   credits: {
     getAll: (status?: string) => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_ALL, status),
+    getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_ID, id),
     getByCustomer: (customerId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, customerId),
     addPayment: (creditId: number, amount: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_ADD_PAYMENT, creditId, amount),
+    getPayments: (creditId: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS, creditId),
     checkOverdue: () => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_CHECK_OVERDUE),
   },
 

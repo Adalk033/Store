@@ -92,8 +92,10 @@ function registerIpcHandlers(): void {
 
   // Credits
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => creditsRepo.getAllCredits(status));
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_ID, (_, id: number) => creditsRepo.getCreditById(id));
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, (_, customerId: number) => creditsRepo.getCreditsByCustomer(customerId));
   ipcMain.handle(IPC_CHANNELS.CREDITS_ADD_PAYMENT, (_, creditId: number, amount: number) => creditsRepo.addCreditPayment(creditId, amount));
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => creditsRepo.getCreditPayments(creditId));
   ipcMain.handle(IPC_CHANNELS.CREDITS_CHECK_OVERDUE, () => creditsRepo.checkOverdueCredits());
 
   // Inventory

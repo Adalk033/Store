@@ -3,6 +3,8 @@ import { MainLayout } from './components/layout/MainLayout';
 import type { PageId } from './components/layout/Sidebar';
 import { ProductsPage } from './pages/ProductsPage';
 import { InventoryPage } from './pages/InventoryPage';
+import { POSPage } from './pages/POSPage';
+import { CreditsPage } from './pages/CreditsPage';
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
@@ -43,6 +45,10 @@ export function App() {
         return <ProductsPage />;
       case 'inventory':
         return <InventoryPage />;
+      case 'pos':
+        return <POSPage />;
+      case 'credits':
+        return <CreditsPage />;
       default:
         return <ProductsPage />;
     }
