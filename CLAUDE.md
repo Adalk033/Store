@@ -31,6 +31,43 @@ MichiPapeleria is a fully local, single-PC point-of-sale (POS) desktop applicati
 
 Do NOT add Babel, Tailwind, styled-components, shadcn/ui, or any other styling/compilation library.
 
+## Design System
+
+The full design spec lives in `docs/DESIGN.md`. Key tokens are implemented as CSS custom properties in `src/styles/globals.css`. Always reference these variables instead of hardcoding values.
+
+### Color Palette
+
+- Background surface: `--color-bg` = `#F9F9F9`
+- Card containers: `--color-card` = `#FFFFFF`
+- Primary action / nav: `--color-primary` = `#1A2B3C`
+- Text primary: `--color-text` = `#111827`
+- Text secondary / labels: `--color-text-secondary` = `#6B7280`
+- Borders / lines: `--color-border` = `#E5E7EB`
+- Success / high stock: `--color-success` = `#10B981`
+- Warning / low stock: `--color-warning` = `#F59E0B`
+- Error / no stock: `--color-error` = `#EF4444`
+
+### Typography
+
+- Font: Google Sans (loaded from `/fonts/`)
+- H1: 24px SemiBold | H2: 18px Medium | Body: 14-16px Regular | Meta/SKU: 12px Regular
+
+### Spacing & Layout
+
+- Spacing scale: multiples of 8px (8, 16, 24, 32, 48, 64)
+- Screen padding: 32px
+- Card gap/gutter: 24px
+
+### Components
+
+- Border radius: 12px
+- Card border: 1px solid `--color-border`
+- Card shadow: `0px 4px 6px -1px rgba(0, 0, 0, 0.05)`
+- Primary button: bg `--color-primary`, white text, padding 12px 24px
+- Secondary button: transparent bg, 1px border `--color-primary`, text `--color-primary`
+- Input focus: 2px ring `--color-primary` at 20% opacity
+- Icons: Lucide Icons, stroke 1.5-2px, 20x20px, color `--color-text-secondary`
+
 ## Project Structure
 michipapeleria/
 
