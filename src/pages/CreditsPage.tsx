@@ -123,18 +123,20 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   }, [getPayments]);
 
   useEffect(() => {
-    if (!initialCreditId || viewMode !== 'list') {
+    if (typeof initialCreditId !== 'number' || viewMode !== 'list') {
       return;
     }
+
+    const creditId = initialCreditId;
 
     let cancelled = false;
 
     async function openInitialCreditDetail() {
       try {
-        let targetCredit = credits.find(credit => credit.id === initialCreditId);
+        let targetCredit = credits.find(credit => credit.id === creditId);
 
         if (!targetCredit) {
-          targetCredit = await getCreditById(initialCreditId);
+          targetCredit = await getCreditById(creditId);
         }
 
         if (!targetCredit || cancelled) {
