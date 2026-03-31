@@ -20,6 +20,71 @@ type ReportTab = 'sales' | 'products' | 'profit' | 'inventory' | 'credits';
 
 const CHART_COLORS = ['#1A2B3C', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#8B5CF6', '#EC4899', '#14B8A6'];
 
+const TABLE_ROWS_OPTIONS = [5, 10, 15, 25] as const;
+
+const CREDIT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendiente',
+  overdue: 'Vencido',
+  paid: 'Pagado',
+};
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function filterByQuery<T>(rows: T[], query: string, getValues: (row: T) => Array<unknown>): T[] {
+  const q = normalizeText(query);
+  if (!q) return rows;
+
+  return rows.filter(row => {
+    const values = getValues(row);
+    return values.some(v => normalizeText(v).includes(q));
+  });
+}
+
+function paginateRows<T>(rows: T[], page: number, rowsPerPage: number): { pageRows: T[]; totalPages: number } {
+  const safeRowsPerPage = rowsPerPage > 0 ? rowsPerPage : 5;
+  const totalPages = Math.max(1, Math.ceil(rows.length / safeRowsPerPage));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (safePage - 1) * safeRowsPerPage;
+  const endIndex = startIndex + safeRowsPerPage;
+  return { pageRows: rows.slice(startIndex, endIndex), totalPages };
+}
+
+function usePersistedRowsPerPage(tableId: string, defaultValue: number): [number, (value: number) => void] {
+  const storageKey = `reports.table.rowsPerPage.${tableId}`;
+  const [rowsPerPage, setRowsPerPage] = useState<number>(defaultValue);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return;
+      if (!TABLE_ROWS_OPTIONS.includes(parsed as (typeof TABLE_ROWS_OPTIONS)[number])) return;
+      setRowsPerPage(parsed);
+    } catch (err) {
+      console.log('Failed to read table rowsPerPage from localStorage', { storageKey, err });
+    }
+  }, [storageKey]);
+
+  const setPersistedRowsPerPage = useCallback((value: number) => {
+    const next = TABLE_ROWS_OPTIONS.includes(value as (typeof TABLE_ROWS_OPTIONS)[number]) ? value : defaultValue;
+    setRowsPerPage(next);
+    try {
+      localStorage.setItem(storageKey, String(next));
+    } catch (err) {
+      console.log('Failed to write table rowsPerPage to localStorage', { storageKey, err });
+    }
+  }, [defaultValue, storageKey]);
+
+  return [rowsPerPage, setPersistedRowsPerPage];
+}
+
 // Date helpers
 function toISODate(date: Date): string {
   const y = date.getFullYear();
@@ -77,6 +142,27 @@ export function ReportsPage() {
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
   const [creditsData, setCreditsData] = useState<CreditsOverviewRow[]>([]);
 
+  // Per-table UI state (search + pagination)
+  const [salesTopSearch, setSalesTopSearch] = useState('');
+  const [salesTopPage, setSalesTopPage] = useState(1);
+  const [salesTopRowsPerPage, setSalesTopRowsPerPage] = usePersistedRowsPerPage('sales.topProducts', 5);
+
+  const [productsDetailSearch, setProductsDetailSearch] = useState('');
+  const [productsDetailPage, setProductsDetailPage] = useState(1);
+  const [productsDetailRowsPerPage, setProductsDetailRowsPerPage] = usePersistedRowsPerPage('products.detailTopProducts', 5);
+
+  const [profitDetailSearch, setProfitDetailSearch] = useState('');
+  const [profitDetailPage, setProfitDetailPage] = useState(1);
+  const [profitDetailRowsPerPage, setProfitDetailRowsPerPage] = usePersistedRowsPerPage('profit.detail', 5);
+
+  const [inventoryDetailSearch, setInventoryDetailSearch] = useState('');
+  const [inventoryDetailPage, setInventoryDetailPage] = useState(1);
+  const [inventoryDetailRowsPerPage, setInventoryDetailRowsPerPage] = usePersistedRowsPerPage('inventory.detail', 5);
+
+  const [creditsSummarySearch, setCreditsSummarySearch] = useState('');
+  const [creditsSummaryPage, setCreditsSummaryPage] = useState(1);
+  const [creditsSummaryRowsPerPage, setCreditsSummaryRowsPerPage] = usePersistedRowsPerPage('credits.summaryByStatus', 5);
+
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
@@ -87,7 +173,7 @@ export function ReportsPage() {
     try {
       const [sales, top] = await Promise.all([
         getSalesByDate(startDate, endDate),
-        getTopProducts(startDate, endDate, 10),
+        getTopProducts(startDate, endDate, 100),
       ]);
       setSalesData(sales);
       setTopProducts(top);
@@ -99,13 +185,86 @@ export function ReportsPage() {
 
   const loadTopProductsReport = useCallback(async () => {
     try {
-      const data = await getTopProducts(startDate, endDate, 20);
+      const data = await getTopProducts(startDate, endDate, 200);
       setTopProducts(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar productos';
       showNotification('error', message);
     }
   }, [startDate, endDate, getTopProducts]);
+
+  const salesTopFiltered = useMemo(() => {
+    return filterByQuery(topProducts, salesTopSearch, r => [r.product_name, r.total_quantity, r.total_revenue]);
+  }, [topProducts, salesTopSearch]);
+  const salesTopPagination = useMemo(() => {
+    return paginateRows(salesTopFiltered, salesTopPage, salesTopRowsPerPage);
+  }, [salesTopFiltered, salesTopPage, salesTopRowsPerPage]);
+
+  const productsDetailFiltered = useMemo(() => {
+    return filterByQuery(topProducts, productsDetailSearch, r => [r.product_name, r.total_quantity, r.total_revenue]);
+  }, [topProducts, productsDetailSearch]);
+  const productsDetailPagination = useMemo(() => {
+    return paginateRows(productsDetailFiltered, productsDetailPage, productsDetailRowsPerPage);
+  }, [productsDetailFiltered, productsDetailPage, productsDetailRowsPerPage]);
+
+  const profitDetailFiltered = useMemo(() => {
+    return filterByQuery(profitData, profitDetailSearch, r => [
+      r.product_name,
+      r.total_quantity,
+      r.total_revenue,
+      r.total_cost,
+      r.profit,
+      r.margin,
+    ]);
+  }, [profitData, profitDetailSearch]);
+  const profitDetailPagination = useMemo(() => {
+    return paginateRows(profitDetailFiltered, profitDetailPage, profitDetailRowsPerPage);
+  }, [profitDetailFiltered, profitDetailPage, profitDetailRowsPerPage]);
+
+  const inventoryDetailFiltered = useMemo(() => {
+    return filterByQuery(inventoryData, inventoryDetailSearch, r => [
+      r.product_name,
+      r.stock,
+      r.cost_price,
+      r.sale_price,
+      r.stock_value_cost,
+      r.stock_value_sale,
+    ]);
+  }, [inventoryData, inventoryDetailSearch]);
+  const inventoryDetailPagination = useMemo(() => {
+    return paginateRows(inventoryDetailFiltered, inventoryDetailPage, inventoryDetailRowsPerPage);
+  }, [inventoryDetailFiltered, inventoryDetailPage, inventoryDetailRowsPerPage]);
+
+  const creditsSummaryFiltered = useMemo(() => {
+    return filterByQuery(creditsData, creditsSummarySearch, r => [
+      r.status,
+      CREDIT_STATUS_LABELS[r.status] || r.status,
+      r.count,
+      r.total_due,
+      r.total_paid,
+      r.total_remaining,
+    ]);
+  }, [creditsData, creditsSummarySearch]);
+  const creditsSummaryPagination = useMemo(() => {
+    return paginateRows(creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage);
+  }, [creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage]);
+
+  // Clamp pages when data/filter changes
+  useEffect(() => {
+    if (salesTopPage > salesTopPagination.totalPages) setSalesTopPage(1);
+  }, [salesTopPage, salesTopPagination.totalPages]);
+  useEffect(() => {
+    if (productsDetailPage > productsDetailPagination.totalPages) setProductsDetailPage(1);
+  }, [productsDetailPage, productsDetailPagination.totalPages]);
+  useEffect(() => {
+    if (profitDetailPage > profitDetailPagination.totalPages) setProfitDetailPage(1);
+  }, [profitDetailPage, profitDetailPagination.totalPages]);
+  useEffect(() => {
+    if (inventoryDetailPage > inventoryDetailPagination.totalPages) setInventoryDetailPage(1);
+  }, [inventoryDetailPage, inventoryDetailPagination.totalPages]);
+  useEffect(() => {
+    if (creditsSummaryPage > creditsSummaryPagination.totalPages) setCreditsSummaryPage(1);
+  }, [creditsSummaryPage, creditsSummaryPagination.totalPages]);
 
   const loadProfitReport = useCallback(async () => {
     try {
@@ -292,6 +451,52 @@ export function ReportsPage() {
         {topProducts.length > 0 && (
           <div className={styles['table-card']}>
             <h3 className={styles['table-card__title']}>Productos Mas Vendidos</h3>
+
+            <div className={styles['table-controls']}>
+              <input
+                type="text"
+                className={styles['table-controls__search']}
+                placeholder="Buscar..."
+                value={salesTopSearch}
+                onChange={e => { setSalesTopSearch(e.target.value); setSalesTopPage(1); }}
+              />
+
+              <div className={styles['table-controls__right']}>
+                <label className={styles['table-controls__label']}>
+                  Filas
+                  <select
+                    className={styles['table-controls__select']}
+                    value={salesTopRowsPerPage}
+                    onChange={e => { setSalesTopRowsPerPage(Number(e.target.value)); setSalesTopPage(1); }}
+                  >
+                    {TABLE_ROWS_OPTIONS.map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className={styles.pager}>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setSalesTopPage(p => Math.max(1, p - 1))}
+                    disabled={salesTopPage <= 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className={styles['pager__text']}>
+                    Pagina {Math.min(salesTopPage, salesTopPagination.totalPages)} de {salesTopPagination.totalPages}
+                  </span>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setSalesTopPage(p => Math.min(salesTopPagination.totalPages, p + 1))}
+                    disabled={salesTopPage >= salesTopPagination.totalPages}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -302,14 +507,20 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {topProducts.map((p, i) => (
-                  <tr key={p.product_id}>
-                    <td>{i + 1}</td>
-                    <td>{p.product_name}</td>
-                    <td>{p.total_quantity}</td>
-                    <td>{formatCurrency(p.total_revenue)}</td>
+                {salesTopPagination.pageRows.length > 0 ? (
+                  salesTopPagination.pageRows.map((p, i) => (
+                    <tr key={p.product_id}>
+                      <td>{(Math.min(salesTopPage, salesTopPagination.totalPages) - 1) * salesTopRowsPerPage + i + 1}</td>
+                      <td>{p.product_name}</td>
+                      <td>{p.total_quantity}</td>
+                      <td>{formatCurrency(p.total_revenue)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -381,6 +592,52 @@ export function ReportsPage() {
         {topProducts.length > 0 && (
           <div className={styles['table-card']}>
             <h3 className={styles['table-card__title']}>Detalle de Productos Vendidos</h3>
+
+            <div className={styles['table-controls']}>
+              <input
+                type="text"
+                className={styles['table-controls__search']}
+                placeholder="Buscar..."
+                value={productsDetailSearch}
+                onChange={e => { setProductsDetailSearch(e.target.value); setProductsDetailPage(1); }}
+              />
+
+              <div className={styles['table-controls__right']}>
+                <label className={styles['table-controls__label']}>
+                  Filas
+                  <select
+                    className={styles['table-controls__select']}
+                    value={productsDetailRowsPerPage}
+                    onChange={e => { setProductsDetailRowsPerPage(Number(e.target.value)); setProductsDetailPage(1); }}
+                  >
+                    {TABLE_ROWS_OPTIONS.map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className={styles.pager}>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setProductsDetailPage(p => Math.max(1, p - 1))}
+                    disabled={productsDetailPage <= 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className={styles['pager__text']}>
+                    Pagina {Math.min(productsDetailPage, productsDetailPagination.totalPages)} de {productsDetailPagination.totalPages}
+                  </span>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setProductsDetailPage(p => Math.min(productsDetailPagination.totalPages, p + 1))}
+                    disabled={productsDetailPage >= productsDetailPagination.totalPages}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -391,14 +648,20 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {topProducts.map((p, i) => (
-                  <tr key={p.product_id}>
-                    <td>{i + 1}</td>
-                    <td>{p.product_name}</td>
-                    <td>{p.total_quantity}</td>
-                    <td>{formatCurrency(p.total_revenue)}</td>
+                {productsDetailPagination.pageRows.length > 0 ? (
+                  productsDetailPagination.pageRows.map((p, i) => (
+                    <tr key={p.product_id}>
+                      <td>{(Math.min(productsDetailPage, productsDetailPagination.totalPages) - 1) * productsDetailRowsPerPage + i + 1}</td>
+                      <td>{p.product_name}</td>
+                      <td>{p.total_quantity}</td>
+                      <td>{formatCurrency(p.total_revenue)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -455,6 +718,52 @@ export function ReportsPage() {
 
             <div className={styles['table-card']}>
               <h3 className={styles['table-card__title']}>Detalle de Utilidades</h3>
+
+              <div className={styles['table-controls']}>
+                <input
+                  type="text"
+                  className={styles['table-controls__search']}
+                  placeholder="Buscar..."
+                  value={profitDetailSearch}
+                  onChange={e => { setProfitDetailSearch(e.target.value); setProfitDetailPage(1); }}
+                />
+
+                <div className={styles['table-controls__right']}>
+                  <label className={styles['table-controls__label']}>
+                    Filas
+                    <select
+                      className={styles['table-controls__select']}
+                      value={profitDetailRowsPerPage}
+                      onChange={e => { setProfitDetailRowsPerPage(Number(e.target.value)); setProfitDetailPage(1); }}
+                    >
+                      {TABLE_ROWS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className={styles.pager}>
+                    <button
+                      className={styles['pager__btn']}
+                      onClick={() => setProfitDetailPage(p => Math.max(1, p - 1))}
+                      disabled={profitDetailPage <= 1}
+                    >
+                      Anterior
+                    </button>
+                    <span className={styles['pager__text']}>
+                      Pagina {Math.min(profitDetailPage, profitDetailPagination.totalPages)} de {profitDetailPagination.totalPages}
+                    </span>
+                    <button
+                      className={styles['pager__btn']}
+                      onClick={() => setProfitDetailPage(p => Math.min(profitDetailPagination.totalPages, p + 1))}
+                      disabled={profitDetailPage >= profitDetailPagination.totalPages}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -467,20 +776,26 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {profitData.map(p => (
-                    <tr key={p.product_id}>
-                      <td>{p.product_name}</td>
-                      <td>{p.total_quantity}</td>
-                      <td>{formatCurrency(p.total_revenue)}</td>
-                      <td>{formatCurrency(p.total_cost)}</td>
-                      <td>
-                        <span className={p.profit >= 0 ? styles['profit--positive'] : styles['profit--negative']}>
-                          {formatCurrency(p.profit)}
-                        </span>
-                      </td>
-                      <td>{p.margin.toFixed(1)}%</td>
+                  {profitDetailPagination.pageRows.length > 0 ? (
+                    profitDetailPagination.pageRows.map(p => (
+                      <tr key={p.product_id}>
+                        <td>{p.product_name}</td>
+                        <td>{p.total_quantity}</td>
+                        <td>{formatCurrency(p.total_revenue)}</td>
+                        <td>{formatCurrency(p.total_cost)}</td>
+                        <td>
+                          <span className={p.profit >= 0 ? styles['profit--positive'] : styles['profit--negative']}>
+                            {formatCurrency(p.profit)}
+                          </span>
+                        </td>
+                        <td>{p.margin.toFixed(1)}%</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className={styles.table__empty} colSpan={6}>No hay resultados</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -552,6 +867,52 @@ export function ReportsPage() {
 
             <div className={styles['table-card']}>
               <h3 className={styles['table-card__title']}>Detalle de Inventario</h3>
+
+              <div className={styles['table-controls']}>
+                <input
+                  type="text"
+                  className={styles['table-controls__search']}
+                  placeholder="Buscar..."
+                  value={inventoryDetailSearch}
+                  onChange={e => { setInventoryDetailSearch(e.target.value); setInventoryDetailPage(1); }}
+                />
+
+                <div className={styles['table-controls__right']}>
+                  <label className={styles['table-controls__label']}>
+                    Filas
+                    <select
+                      className={styles['table-controls__select']}
+                      value={inventoryDetailRowsPerPage}
+                      onChange={e => { setInventoryDetailRowsPerPage(Number(e.target.value)); setInventoryDetailPage(1); }}
+                    >
+                      {TABLE_ROWS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className={styles.pager}>
+                    <button
+                      className={styles['pager__btn']}
+                      onClick={() => setInventoryDetailPage(p => Math.max(1, p - 1))}
+                      disabled={inventoryDetailPage <= 1}
+                    >
+                      Anterior
+                    </button>
+                    <span className={styles['pager__text']}>
+                      Pagina {Math.min(inventoryDetailPage, inventoryDetailPagination.totalPages)} de {inventoryDetailPagination.totalPages}
+                    </span>
+                    <button
+                      className={styles['pager__btn']}
+                      onClick={() => setInventoryDetailPage(p => Math.min(inventoryDetailPagination.totalPages, p + 1))}
+                      disabled={inventoryDetailPage >= inventoryDetailPagination.totalPages}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -564,20 +925,26 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inventoryData.map(p => (
-                    <tr key={p.product_id}>
-                      <td>{p.product_name}</td>
-                      <td>
-                        <span className={p.stock <= 5 ? styles['stock--low'] : styles['stock--ok']}>
-                          {p.stock}
-                        </span>
-                      </td>
-                      <td>{formatCurrency(p.cost_price)}</td>
-                      <td>{formatCurrency(p.sale_price)}</td>
-                      <td>{formatCurrency(p.stock_value_cost)}</td>
-                      <td>{formatCurrency(p.stock_value_sale)}</td>
+                  {inventoryDetailPagination.pageRows.length > 0 ? (
+                    inventoryDetailPagination.pageRows.map(p => (
+                      <tr key={p.product_id}>
+                        <td>{p.product_name}</td>
+                        <td>
+                          <span className={p.stock <= 5 ? styles['stock--low'] : styles['stock--ok']}>
+                            {p.stock}
+                          </span>
+                        </td>
+                        <td>{formatCurrency(p.cost_price)}</td>
+                        <td>{formatCurrency(p.sale_price)}</td>
+                        <td>{formatCurrency(p.stock_value_cost)}</td>
+                        <td>{formatCurrency(p.stock_value_sale)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className={styles.table__empty} colSpan={6}>No hay resultados</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -592,12 +959,6 @@ export function ReportsPage() {
   }
 
   function renderCreditsTab() {
-    const statusLabels: Record<string, string> = {
-      pending: 'Pendiente',
-      overdue: 'Vencido',
-      paid: 'Pagado',
-    };
-
     return (
       <>
         <div className={styles.summary}>
@@ -631,7 +992,7 @@ export function ReportsPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={creditsData.map(d => ({ ...d, name: statusLabels[d.status] || d.status }))}
+                      data={creditsData.map(d => ({ ...d, name: CREDIT_STATUS_LABELS[d.status] || d.status }))}
                       dataKey="count"
                       nameKey="name"
                       cx="50%"
@@ -659,7 +1020,7 @@ export function ReportsPage() {
               <h3 className={styles['chart-card__title']}>Montos por Estado</h3>
               <div className={styles['chart-container']}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={creditsData.map(d => ({ ...d, name: statusLabels[d.status] || d.status }))}>
+                  <BarChart data={creditsData.map(d => ({ ...d, name: CREDIT_STATUS_LABELS[d.status] || d.status }))}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                     <YAxis tickFormatter={(val: number) => `$${val}`} tick={{ fontSize: 12 }} />
@@ -682,6 +1043,52 @@ export function ReportsPage() {
         {creditsData.length > 0 && (
           <div className={styles['table-card']}>
             <h3 className={styles['table-card__title']}>Resumen por Estado</h3>
+
+            <div className={styles['table-controls']}>
+              <input
+                type="text"
+                className={styles['table-controls__search']}
+                placeholder="Buscar..."
+                value={creditsSummarySearch}
+                onChange={e => { setCreditsSummarySearch(e.target.value); setCreditsSummaryPage(1); }}
+              />
+
+              <div className={styles['table-controls__right']}>
+                <label className={styles['table-controls__label']}>
+                  Filas
+                  <select
+                    className={styles['table-controls__select']}
+                    value={creditsSummaryRowsPerPage}
+                    onChange={e => { setCreditsSummaryRowsPerPage(Number(e.target.value)); setCreditsSummaryPage(1); }}
+                  >
+                    {TABLE_ROWS_OPTIONS.map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className={styles.pager}>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setCreditsSummaryPage(p => Math.max(1, p - 1))}
+                    disabled={creditsSummaryPage <= 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className={styles['pager__text']}>
+                    Pagina {Math.min(creditsSummaryPage, creditsSummaryPagination.totalPages)} de {creditsSummaryPagination.totalPages}
+                  </span>
+                  <button
+                    className={styles['pager__btn']}
+                    onClick={() => setCreditsSummaryPage(p => Math.min(creditsSummaryPagination.totalPages, p + 1))}
+                    disabled={creditsSummaryPage >= creditsSummaryPagination.totalPages}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -693,19 +1100,25 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {creditsData.map(d => (
-                  <tr key={d.status}>
-                    <td>
-                      <span className={`${styles.badge} ${styles[`badge--${d.status}`]}`}>
-                        {statusLabels[d.status] || d.status}
-                      </span>
-                    </td>
-                    <td>{d.count}</td>
-                    <td>{formatCurrency(d.total_due)}</td>
-                    <td>{formatCurrency(d.total_paid)}</td>
-                    <td>{formatCurrency(d.total_remaining)}</td>
+                {creditsSummaryPagination.pageRows.length > 0 ? (
+                  creditsSummaryPagination.pageRows.map(d => (
+                    <tr key={d.status}>
+                      <td>
+                        <span className={`${styles.badge} ${styles[`badge--${d.status}`]}`}>
+                          {CREDIT_STATUS_LABELS[d.status] || d.status}
+                        </span>
+                      </td>
+                      <td>{d.count}</td>
+                      <td>{formatCurrency(d.total_due)}</td>
+                      <td>{formatCurrency(d.total_paid)}</td>
+                      <td>{formatCurrency(d.total_remaining)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className={styles.table__empty} colSpan={5}>No hay resultados</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
