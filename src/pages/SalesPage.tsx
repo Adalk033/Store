@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
@@ -11,7 +11,7 @@ import {
 import JsBarcode from 'jsbarcode';
 import { useSales } from '../hooks/useSales';
 import { formatCurrency, formatDateTime } from '../lib/formatters';
-import type { SaleDetail, SaleListItem } from '../types';
+import type { SaleDetail, SaleListItem, PaginatedQuery } from '../types';
 import styles from './SalesPage.module.css';
 
 type ViewMode = 'list' | 'detail';
@@ -35,9 +35,16 @@ const SALE_TYPE_LABEL: Record<'cash' | 'credit', string> = {
 
 const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
-function getRangeStartDate(range: TimeRangeFilter): Date | null {
+function formatDateYMD(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getRangeDateFrom(range: TimeRangeFilter): string | undefined {
   if (range === 'all' || range === 'select') {
-    return null;
+    return undefined;
   }
 
   const start = new Date();
@@ -52,18 +59,21 @@ function getRangeStartDate(range: TimeRangeFilter): Date | null {
     start.setMonth(start.getMonth() - 3);
   }
 
-  start.setHours(0, 0, 0, 0);
-  return start;
+  return formatDateYMD(start);
 }
 
 export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
-  const { getAllSales, getSaleDetailById } = useSales();
+  const { getAllSalesPaginated, getSaleDetailById } = useSales();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sales, setSales] = useState<SaleListItem[]>([]);
+  const [totalSales, setTotalSales] = useState(0);
   const [loadingSales, setLoadingSales] = useState(true);
   const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // Summary from server (computed over filtered set)
+  const [summary, setSummary] = useState({ totalSales: 0, totalRevenue: 0, cashRevenue: 0, creditRevenue: 0 });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTypeFilter, setSaleTypeFilter] = useState<SaleTypeFilter>('all');
@@ -82,23 +92,78 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Debounce timer for search input
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   const showNotification = useCallback((type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
   }, []);
 
+  // Debounce search input
+  useEffect(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 400);
+
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  // Build effective date filters from timeRange or custom date inputs
+  const effectiveDates = useMemo(() => {
+    if (startDateFilter || endDateFilter) {
+      return {
+        dateFrom: startDateFilter || undefined,
+        dateTo: endDateFilter || undefined,
+      };
+    }
+    return {
+      dateFrom: getRangeDateFrom(timeRangeFilter),
+      dateTo: undefined,
+    };
+  }, [startDateFilter, endDateFilter, timeRangeFilter]);
+
   const loadSales = useCallback(async () => {
     setLoadingSales(true);
     try {
-      const data = await getAllSales(5000, 0);
-      setSales(data);
+      const query: PaginatedQuery = {
+        page: currentPage,
+        pageSize: rowsPerPage,
+        search: debouncedSearch || undefined,
+        type: saleTypeFilter !== 'all' ? saleTypeFilter : undefined,
+        dateFrom: effectiveDates.dateFrom,
+        dateTo: effectiveDates.dateTo,
+      };
+
+      const [result, summaryResult] = await Promise.all([
+        getAllSalesPaginated(query),
+        window.electronAPI.sales.getSummary({
+          search: query.search,
+          type: query.type,
+          dateFrom: query.dateFrom,
+          dateTo: query.dateTo,
+        }),
+      ]);
+
+      setSales(result.items);
+      setTotalSales(result.total);
+      setSummary(summaryResult);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error al cargar ventas';
       showNotification('error', message);
     } finally {
       setLoadingSales(false);
     }
-  }, [getAllSales, showNotification]);
+  }, [currentPage, rowsPerPage, debouncedSearch, saleTypeFilter, effectiveDates, getAllSalesPaginated, showNotification]);
 
   useEffect(() => {
     void loadSales();
@@ -132,46 +197,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
     void loadStoreSettings();
   }, []);
 
-  const filteredSales = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const rangeStart = getRangeStartDate(timeRangeFilter);
-    const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
-    const customStartDate = startDateFilter ? new Date(`${startDateFilter}T00:00:00`) : null;
-    const customEndDate = endDateFilter ? new Date(`${endDateFilter}T23:59:59.999`) : null;
-
-    if (customStartDate && customEndDate && customStartDate > customEndDate) {
-      return [];
-    }
-
-    return sales.filter((sale) => {
-      const saleDate = new Date(sale.created_at);
-
-      if (hasCustomDateFilter) {
-        if (customStartDate && saleDate < customStartDate) {
-          return false;
-        }
-
-        if (customEndDate && saleDate > customEndDate) {
-          return false;
-        }
-      } else if (rangeStart && saleDate < rangeStart) {
-        return false;
-      }
-
-      if (saleTypeFilter !== 'all' && sale.sale_type !== saleTypeFilter) {
-        return false;
-      }
-
-      if (!query) {
-        return true;
-      }
-
-      return sale.id.toString().includes(query)
-        || sale.customer_name?.toLowerCase().includes(query)
-        || sale.total.toFixed(2).includes(query);
-    });
-  }, [sales, saleTypeFilter, searchQuery, timeRangeFilter, startDateFilter, endDateFilter]);
-
   const hasInvalidDateRange = Boolean(
     startDateFilter
       && endDateFilter
@@ -180,6 +205,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   function handleTimeRangeFilterChange(nextFilter: TimeRangeFilter) {
     setTimeRangeFilter(nextFilter);
+    setCurrentPage(1);
 
     if (nextFilter !== 'select') {
       setStartDateFilter('');
@@ -189,6 +215,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   function handleStartDateFilterChange(value: string) {
     setStartDateFilter(value);
+    setCurrentPage(1);
 
     if (value || endDateFilter) {
       setTimeRangeFilter('select');
@@ -197,25 +224,22 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   function handleEndDateFilterChange(value: string) {
     setEndDateFilter(value);
+    setCurrentPage(1);
 
     if (value || startDateFilter) {
       setTimeRangeFilter('select');
     }
   }
 
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredSales.length / rowsPerPage)),
-    [filteredSales.length, rowsPerPage],
-  );
-
-  const paginatedSales = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredSales.slice(start, start + rowsPerPage);
-  }, [filteredSales, currentPage, rowsPerPage]);
-
-  useEffect(() => {
+  function handleSaleTypeFilterChange(value: SaleTypeFilter) {
+    setSaleTypeFilter(value);
     setCurrentPage(1);
-  }, [searchQuery, saleTypeFilter, timeRangeFilter, startDateFilter, endDateFilter, rowsPerPage]);
+  }
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalSales / rowsPerPage)),
+    [totalSales, rowsPerPage],
+  );
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -225,6 +249,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   async function handleRowsPerPageChange(value: number) {
     setRowsPerPage(value);
+    setCurrentPage(1);
     try {
       await window.electronAPI.settings.set('sales_rows_per_page', String(value));
     } catch (error) {
@@ -232,19 +257,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
       showNotification('error', 'No se pudo guardar la configuracion de filas');
     }
   }
-
-  const summary = useMemo(() => {
-    const totalSales = filteredSales.length;
-    const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
-    const cashRevenue = filteredSales
-      .filter((sale) => sale.sale_type === 'cash')
-      .reduce((sum, sale) => sum + sale.total, 0);
-    const creditRevenue = filteredSales
-      .filter((sale) => sale.sale_type === 'credit')
-      .reduce((sum, sale) => sum + sale.total, 0);
-
-    return { totalSales, totalRevenue, cashRevenue, creditRevenue };
-  }, [filteredSales]);
 
   const openSaleDetail = useCallback(async (saleId: number): Promise<boolean> => {
     setLoadingDetail(true);
@@ -603,7 +615,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
         <select
           className={styles['toolbar__filter']}
           value={saleTypeFilter}
-          onChange={(event) => setSaleTypeFilter(event.target.value as SaleTypeFilter)}
+          onChange={(event) => handleSaleTypeFilterChange(event.target.value as SaleTypeFilter)}
         >
           <option value="all">Todos los tipos</option>
           <option value="cash">Solo contado</option>
@@ -648,12 +660,12 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
               <tr>
                 <td colSpan={7} className={styles['table__empty']}>Cargando ventas...</td>
               </tr>
-            ) : filteredSales.length === 0 ? (
+            ) : sales.length === 0 ? (
               <tr>
                 <td colSpan={7} className={styles['table__empty']}>No hay ventas con los filtros actuales</td>
               </tr>
             ) : (
-              paginatedSales.map((sale) => (
+              sales.map((sale) => (
                 <tr key={sale.id} className={styles['table__row--clickable']} onClick={() => void openSaleDetail(sale.id)}>
                   <td className={styles['table__strong']}>#{sale.id}</td>
                   <td>{formatDateTime(sale.created_at)}</td>
@@ -686,7 +698,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
       <section className={styles.pagination}>
         <span className={styles['pagination__meta']}>
-          Mostrando {paginatedSales.length} de {filteredSales.length} ventas
+          Mostrando {sales.length} de {totalSales} ventas
         </span>
         <div className={styles['pagination__actions']}>
           <button

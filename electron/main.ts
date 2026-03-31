@@ -99,6 +99,36 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SALES_GET_BY_ID, (_, id: number) => salesRepo.getSaleById(id));
   ipcMain.handle(IPC_CHANNELS.SALES_GET_DETAIL, (_, id: number) => salesRepo.getSaleDetailById(id));
 
+  // Sales - Paginated endpoints (Phase 2)
+  ipcMain.handle(
+    IPC_CHANNELS.SALES_GET_ALL_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return salesRepo.getAllSalesPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SALES_GET_SUMMARY,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return salesRepo.getSalesSummary({
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+      });
+    }
+  );
+
   // Credits
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => creditsRepo.getAllCredits(status));
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_ID, (_, id: number) => creditsRepo.getCreditById(id));
@@ -111,6 +141,41 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => inventoryRepo.addInventoryMovement(data));
   ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, (_, productId: number) => inventoryRepo.getMovementsByProduct(productId));
   ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_ALL, (_, limit?: number, offset?: number) => inventoryRepo.getAllMovements(limit, offset));
+
+  // Inventory - Paginated endpoints (Phase 2)
+  ipcMain.handle(
+    IPC_CHANNELS.INVENTORY_GET_ALL_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return inventoryRepo.getAllMovementsPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT_PAGINATED,
+    (_, productId: number, query: unknown) => {
+      if (typeof productId !== 'number' || !Number.isInteger(productId) || productId < 1) {
+        throw new Error('ID de producto invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return inventoryRepo.getMovementsByProductPaginated(productId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
 
   // Cash Register
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => cashRegisterRepo.openPeriod(data));

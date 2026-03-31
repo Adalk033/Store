@@ -11,6 +11,7 @@ export type {
   CreditPayment,
   CreditPaymentListItem,
   InventoryMovement,
+  InventoryMovementListItem,
   CashRegisterPeriod,
   CashMovement,
   Setting,

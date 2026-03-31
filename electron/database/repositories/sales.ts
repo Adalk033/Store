@@ -12,7 +12,11 @@ import type {
   SaleDetail,
   SaleDetailItem,
   SaleListItem,
+  PaginatedQuery,
+  PaginatedResponse,
+  SortSpec,
 } from '../../../src/types/database';
+import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
 
 interface CreateSaleData {
   sale_type: 'cash' | 'credit';
@@ -248,6 +252,130 @@ export function getAllSales(limit = 100, offset = 0): SaleListItem[] {
     ORDER BY s.created_at DESC
     LIMIT ? OFFSET ?`
   ).all(limit, offset) as SaleListItem[];
+}
+
+// --- Paginated endpoints (Phase 2 - Scalability) ---
+
+const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
+const ALLOWED_SALE_TYPES = ['cash', 'credit'] as const;
+
+export function getAllSalesPaginated(
+  query: PaginatedQuery
+): PaginatedResponse<SaleListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(c.name) LIKE ? OR CAST(s.id AS TEXT) LIKE ? OR CAST(s.total AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidStatus(query.type, ALLOWED_SALE_TYPES)) {
+    conditions.push('s.sale_type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("s.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("s.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const countRow = db.prepare(
+    `SELECT COUNT(DISTINCT s.id) AS total
+     FROM sales s
+     LEFT JOIN customers c ON c.id = s.customer_id
+     ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      COALESCE(SUM(si.quantity), 0) AS item_count
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    ${whereClause}
+    GROUP BY s.id
+    ORDER BY s.${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, s.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as SaleListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getSalesSummary(query: {
+  search?: string;
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): { totalSales: number; totalRevenue: number; cashRevenue: number; creditRevenue: number } {
+  const db = getDatabase();
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(c.name) LIKE ? OR CAST(s.id AS TEXT) LIKE ? OR CAST(s.total AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidStatus(query.type, ALLOWED_SALE_TYPES)) {
+    conditions.push('s.sale_type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("s.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("s.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const row = db.prepare(
+    `SELECT
+      COUNT(*) AS totalSales,
+      COALESCE(SUM(s.total), 0) AS totalRevenue,
+      COALESCE(SUM(CASE WHEN s.sale_type = 'cash' THEN s.total ELSE 0 END), 0) AS cashRevenue,
+      COALESCE(SUM(CASE WHEN s.sale_type = 'credit' THEN s.total ELSE 0 END), 0) AS creditRevenue
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    ${whereClause}`
+  ).get(...params) as { totalSales: number; totalRevenue: number; cashRevenue: number; creditRevenue: number };
+
+  return row;
 }
 
 export function getSaleDetailById(id: number): SaleDetail | undefined {

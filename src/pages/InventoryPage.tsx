@@ -1,13 +1,15 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, PackagePlus, SlidersHorizontal, X } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Plus, PackagePlus, SlidersHorizontal, X, Search } from 'lucide-react';
 import { useInventory } from '../hooks/useInventory';
 import { useProducts } from '../hooks/useProducts';
 import { formatDateTime } from '../lib/formatters';
-import type { Product } from '../types';
+import type { Product, PaginatedQuery, InventoryMovementListItem } from '../types';
 import styles from './InventoryPage.module.css';
 
 type TabId = 'movements' | 'restock' | 'adjustment';
+type MovementTypeFilter = 'all' | 'in' | 'out' | 'adjustment';
 const MAX_FORM_PRODUCT_OPTIONS = 100;
+const DEFAULT_ROWS_PER_PAGE = 50;
 
 const TYPE_LABELS: Record<string, string> = {
   in: 'Entrada',
@@ -16,11 +18,27 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function InventoryPage() {
-  const { movements, loading, error, fetchMovements, addMovement } = useInventory();
+  const { fetchMovementsPaginated, addMovement } = useInventory();
   const { products, fetchProducts } = useProducts();
 
   const [activeTab, setActiveTab] = useState<TabId>('movements');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Movements list state (server-side pagination)
+  const [movementItems, setMovementItems] = useState<InventoryMovementListItem[]>([]);
+  const [totalMovements, setTotalMovements] = useState(0);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+  const [movementsError, setMovementsError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
+
+  // Search and filters for movements
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState<MovementTypeFilter>('all');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Form state
   const [formProductId, setFormProductId] = useState<number | ''>('');
@@ -33,9 +51,6 @@ export function InventoryPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Filter for movements list
-  const [filterProductId, setFilterProductId] = useState<number | ''>('');
-
   const clearForm = useCallback(() => {
     setFormProductId('');
     setFormProductQuery('');
@@ -47,21 +62,89 @@ export function InventoryPage() {
     setFormError(null);
   }, []);
 
-  // Clear form every time the active tab changes
   useEffect(() => {
     clearForm();
   }, [activeTab, clearForm]);
 
+  // Debounced search
   useEffect(() => {
-    fetchMovements();
-  }, [fetchMovements]);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 350);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
+  const hasInvalidDateRange = Boolean(
+    startDateFilter
+      && endDateFilter
+      && new Date(`${startDateFilter}T00:00:00`) > new Date(`${endDateFilter}T23:59:59.999`),
+  );
+
+  // Load movements with server-side pagination
+  const loadMovements = useCallback(async () => {
+    setLoadingMovements(true);
+    setMovementsError(null);
+    try {
+      const query: PaginatedQuery = {
+        page: currentPage,
+        pageSize: rowsPerPage,
+        search: debouncedSearch || undefined,
+        type: movementTypeFilter !== 'all' ? movementTypeFilter : undefined,
+        dateFrom: startDateFilter || undefined,
+        dateTo: endDateFilter || undefined,
+      };
+
+      const result = await fetchMovementsPaginated(query);
+      setMovementItems(result.items);
+      setTotalMovements(result.total);
+    } catch (err) {
+      console.error('InventoryPage.loadMovements:', err);
+      setMovementsError('Error al cargar movimientos');
+    } finally {
+      setLoadingMovements(false);
+    }
+  }, [currentPage, rowsPerPage, debouncedSearch, movementTypeFilter, startDateFilter, endDateFilter, fetchMovementsPaginated]);
+
+  useEffect(() => {
+    void loadMovements();
+  }, [loadMovements]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalMovements / rowsPerPage)),
+    [totalMovements, rowsPerPage],
+  );
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  function handleTypeFilterChange(value: MovementTypeFilter) {
+    setMovementTypeFilter(value);
+    setCurrentPage(1);
+  }
+
+  function handleStartDateFilterChange(value: string) {
+    setStartDateFilter(value);
+    setCurrentPage(1);
+  }
+
+  function handleEndDateFilterChange(value: string) {
+    setEndDateFilter(value);
+    setCurrentPage(1);
+  }
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
   }
 
-  // Product lookup map
+  // Product lookup map (still needed for form)
   const productMap = useMemo(() => {
     const map = new Map<number, Product>();
     products.forEach(p => map.set(p.id, p));
@@ -87,12 +170,6 @@ export function InventoryPage() {
       })
       .slice(0, MAX_FORM_PRODUCT_OPTIONS);
   }, [activeProducts, formProductQuery]);
-
-  // Filtered movements
-  const filteredMovements = useMemo(() => {
-    if (filterProductId === '') return movements;
-    return movements.filter(m => m.product_id === filterProductId);
-  }, [movements, filterProductId]);
 
   const selectedProduct = formProductId !== '' ? productMap.get(formProductId) : null;
 
@@ -225,7 +302,7 @@ export function InventoryPage() {
 
       // Refresh products to reflect updated stock
       await fetchProducts();
-      await fetchMovements();
+      await loadMovements();
 
       const productName = selectedProduct?.name ?? 'Producto';
       showNotification('success',
@@ -256,7 +333,7 @@ export function InventoryPage() {
         <h1 className={styles['page__title']}>Inventario</h1>
       </div>
 
-      {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}>{error}</p>}
+      {movementsError && <p style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}>{movementsError}</p>}
 
       {/* Tabs */}
       <div className={styles.tabs}>
@@ -421,17 +498,50 @@ export function InventoryPage() {
       {activeTab === 'movements' && (
         <>
           <div className={styles.toolbar}>
+            <div className={styles['search-box']}>
+              <Search size={16} strokeWidth={1.5} className={styles['search-box__icon']} />
+              <input
+                className={styles['search-box__input']}
+                type="search"
+                placeholder="Buscar por producto o codigo..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
             <select
               className={styles['toolbar__filter']}
-              value={filterProductId}
-              onChange={e => setFilterProductId(e.target.value ? Number(e.target.value) : '')}
+              value={movementTypeFilter}
+              onChange={(e) => handleTypeFilterChange(e.target.value as MovementTypeFilter)}
             >
-              <option value="">Todos los productos</option>
-              {activeProducts.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              <option value="all">Todos los tipos</option>
+              <option value="in">Entradas</option>
+              <option value="out">Salidas</option>
+              <option value="adjustment">Ajustes</option>
             </select>
+
+            <div className={styles['toolbar__date-group']}>
+              <input
+                className={styles['toolbar__filter']}
+                type="date"
+                value={startDateFilter}
+                onChange={(e) => handleStartDateFilterChange(e.target.value)}
+              />
+              <span>-</span>
+              <input
+                className={styles['toolbar__filter']}
+                type="date"
+                value={endDateFilter}
+                onChange={(e) => handleEndDateFilterChange(e.target.value)}
+              />
+            </div>
           </div>
+
+          {hasInvalidDateRange && (
+            <p className={styles['toolbar__hint--error']}>
+              La fecha inicial no puede ser posterior a la fecha final
+            </p>
+          )}
 
           <div className={styles['table-card']}>
             <table className={styles.table}>
@@ -445,20 +555,19 @@ export function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {loadingMovements ? (
                   <tr><td colSpan={5} className={styles['table__empty']}>Cargando...</td></tr>
-                ) : filteredMovements.length === 0 ? (
-                  <tr><td colSpan={5} className={styles['table__empty']}>No hay movimientos registrados</td></tr>
+                ) : movementItems.length === 0 ? (
+                  <tr><td colSpan={5} className={styles['table__empty']}>No hay movimientos con los filtros actuales</td></tr>
                 ) : (
-                  filteredMovements.map(mov => {
-                    const product = productMap.get(mov.product_id);
+                  movementItems.map(mov => {
                     const isPositive = mov.type === 'in' || (mov.type === 'adjustment' && mov.quantity > 0);
                     return (
                       <tr key={mov.id}>
                         <td style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
                           {formatDateTime(mov.created_at)}
                         </td>
-                        <td>{product?.name ?? `Producto #${mov.product_id}`}</td>
+                        <td>{mov.product_name}</td>
                         <td>
                           <span className={`${styles['table__badge']} ${styles[`table__badge--${mov.type}`]}`}>
                             {TYPE_LABELS[mov.type] ?? mov.type}
@@ -479,6 +588,31 @@ export function InventoryPage() {
               </tbody>
             </table>
           </div>
+
+          <section className={styles.pagination}>
+            <span className={styles['pagination__meta']}>
+              Mostrando {movementItems.length} de {totalMovements} movimientos
+            </span>
+            <div className={styles['pagination__actions']}>
+              <button
+                className={styles['btn-secondary']}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+              <span className={styles['pagination__page']}>
+                Pagina {currentPage} de {totalPages}
+              </span>
+              <button
+                className={styles['btn-secondary']}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Siguiente
+              </button>
+            </div>
+          </section>
         </>
       )}
     </div>

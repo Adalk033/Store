@@ -78,6 +78,10 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),
     getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_BY_ID, id),
     getDetail: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_DETAIL, id),
+    getAllPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_PAGINATED, query),
+    getSummary: (query: { search?: string; type?: string; dateFrom?: string; dateTo?: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_SUMMARY, query),
   },
 
   // Credits
@@ -108,6 +112,10 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, productId),
     getAll: (limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_ALL, limit, offset),
+    getAllPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_ALL_PAGINATED, query),
+    getByProductPaginated: (productId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT_PAGINATED, productId, query),
   },
 
   // Cash Register

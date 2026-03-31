@@ -31,6 +31,8 @@ export const IPC_CHANNELS = {
   SALES_GET_ALL: 'sales:getAll',
   SALES_GET_BY_ID: 'sales:getById',
   SALES_GET_DETAIL: 'sales:getDetail',
+  SALES_GET_ALL_PAGINATED: 'sales:getAllPaginated',
+  SALES_GET_SUMMARY: 'sales:getSummary',
 
   // Credits
   CREDITS_GET_ALL: 'credits:getAll',
@@ -44,6 +46,8 @@ export const IPC_CHANNELS = {
   INVENTORY_ADD_MOVEMENT: 'inventory:addMovement',
   INVENTORY_GET_BY_PRODUCT: 'inventory:getByProduct',
   INVENTORY_GET_ALL: 'inventory:getAll',
+  INVENTORY_GET_ALL_PAGINATED: 'inventory:getAllPaginated',
+  INVENTORY_GET_BY_PRODUCT_PAGINATED: 'inventory:getByProductPaginated',
 
   // Cash Register
   CASH_REGISTER_OPEN: 'cashRegister:open',

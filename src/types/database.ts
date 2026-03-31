@@ -113,6 +113,11 @@ export interface InventoryMovement {
   created_at: string;
 }
 
+export interface InventoryMovementListItem extends InventoryMovement {
+  product_name: string;
+  product_barcode: string;
+}
+
 export interface CashRegisterPeriod {
   id: number;
   period_name: string;

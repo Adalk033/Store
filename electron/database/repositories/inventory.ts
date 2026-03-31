@@ -1,5 +1,6 @@
 import { getDatabase } from '../connection';
-import type { InventoryMovement } from '../../../src/types/database';
+import type { InventoryMovement, InventoryMovementListItem, PaginatedQuery, PaginatedResponse, SortSpec } from '../../../src/types/database';
+import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
 
 interface AddMovementData {
   product_id: number;
@@ -91,4 +92,135 @@ export function getAllMovements(limit = 100, offset = 0): InventoryMovement[] {
   return db.prepare(
     'SELECT * FROM inventory_movements ORDER BY created_at DESC LIMIT ? OFFSET ?'
   ).all(limit, offset) as InventoryMovement[];
+}
+
+// --- Paginated endpoints (Phase 2 - Scalability) ---
+
+const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
+const ALLOWED_MOVEMENT_TYPES = ['in', 'out', 'adjustment'] as const;
+
+export function getAllMovementsPaginated(
+  query: PaginatedQuery
+): PaginatedResponse<InventoryMovementListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(p.name) LIKE ? OR LOWER(p.barcode) LIKE ?)');
+    params.push(pattern, pattern);
+  }
+
+  if (isValidStatus(query.type, ALLOWED_MOVEMENT_TYPES)) {
+    conditions.push('m.type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("m.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("m.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM inventory_movements m
+     LEFT JOIN products p ON p.id = m.product_id
+     ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      m.*,
+      COALESCE(p.name, 'Producto eliminado') AS product_name,
+      COALESCE(p.barcode, '') AS product_barcode
+    FROM inventory_movements m
+    LEFT JOIN products p ON p.id = m.product_id
+    ${whereClause}
+    ORDER BY m.${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, m.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as InventoryMovementListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getMovementsByProductPaginated(
+  productId: number,
+  query: PaginatedQuery
+): PaginatedResponse<InventoryMovementListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['m.product_id = ?'];
+  const params: unknown[] = [productId];
+
+  if (isValidStatus(query.type, ALLOWED_MOVEMENT_TYPES)) {
+    conditions.push('m.type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("m.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("m.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM inventory_movements m
+     WHERE ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      m.*,
+      COALESCE(p.name, 'Producto eliminado') AS product_name,
+      COALESCE(p.barcode, '') AS product_barcode
+    FROM inventory_movements m
+    LEFT JOIN products p ON p.id = m.product_id
+    WHERE ${whereClause}
+    ORDER BY m.${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, m.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as InventoryMovementListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
 }
