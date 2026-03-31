@@ -20,7 +20,7 @@ export function ProductsPage() {
     updateProduct,
     deleteProduct,
   } = useProducts();
-  const { categories } = useCategories();
+  const { categories, fetchCategories } = useCategories();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -134,7 +134,10 @@ export function ProductsPage() {
       <div className={styles.page}>
         <div className={styles['page__header']}>
           <h1 className={styles['page__title']}>Categorias</h1>
-          <button className={styles['btn-secondary']} onClick={() => setViewMode('list')}>
+          <button
+            className={styles['btn-secondary']}
+            onClick={() => { fetchCategories(); setViewMode('list'); }}
+          >
             Volver a productos
           </button>
         </div>
