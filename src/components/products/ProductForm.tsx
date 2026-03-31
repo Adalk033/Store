@@ -96,10 +96,10 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
   // Handle sale price change
   function handleSalePriceChange(value: string) {
     setSalePrice(value);
-    // Recalculate margin from sale price
+    // Recalculate margin from sale price, but skip if sale price is empty/NaN
     const cost = parseFloat(costPrice) || 0;
-    const sale = parseFloat(value) || 0;
-    if (cost > 0) {
+    const sale = parseFloat(value);
+    if (cost > 0 && !Number.isNaN(sale)) {
       const newMargin = ((sale / cost) - 1) * 100;
       setMarginPercent(String(Math.round(newMargin * 10) / 10));
     }
