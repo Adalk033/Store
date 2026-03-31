@@ -183,6 +183,21 @@
   color: var(--color-success);
 }
 
+.table__stock--neutral {
+  color: var(--color-text);
+}
+
+.table__meta-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background-color: rgba(107, 114, 128, 0.12);
+}
+
 .table__actions {
   display: flex;
   gap: 4px;

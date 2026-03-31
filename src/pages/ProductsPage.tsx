@@ -115,6 +115,7 @@ export function ProductsPage() {
 
   function getStockClass(product: Product): string {
     if (product.stock === 0) return styles['table__stock--out'];
+    if (product.min_stock < 0) return styles['table__stock--neutral'];
     if (product.stock <= product.min_stock) return styles['table__stock--low'];
     return styles['table__stock--ok'];
   }
@@ -281,7 +282,10 @@ export function ProductsPage() {
                   </td>
                   <td className={`${styles['table__stock']} ${getStockClass(product)}`}>
                     {product.stock}
-                    {product.stock <= product.min_stock && product.is_active === 1 && (
+                    {product.min_stock < 0 && product.is_active === 1 && (
+                      <span className={styles['table__meta-badge']}>Sin alerta</span>
+                    )}
+                    {product.min_stock >= 0 && product.stock <= product.min_stock && product.is_active === 1 && (
                       <AlertTriangle size={12} strokeWidth={2} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
                     )}
                   </td>

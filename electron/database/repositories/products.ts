@@ -27,7 +27,7 @@ export function searchProducts(query: string): Product[] {
 export function getLowStockProducts(): Product[] {
   const db = getDatabase();
   return db.prepare(
-    'SELECT * FROM products WHERE stock <= min_stock AND is_active = 1 ORDER BY stock ASC'
+    'SELECT * FROM products WHERE min_stock >= 0 AND stock <= min_stock AND is_active = 1 ORDER BY stock ASC'
   ).all() as Product[];
 }
 

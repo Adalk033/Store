@@ -40,7 +40,8 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
   const [costPrice, setCostPrice] = useState(product?.cost_price?.toString() ?? '');
   const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? '30');
   const [stock, setStock] = useState(product?.stock?.toString() ?? '0');
-  const [minStock, setMinStock] = useState(product?.min_stock?.toString() ?? '5');
+  const [minStock, setMinStock] = useState(product && product.min_stock >= 0 ? product.min_stock.toString() : '5');
+  const [disableLowStockAlert, setDisableLowStockAlert] = useState(product ? product.min_stock < 0 : false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -90,7 +91,7 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
     if (!isEditing && (stock === '' || parseInt(stock) < 0)) {
       newErrors.stock = 'El stock no puede ser negativo';
     }
-    if (minStock === '' || parseInt(minStock) < 0) {
+    if (!disableLowStockAlert && (minStock === '' || parseInt(minStock) < 0)) {
       newErrors.min_stock = 'El stock minimo no puede ser negativo';
     }
 
@@ -120,7 +121,7 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
         category_id: categoryId !== '' ? categoryId : null,
         cost_price: parseFloat(costPrice),
         margin_percent: parseFloat(marginPercent),
-        min_stock: parseInt(minStock),
+        min_stock: disableLowStockAlert ? -1 : parseInt(minStock),
       };
       // Only include stock on create
       if (!isEditing) {
@@ -257,6 +258,14 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
           )}
           <div className={styles['form__field']}>
             <label className={styles['form__label']}>Stock minimo (alerta)</label>
+            <label className={styles['form__checkbox-row']}>
+              <input
+                type="checkbox"
+                checked={disableLowStockAlert}
+                onChange={e => setDisableLowStockAlert(e.target.checked)}
+              />
+              <span>No alertar stock bajo para este producto</span>
+            </label>
             <input
               className={`${styles['form__input']} ${errors.min_stock ? styles['form__input--error'] : ''}`}
               type="number"
@@ -264,8 +273,14 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
               value={minStock}
               onChange={e => setMinStock(e.target.value)}
               placeholder="5"
+              disabled={disableLowStockAlert}
             />
             {errors.min_stock && <span className={styles['form__error']}>{errors.min_stock}</span>}
+            {disableLowStockAlert && (
+              <span className={styles['form__hint']}>
+                Este producto no aparecera en alertas de stock bajo.
+              </span>
+            )}
           </div>
         </div>
 

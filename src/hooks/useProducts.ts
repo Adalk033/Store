@@ -124,7 +124,9 @@ export function useProducts() {
     }
   }, [fetchProducts]);
 
-  const lowStockProducts = products.filter(p => p.stock <= p.min_stock && p.is_active === 1);
+  const lowStockProducts = products.filter(
+    p => p.min_stock >= 0 && p.stock <= p.min_stock && p.is_active === 1
+  );
 
   return {
     products,
