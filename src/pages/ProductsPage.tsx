@@ -168,7 +168,11 @@ export function ProductsPage() {
         <ProductForm
           product={editingProduct}
           categories={categories}
-          defaultMarginPercent={Number(settings.default_margin_percent) || 50}
+          defaultMarginPercent={
+            Number.isFinite(Number(settings.default_margin_percent))
+              ? Number(settings.default_margin_percent)
+              : 50
+          }
           onSubmit={handleFormSubmit}
           onCancel={handleCancel}
         />
