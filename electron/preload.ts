@@ -58,6 +58,8 @@ const electronAPI = {
     update: (id: number, data: { name?: string; phone?: string | null; email?: string | null; notes?: string | null; is_active?: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_UPDATE, id, data),
     delete: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_DELETE, id),
+    getAllPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_GET_ALL_PAGINATED, query),
   },
 
   // Sales
@@ -95,6 +97,14 @@ const electronAPI = {
     getPayments: (creditId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS, creditId),
     checkOverdue: () => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_CHECK_OVERDUE),
+    getAllPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_ALL_PAGINATED, query),
+    getByCustomerPaginated: (customerId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER_PAGINATED, customerId, query),
+    getPaymentsPaginated: (creditId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS_PAGINATED, creditId, query),
+    getSummary: (query: { search?: string; status?: string; dateFrom?: string; dateTo?: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_SUMMARY, query),
   },
 
   // Inventory

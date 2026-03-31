@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   CUSTOMERS_CREATE: 'customers:create',
   CUSTOMERS_UPDATE: 'customers:update',
   CUSTOMERS_DELETE: 'customers:delete',
+  CUSTOMERS_GET_ALL_PAGINATED: 'customers:getAllPaginated',
 
   // Sales
   SALES_CREATE: 'sales:create',
@@ -41,6 +42,10 @@ export const IPC_CHANNELS = {
   CREDITS_ADD_PAYMENT: 'credits:addPayment',
   CREDITS_GET_PAYMENTS: 'credits:getPayments',
   CREDITS_CHECK_OVERDUE: 'credits:checkOverdue',
+  CREDITS_GET_ALL_PAGINATED: 'credits:getAllPaginated',
+  CREDITS_GET_BY_CUSTOMER_PAGINATED: 'credits:getByCustomerPaginated',
+  CREDITS_GET_PAYMENTS_PAGINATED: 'credits:getPaymentsPaginated',
+  CREDITS_GET_SUMMARY: 'credits:getSummary',
 
   // Inventory
   INVENTORY_ADD_MOVEMENT: 'inventory:addMovement',

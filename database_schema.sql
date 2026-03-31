@@ -162,8 +162,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('feature_paginated_cash', '0'),
     ('feature_paginated_sales', '1'),
     ('feature_paginated_inventory', '1'),
-    ('feature_paginated_credits', '0'),
-    ('feature_paginated_customers', '0'),
+    ('feature_paginated_credits', '1'),
+    ('feature_paginated_customers', '1'),
     ('feature_paginated_products', '0'),
     ('feature_paginated_reports', '0');
 

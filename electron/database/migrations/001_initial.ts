@@ -162,8 +162,8 @@ export function runMigrations(): void {
         ('feature_paginated_cash', '0'),
         ('feature_paginated_sales', '1'),
         ('feature_paginated_inventory', '1'),
-        ('feature_paginated_credits', '0'),
-        ('feature_paginated_customers', '0'),
+        ('feature_paginated_credits', '1'),
+        ('feature_paginated_customers', '1'),
         ('feature_paginated_products', '0'),
         ('feature_paginated_reports', '0');
   `);
@@ -215,6 +215,18 @@ export function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_sales_cash_register_date ON sales(cash_register_id, created_at DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_credit_payments_cash_register_date ON credit_payments(cash_register_id, created_at DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_cash_movements_cash_register_date ON cash_movements(cash_register_id, created_at DESC, id DESC);
+  `);
+
+  // Phase 3 indices for paginated credits and customers queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_credits_customer_status_due ON credits(customer_id, status, due_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_customers_active_name ON customers(is_active, name);
+  `);
+
+  // Phase 3: enable pagination flags for credits and customers (idempotent for existing DBs)
+  db.exec(`
+    UPDATE settings SET value = '1' WHERE key = 'feature_paginated_credits' AND value = '0';
+    UPDATE settings SET value = '1' WHERE key = 'feature_paginated_customers' AND value = '0';
   `);
 
   console.log('Database migrations completed successfully');

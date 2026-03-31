@@ -96,6 +96,26 @@ export interface CreditPayment {
   created_at: string;
 }
 
+export interface CreditListItem extends Credit {
+  customer_name: string | null;
+}
+
+export interface CustomerListItem extends Customer {
+  total_credits: number;
+  active_credits: number;
+  overdue_credits: number;
+  total_debt: number;
+  total_paid: number;
+  last_credit_date: string | null;
+}
+
+export interface CreditsSummary {
+  countActive: number;
+  totalPending: number;
+  totalOverdue: number;
+  totalCollected: number;
+}
+
 export interface CreditPaymentListItem extends CreditPayment {
   sale_id: number;
   customer_id: number;

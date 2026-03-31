@@ -93,6 +93,21 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, id: number, data) => customersRepo.updateCustomer(id, data));
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_DELETE, (_, id: number) => customersRepo.deleteCustomer(id));
 
+  // Customers - Paginated endpoint (Phase 3)
+  ipcMain.handle(
+    IPC_CHANNELS.CUSTOMERS_GET_ALL_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return customersRepo.getAllCustomersPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        status: typeof q.status === 'string' ? q.status : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
   // Sales
   ipcMain.handle(IPC_CHANNELS.SALES_CREATE, (_, data) => salesRepo.createSale(data));
   ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, (_, limit?: number, offset?: number) => salesRepo.getAllSales(limit, offset));
@@ -136,6 +151,71 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.CREDITS_ADD_PAYMENT, (_, creditId: number, amount: number) => creditsRepo.addCreditPayment(creditId, amount));
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => creditsRepo.getCreditPayments(creditId));
   ipcMain.handle(IPC_CHANNELS.CREDITS_CHECK_OVERDUE, () => creditsRepo.checkOverdueCredits());
+
+  // Credits - Paginated endpoints (Phase 3)
+  ipcMain.handle(
+    IPC_CHANNELS.CREDITS_GET_ALL_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return creditsRepo.getAllCreditsPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        status: typeof q.status === 'string' ? q.status : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER_PAGINATED,
+    (_, customerId: number, query: unknown) => {
+      if (typeof customerId !== 'number' || !Number.isInteger(customerId) || customerId < 1) {
+        throw new Error('ID de cliente invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return creditsRepo.getCreditsByCustomerPaginated(customerId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+        status: typeof q.status === 'string' ? q.status : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CREDITS_GET_PAYMENTS_PAGINATED,
+    (_, creditId: number, query: unknown) => {
+      if (typeof creditId !== 'number' || !Number.isInteger(creditId) || creditId < 1) {
+        throw new Error('ID de credito invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return creditsRepo.getCreditPaymentsPaginated(creditId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CREDITS_GET_SUMMARY,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return creditsRepo.getCreditsSummary({
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        status: typeof q.status === 'string' ? q.status : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+      });
+    }
+  );
 
   // Inventory
   ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => inventoryRepo.addInventoryMovement(data));
