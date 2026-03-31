@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../src/lib/ipcChannels';
+import type { PaginatedQuery } from '../src/types/database';
 
 // Typed API exposed to the renderer process
 const electronAPI = {
@@ -131,6 +132,14 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES, cashRegisterId, limit, offset),
     getCreditPayments: (cashRegisterId: number, limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS, cashRegisterId, limit, offset),
+    getSalesPaginated: (cashRegisterId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES_PAGINATED, cashRegisterId, query),
+    getCreditPaymentsPaginated: (cashRegisterId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS_PAGINATED, cashRegisterId, query),
+    getMovementsPaginated: (cashRegisterId: number, query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS_PAGINATED, cashRegisterId, query),
+    getAllPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_ALL_PAGINATED, query),
   },
 
   // Reports

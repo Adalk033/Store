@@ -130,6 +130,77 @@ function registerIpcHandlers(): void {
       cashRegisterRepo.getCreditPaymentsByPeriod(cashRegisterId, limit, offset)
   );
 
+  // Cash Register - Paginated endpoints (Phase 1)
+  ipcMain.handle(
+    IPC_CHANNELS.CASH_REGISTER_GET_SALES_PAGINATED,
+    (_, cashRegisterId: number, query: unknown) => {
+      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+        throw new Error('ID de periodo invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return cashRegisterRepo.getSalesByPeriodPaginated(cashRegisterId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS_PAGINATED,
+    (_, cashRegisterId: number, query: unknown) => {
+      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+        throw new Error('ID de periodo invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return cashRegisterRepo.getCreditPaymentsByPeriodPaginated(cashRegisterId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS_PAGINATED,
+    (_, cashRegisterId: number, query: unknown) => {
+      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+        throw new Error('ID de periodo invalido');
+      }
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return cashRegisterRepo.getMovementsByPeriodPaginated(cashRegisterId, {
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        type: typeof q.type === 'string' ? q.type : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.CASH_REGISTER_GET_ALL_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return cashRegisterRepo.getAllPeriodsPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        status: typeof q.status === 'string' ? q.status : undefined,
+        dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+        dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
   // Reports
   ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => reportsRepo.getSalesByDateRange(startDate, endDate));
   ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => reportsRepo.getTopProducts(startDate, endDate, limit));

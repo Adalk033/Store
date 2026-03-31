@@ -55,6 +55,10 @@ export const IPC_CHANNELS = {
   CASH_REGISTER_GET_SALES_SUMMARY: 'cashRegister:getSalesSummary',
   CASH_REGISTER_GET_SALES: 'cashRegister:getSales',
   CASH_REGISTER_GET_CREDIT_PAYMENTS: 'cashRegister:getCreditPayments',
+  CASH_REGISTER_GET_SALES_PAGINATED: 'cashRegister:getSalesPaginated',
+  CASH_REGISTER_GET_CREDIT_PAYMENTS_PAGINATED: 'cashRegister:getCreditPaymentsPaginated',
+  CASH_REGISTER_GET_MOVEMENTS_PAGINATED: 'cashRegister:getMovementsPaginated',
+  CASH_REGISTER_GET_ALL_PAGINATED: 'cashRegister:getAllPaginated',
 
   // Reports
   REPORTS_SALES_BY_DATE: 'reports:salesByDate',

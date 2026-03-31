@@ -1,5 +1,6 @@
 import { getDatabase } from '../connection';
-import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem } from '../../../src/types/database';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse, SortSpec } from '../../../src/types/database';
+import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
 
 export interface CashRegisterSalesSummary {
   sale_count: number;
@@ -7,6 +8,11 @@ export interface CashRegisterSalesSummary {
   total_credit_sales: number;
   total_credit_collected: number;
 }
+
+const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
+const ALLOWED_SALE_TYPES = ['cash', 'credit'] as const;
+const ALLOWED_MOVEMENT_TYPES = ['expense', 'withdrawal', 'deposit'] as const;
+const ALLOWED_PERIOD_STATUSES = ['open', 'closed'] as const;
 
 export function getCurrentPeriod(): CashRegisterPeriod | undefined {
   const db = getDatabase();
@@ -155,4 +161,242 @@ export function getCreditPaymentsByPeriod(cashRegisterId: number, limit = 200, o
     ORDER BY cp.created_at DESC
     LIMIT ? OFFSET ?`
   ).all(cashRegisterId, limit, offset) as CreditPaymentListItem[];
+}
+
+// --- Paginated endpoints (Phase 1 - Scalability) ---
+
+export function getSalesByPeriodPaginated(
+  cashRegisterId: number,
+  query: PaginatedQuery
+): PaginatedResponse<SaleListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['s.cash_register_id = ?'];
+  const params: unknown[] = [cashRegisterId];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(c.name) LIKE ? OR CAST(s.id AS TEXT) LIKE ?)');
+    params.push(pattern, pattern);
+  }
+
+  if (isValidStatus(query.type, ALLOWED_SALE_TYPES)) {
+    conditions.push('s.sale_type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("s.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("s.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const countRow = db.prepare(
+    `SELECT COUNT(DISTINCT s.id) AS total
+     FROM sales s
+     LEFT JOIN customers c ON c.id = s.customer_id
+     WHERE ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      COALESCE(SUM(si.quantity), 0) AS item_count
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    WHERE ${whereClause}
+    GROUP BY s.id
+    ORDER BY s.${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, s.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as SaleListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getCreditPaymentsByPeriodPaginated(
+  cashRegisterId: number,
+  query: PaginatedQuery
+): PaginatedResponse<CreditPaymentListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['cp.cash_register_id = ?'];
+  const params: unknown[] = [cashRegisterId];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(cu.name) LIKE ? OR CAST(cp.id AS TEXT) LIKE ? OR CAST(c.sale_id AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("cp.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("cp.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM credit_payments cp
+     INNER JOIN credits c ON c.id = cp.credit_id
+     LEFT JOIN customers cu ON cu.id = c.customer_id
+     WHERE ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      cp.*,
+      c.sale_id,
+      c.customer_id,
+      c.status AS credit_status,
+      cu.name AS customer_name
+    FROM credit_payments cp
+    INNER JOIN credits c ON c.id = cp.credit_id
+    LEFT JOIN customers cu ON cu.id = c.customer_id
+    WHERE ${whereClause}
+    ORDER BY cp.${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, cp.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CreditPaymentListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getMovementsByPeriodPaginated(
+  cashRegisterId: number,
+  query: PaginatedQuery
+): PaginatedResponse<CashMovement> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['cash_register_id = ?'];
+  const params: unknown[] = [cashRegisterId];
+
+  if (isValidStatus(query.type, ALLOWED_MOVEMENT_TYPES)) {
+    conditions.push('type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total FROM cash_movements WHERE ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT * FROM cash_movements
+     WHERE ${whereClause}
+     ORDER BY ${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, id DESC
+     LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CashMovement[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getAllPeriodsPaginated(
+  query: PaginatedQuery
+): PaginatedResponse<CashRegisterPeriod> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (isValidStatus(query.status, ALLOWED_PERIOD_STATUSES)) {
+    conditions.push('status = ?');
+    params.push(query.status);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total FROM cash_register_periods ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT * FROM cash_register_periods
+     ${whereClause}
+     ORDER BY ${sort.field === 'created_at' ? 'created_at' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, id DESC
+     LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CashRegisterPeriod[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
 }

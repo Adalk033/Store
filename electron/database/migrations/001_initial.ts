@@ -210,5 +210,12 @@ export function runMigrations(): void {
 
         db.exec("UPDATE credits SET due_date = substr(due_date, 1, 10) WHERE due_date IS NOT NULL AND length(due_date) > 10");
 
+  // Phase 1 indices for paginated cash register queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sales_cash_register_date ON sales(cash_register_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_credit_payments_cash_register_date ON credit_payments(cash_register_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_cash_movements_cash_register_date ON cash_movements(cash_register_id, created_at DESC, id DESC);
+  `);
+
   console.log('Database migrations completed successfully');
 }

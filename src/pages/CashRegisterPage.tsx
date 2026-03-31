@@ -2,12 +2,21 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Plus, Lock, DollarSign } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem } from '../types';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
 import styles from './CashRegisterPage.module.css';
 
 type ViewMode = 'current' | 'history' | 'detail';
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25] as const;
-const SALES_PAGE_SIZE_OPTIONS = PAGE_SIZE_OPTIONS;
+
+const EMPTY_SALES_RESPONSE: PaginatedResponse<SaleListItem> = {
+  items: [], page: 1, pageSize: 5, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' },
+};
+const EMPTY_CREDITS_RESPONSE: PaginatedResponse<CreditPaymentListItem> = {
+  items: [], page: 1, pageSize: 5, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' },
+};
+const EMPTY_MOVEMENTS_RESPONSE: PaginatedResponse<CashMovement> = {
+  items: [], page: 1, pageSize: 10, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' },
+};
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   expense: 'Gasto',
@@ -20,16 +29,15 @@ export function CashRegisterPage() {
     currentPeriod,
     periods,
     movements,
-    sales,
-    creditPayments,
     salesSummary,
     loading,
     fetchCurrentPeriod,
     fetchAllPeriods,
     fetchMovements,
-    fetchSales,
-    fetchCreditPayments,
     fetchSalesSummary,
+    fetchSalesPaginated,
+    fetchCreditPaymentsPaginated,
+    fetchMovementsPaginated,
     openPeriod,
     closePeriod,
     addMovement,
@@ -63,13 +71,19 @@ export function CashRegisterPage() {
 
   // Detail view for historical periods
   const [selectedPeriod, setSelectedPeriod] = useState<CashRegisterPeriod | null>(null);
-  const [selectedMovements, setSelectedMovements] = useState<CashMovement[]>([]);
-  const [selectedSales, setSelectedSales] = useState<SaleListItem[]>([]);
-  const [selectedCreditPayments, setSelectedCreditPayments] = useState<CreditPaymentListItem[]>([]);
+  const [selectedMovements, setSelectedMovements] = useState<PaginatedResponse<CashMovement>>(EMPTY_MOVEMENTS_RESPONSE);
+
+  // Current period paginated data
+  const [currentSalesData, setCurrentSalesData] = useState<PaginatedResponse<SaleListItem>>(EMPTY_SALES_RESPONSE);
+  const [currentCreditsData, setCurrentCreditsData] = useState<PaginatedResponse<CreditPaymentListItem>>(EMPTY_CREDITS_RESPONSE);
 
   const [currentSalesSearch, setCurrentSalesSearch] = useState('');
   const [currentSalesPage, setCurrentSalesPage] = useState(1);
   const [currentSalesPageSize, setCurrentSalesPageSize] = useState<number>(5);
+
+  // Detail view paginated data
+  const [detailSalesData, setDetailSalesData] = useState<PaginatedResponse<SaleListItem>>(EMPTY_SALES_RESPONSE);
+  const [detailCreditsData, setDetailCreditsData] = useState<PaginatedResponse<CreditPaymentListItem>>(EMPTY_CREDITS_RESPONSE);
 
   const [detailSalesSearch, setDetailSalesSearch] = useState('');
   const [detailSalesPage, setDetailSalesPage] = useState(1);
@@ -95,10 +109,12 @@ export function CashRegisterPage() {
     if (currentPeriod) {
       fetchMovements(currentPeriod.id);
       void fetchSalesSummary(currentPeriod.id);
-      void fetchSales(currentPeriod.id, 1000, 0);
-      void fetchCreditPayments(currentPeriod.id, 1000, 0);
+      void loadCurrentSales();
+      void loadCurrentCredits();
     }
-  }, [currentPeriod, fetchMovements, fetchSalesSummary, fetchSales, fetchCreditPayments]);
+  // Only re-run when period changes, not when search/page state changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPeriod?.id]);
 
   useEffect(() => {
     setCurrentSalesSearch('');
@@ -107,7 +123,21 @@ export function CashRegisterPage() {
     setCurrentCreditsPage(1);
   }, [currentPeriod?.id]);
 
-  // Keep sales totals up-to-date while viewing the current open period.
+  // Reload current sales when search/page/pageSize changes
+  useEffect(() => {
+    if (!currentPeriod) return;
+    void loadCurrentSales();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSalesSearch, currentSalesPage, currentSalesPageSize, currentPeriod?.id]);
+
+  // Reload current credits when search/page/pageSize changes
+  useEffect(() => {
+    if (!currentPeriod) return;
+    void loadCurrentCredits();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCreditsSearch, currentCreditsPage, currentCreditsPageSize, currentPeriod?.id]);
+
+  // Polling: only refresh salesSummary every 15 seconds (not full lists)
   useEffect(() => {
     if (!currentPeriod) return;
     if (viewMode !== 'current') return;
@@ -115,15 +145,67 @@ export function CashRegisterPage() {
     const intervalId = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         void fetchSalesSummary(currentPeriod.id);
-        void fetchSales(currentPeriod.id, 1000, 0);
-        void fetchCreditPayments(currentPeriod.id, 1000, 0);
       }
-    }, 10000);
+    }, 15000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentPeriod, viewMode, fetchSalesSummary, fetchSales, fetchCreditPayments]);
+  }, [currentPeriod, viewMode, fetchSalesSummary]);
+
+  async function loadCurrentSales() {
+    if (!currentPeriod) return;
+    const result = await fetchSalesPaginated(currentPeriod.id, {
+      page: currentSalesPage,
+      pageSize: currentSalesPageSize,
+      search: currentSalesSearch || undefined,
+    });
+    setCurrentSalesData(result);
+  }
+
+  async function loadCurrentCredits() {
+    if (!currentPeriod) return;
+    const result = await fetchCreditPaymentsPaginated(currentPeriod.id, {
+      page: currentCreditsPage,
+      pageSize: currentCreditsPageSize,
+      search: currentCreditsSearch || undefined,
+    });
+    setCurrentCreditsData(result);
+  }
+
+  // Reload detail sales when search/page/pageSize changes
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    void loadDetailSales();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailSalesSearch, detailSalesPage, detailSalesPageSize, selectedPeriod?.id]);
+
+  // Reload detail credits when search/page/pageSize changes
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    void loadDetailCredits();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailCreditsSearch, detailCreditsPage, detailCreditsPageSize, selectedPeriod?.id]);
+
+  async function loadDetailSales() {
+    if (!selectedPeriod) return;
+    const result = await fetchSalesPaginated(selectedPeriod.id, {
+      page: detailSalesPage,
+      pageSize: detailSalesPageSize,
+      search: detailSalesSearch || undefined,
+    });
+    setDetailSalesData(result);
+  }
+
+  async function loadDetailCredits() {
+    if (!selectedPeriod) return;
+    const result = await fetchCreditPaymentsPaginated(selectedPeriod.id, {
+      page: detailCreditsPage,
+      pageSize: detailCreditsPageSize,
+      search: detailCreditsSearch || undefined,
+    });
+    setDetailCreditsData(result);
+  }
 
   function getSaleTypeLabel(type: SaleListItem['sale_type']): string {
     return type === 'cash' ? 'Efectivo' : 'Credito';
@@ -131,7 +213,7 @@ export function CashRegisterPage() {
 
   function renderSalesTable(params: {
     title: string;
-    rows: SaleListItem[];
+    data: PaginatedResponse<SaleListItem>;
     meta?: string;
     searchValue: string;
     onSearchChange: (value: string) => void;
@@ -142,7 +224,7 @@ export function CashRegisterPage() {
   }) {
     const {
       title,
-      rows,
+      data,
       meta,
       searchValue,
       onSearchChange,
@@ -152,24 +234,11 @@ export function CashRegisterPage() {
       onPageSizeChange,
     } = params;
 
-    const normalizedSearch = searchValue.trim().toLowerCase();
-    const filteredRows = normalizedSearch
-      ? rows.filter(s => {
-        const customer = (s.customer_name || '').toLowerCase();
-        return String(s.id).includes(normalizedSearch)
-          || getSaleTypeLabel(s.sale_type).toLowerCase().includes(normalizedSearch)
-          || customer.includes(normalizedSearch)
-          || String(s.total).includes(normalizedSearch)
-          || formatDateTime(s.created_at).toLowerCase().includes(normalizedSearch);
-      })
-      : rows;
-
-    const totalRows = filteredRows.length;
+    const totalRows = data.total;
     const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
     const safePage = Math.min(page, totalPages);
     const startIndex = (safePage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const visibleRows = filteredRows.slice(startIndex, endIndex);
+    const endIndex = Math.min(startIndex + pageSize, totalRows);
 
     return (
       <div className={styles['table-card']}>
@@ -194,7 +263,7 @@ export function CashRegisterPage() {
                 onPageChange(1);
               }}
             >
-              {SALES_PAGE_SIZE_OPTIONS.map(size => (
+              {PAGE_SIZE_OPTIONS.map(size => (
                 <option key={size} value={size}>{size} por pagina</option>
               ))}
             </select>
@@ -213,7 +282,7 @@ export function CashRegisterPage() {
             </tr>
           </thead>
           <tbody>
-            {visibleRows.length === 0 ? (
+            {data.items.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles['table__empty']}>
                   {searchValue.trim()
@@ -222,7 +291,7 @@ export function CashRegisterPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map(s => (
+              data.items.map(s => (
                 <tr key={s.id}>
                   <td><span className={styles['table__strong']}>#{s.id}</span></td>
                   <td>{getSaleTypeLabel(s.sale_type)}</td>
@@ -239,7 +308,7 @@ export function CashRegisterPage() {
           <span className={styles['table-card__pagination-meta']}>
             {totalRows === 0
               ? 'Sin resultados'
-              : `Mostrando ${startIndex + 1}-${Math.min(endIndex, totalRows)} de ${totalRows}`}
+              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
           </span>
           <div className={styles['table-card__pagination-actions']}>
             <button
@@ -265,7 +334,7 @@ export function CashRegisterPage() {
 
   function renderCreditPaymentsTable(params: {
     title: string;
-    rows: CreditPaymentListItem[];
+    data: PaginatedResponse<CreditPaymentListItem>;
     meta?: string;
     searchValue: string;
     onSearchChange: (value: string) => void;
@@ -276,7 +345,7 @@ export function CashRegisterPage() {
   }) {
     const {
       title,
-      rows,
+      data,
       meta,
       searchValue,
       onSearchChange,
@@ -286,25 +355,11 @@ export function CashRegisterPage() {
       onPageSizeChange,
     } = params;
 
-    const normalizedSearch = searchValue.trim().toLowerCase();
-    const filteredRows = normalizedSearch
-      ? rows.filter(p => {
-        const customer = (p.customer_name || '').toLowerCase();
-        return String(p.id).includes(normalizedSearch)
-          || String(p.credit_id).includes(normalizedSearch)
-          || String(p.sale_id).includes(normalizedSearch)
-          || customer.includes(normalizedSearch)
-          || String(p.amount).includes(normalizedSearch)
-          || formatDateTime(p.created_at).toLowerCase().includes(normalizedSearch);
-      })
-      : rows;
-
-    const totalRows = filteredRows.length;
+    const totalRows = data.total;
     const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
     const safePage = Math.min(page, totalPages);
     const startIndex = (safePage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const visibleRows = filteredRows.slice(startIndex, endIndex);
+    const endIndex = Math.min(startIndex + pageSize, totalRows);
 
     return (
       <div className={styles['table-card']}>
@@ -329,7 +384,7 @@ export function CashRegisterPage() {
                 onPageChange(1);
               }}
             >
-              {SALES_PAGE_SIZE_OPTIONS.map(size => (
+              {PAGE_SIZE_OPTIONS.map(size => (
                 <option key={size} value={size}>{size} por pagina</option>
               ))}
             </select>
@@ -348,7 +403,7 @@ export function CashRegisterPage() {
             </tr>
           </thead>
           <tbody>
-            {visibleRows.length === 0 ? (
+            {data.items.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles['table__empty']}>
                   {searchValue.trim()
@@ -357,7 +412,7 @@ export function CashRegisterPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map(payment => (
+              data.items.map(payment => (
                 <tr key={payment.id}>
                   <td><span className={styles['table__strong']}>#{payment.id}</span></td>
                   <td>#{payment.credit_id}</td>
@@ -374,7 +429,7 @@ export function CashRegisterPage() {
           <span className={styles['table-card__pagination-meta']}>
             {totalRows === 0
               ? 'Sin resultados'
-              : `Mostrando ${startIndex + 1}-${Math.min(endIndex, totalRows)} de ${totalRows}`}
+              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
           </span>
           <div className={styles['table-card__pagination-actions']}>
             <button
@@ -529,20 +584,20 @@ export function CashRegisterPage() {
     setDetailCreditsPage(1);
     try {
       const [movs, periodSales, periodCreditPayments] = await Promise.all([
-        window.electronAPI.cashRegister.getMovements(period.id),
-        window.electronAPI.cashRegister.getSales(period.id, 1000, 0),
-        window.electronAPI.cashRegister.getCreditPayments(period.id, 1000, 0),
+        fetchMovementsPaginated(period.id, { page: 1, pageSize: 10 }),
+        fetchSalesPaginated(period.id, { page: 1, pageSize: 5 }),
+        fetchCreditPaymentsPaginated(period.id, { page: 1, pageSize: 5 }),
       ]);
       setSelectedMovements(movs);
-      setSelectedSales(periodSales);
-      setSelectedCreditPayments(periodCreditPayments);
+      setDetailSalesData(periodSales);
+      setDetailCreditsData(periodCreditPayments);
     } catch (err) {
-      console.error('Error loading period movements:', err);
-      setSelectedMovements([]);
-      setSelectedSales([]);
-      setSelectedCreditPayments([]);
+      console.error('Error loading period detail:', err);
+      setSelectedMovements(EMPTY_MOVEMENTS_RESPONSE);
+      setDetailSalesData(EMPTY_SALES_RESPONSE);
+      setDetailCreditsData(EMPTY_CREDITS_RESPONSE);
     }
-  }, []);
+  }, [fetchMovementsPaginated, fetchSalesPaginated, fetchCreditPaymentsPaginated]);
 
   // Closed periods for history view
   const closedPeriods = useMemo(() =>
@@ -769,7 +824,7 @@ export function CashRegisterPage() {
         {renderSalesTable(
           {
             title: 'Ventas asociadas al periodo',
-            rows: sales,
+            data: currentSalesData,
             meta: salesSummary.sale_count > 0 ? `Ventas registradas: ${salesSummary.sale_count}` : undefined,
             searchValue: currentSalesSearch,
             onSearchChange: setCurrentSalesSearch,
@@ -783,8 +838,8 @@ export function CashRegisterPage() {
         {renderCreditPaymentsTable(
           {
             title: 'Abonos de credito del periodo',
-            rows: creditPayments,
-            meta: creditPayments.length > 0 ? `Abonos registrados: ${creditPayments.length}` : undefined,
+            data: currentCreditsData,
+            meta: currentCreditsData.total > 0 ? `Abonos registrados: ${currentCreditsData.total}` : undefined,
             searchValue: currentCreditsSearch,
             onSearchChange: setCurrentCreditsSearch,
             page: currentCreditsPage,
@@ -989,8 +1044,8 @@ export function CashRegisterPage() {
         {renderSalesTable(
           {
             title: 'Ventas del periodo',
-            rows: selectedSales,
-            meta: selectedSales.length > 0 ? `Ventas registradas: ${selectedSales.length}` : undefined,
+            data: detailSalesData,
+            meta: detailSalesData.total > 0 ? `Ventas registradas: ${detailSalesData.total}` : undefined,
             searchValue: detailSalesSearch,
             onSearchChange: setDetailSalesSearch,
             page: detailSalesPage,
@@ -1003,8 +1058,8 @@ export function CashRegisterPage() {
         {renderCreditPaymentsTable(
           {
             title: 'Abonos de credito del periodo',
-            rows: selectedCreditPayments,
-            meta: selectedCreditPayments.length > 0 ? `Abonos registrados: ${selectedCreditPayments.length}` : undefined,
+            data: detailCreditsData,
+            meta: detailCreditsData.total > 0 ? `Abonos registrados: ${detailCreditsData.total}` : undefined,
             searchValue: detailCreditsSearch,
             onSearchChange: setDetailCreditsSearch,
             page: detailCreditsPage,
@@ -1026,14 +1081,14 @@ export function CashRegisterPage() {
               </tr>
             </thead>
             <tbody>
-              {selectedMovements.length === 0 ? (
+              {selectedMovements.items.length === 0 ? (
                 <tr>
                   <td colSpan={4} className={styles['table__empty']}>
                     No hubo movimientos de caja en este periodo
                   </td>
                 </tr>
               ) : (
-                selectedMovements.map(m => (
+                selectedMovements.items.map(m => (
                   <tr key={m.id}>
                     <td>
                       <span className={`${styles['movement-type']} ${styles[`movement-type--${m.type}`]}`}>
