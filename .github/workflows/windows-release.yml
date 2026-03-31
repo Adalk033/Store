@@ -36,11 +36,21 @@ jobs:
           $tag = "win-v${{ github.run_number }}-${{ github.run_attempt }}-$shortSha"
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Build release name
+        id: release_name
+        shell: pwsh
+        run: |
+          $releaseDate = (Get-Date).ToString('yyyy-MM-dd')
+          $version = node -p "require('./package.json').version"
+          $actor = $env:GITHUB_ACTOR
+          $name = "$releaseDate, Version $version (Current), @$actor Latest"
+          "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: Windows Build ${{ github.run_number }}
+          name: ${{ steps.release_name.outputs.name }}
           body: |
             Build automatico para Windows x64.
             Commit: ${{ github.sha }}
