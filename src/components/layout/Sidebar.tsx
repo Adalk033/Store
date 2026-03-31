@@ -1,7 +1,7 @@
-import { Package, Archive, ShoppingCart, Users, User, Calculator, BarChart3, Tag, Settings, Receipt } from 'lucide-react';
+import { Package, Archive, ShoppingCart, Users, User, Calculator, BarChart3, Tag, Settings, Receipt, HelpCircle } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
-export type PageId = 'products' | 'inventory' | 'pos' | 'sales' | 'credits' | 'customers' | 'cashRegister' | 'reports' | 'barcodeLabels' | 'settings';
+export type PageId = 'products' | 'inventory' | 'pos' | 'sales' | 'credits' | 'customers' | 'cashRegister' | 'reports' | 'barcodeLabels' | 'settings' | 'help';
 
 interface SidebarProps {
   currentPage: PageId;
@@ -20,6 +20,7 @@ const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabl
   { id: 'reports', label: 'Reportes', icon: BarChart3 },
   { id: 'barcodeLabels', label: 'Etiquetas', icon: Tag },
   { id: 'settings', label: 'Configuracion', icon: Settings },
+  { id: 'help', label: 'Ayuda', icon: HelpCircle },
 ];
 
 export function Sidebar({ currentPage, onNavigate, storeName }: SidebarProps) {

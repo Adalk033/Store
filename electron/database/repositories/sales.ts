@@ -32,6 +32,20 @@ function roundMoney(value: number): number {
 export function createSale(data: CreateSaleData): Sale {
   const db = getDatabase();
 
+  const openPeriod = db
+    .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  if (!openPeriod) {
+    throw new Error('No hay un periodo de caja abierto. Abra una caja antes de registrar ventas.');
+  }
+
+  if (data.cash_register_id != null && data.cash_register_id !== openPeriod.id) {
+    throw new Error('La venta debe registrarse en el periodo de caja abierto actualmente.');
+  }
+
+  const cashRegisterId = openPeriod.id;
+
   const subtotal = data.items.reduce(
     (sum, item) => sum + item.quantity * item.unit_price,
     0
@@ -73,7 +87,7 @@ export function createSale(data: CreateSaleData): Sale {
       subtotal,
       cashReceived,
       cashChange,
-      data.cash_register_id ?? null
+      cashRegisterId
     );
 
     const saleId = Number(saleResult.lastInsertRowid);
@@ -143,8 +157,8 @@ export function createSale(data: CreateSaleData): Sale {
       if (initialPayment > 0) {
         const creditId = Number(creditResult.lastInsertRowid);
         db.prepare(
-          'INSERT INTO credit_payments (credit_id, amount) VALUES (?, ?)'
-        ).run(creditId, initialPayment);
+          'INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES (?, ?, ?)'
+        ).run(creditId, initialPayment, cashRegisterId);
       }
     }
 

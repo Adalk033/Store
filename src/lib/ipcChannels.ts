@@ -52,6 +52,7 @@ export const IPC_CHANNELS = {
   CASH_REGISTER_GET_ALL: 'cashRegister:getAll',
   CASH_REGISTER_ADD_MOVEMENT: 'cashRegister:addMovement',
   CASH_REGISTER_GET_MOVEMENTS: 'cashRegister:getMovements',
+  CASH_REGISTER_GET_SALES_SUMMARY: 'cashRegister:getSalesSummary',
 
   // Reports
   REPORTS_SALES_BY_DATE: 'reports:salesByDate',

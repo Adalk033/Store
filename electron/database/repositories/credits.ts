@@ -24,11 +24,19 @@ export function getCreditById(id: number): Credit | undefined {
 export function addCreditPayment(creditId: number, amount: number): Credit {
   const db = getDatabase();
 
+  const openPeriod = db
+    .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  if (!openPeriod) {
+    throw new Error('No hay un periodo de caja abierto. Abra una caja antes de registrar abonos.');
+  }
+
   const transaction = db.transaction(() => {
     // Insert payment record
     db.prepare(
-      'INSERT INTO credit_payments (credit_id, amount) VALUES (?, ?)'
-    ).run(creditId, amount);
+      'INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES (?, ?, ?)'
+    ).run(creditId, amount, openPeriod.id);
 
     // Update credit amount_paid
     db.prepare(
