@@ -290,7 +290,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       </div>
 
       <div className={styles.version}>
-        store-internal v0.1.0
+        store-internal v{__APP_VERSION__} · {__APP_CREDITS__} · {__APP_REPO_URL__}
       </div>
     </div>
   );
