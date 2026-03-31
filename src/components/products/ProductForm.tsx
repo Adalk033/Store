@@ -8,6 +8,7 @@ import styles from './ProductForm.module.css';
 interface ProductFormProps {
   product: Product | null;
   categories: Category[];
+  defaultMarginPercent?: number;
   onSubmit: (data: {
     barcode: string;
     name: string;
@@ -30,7 +31,7 @@ interface FormErrors {
   min_stock?: string;
 }
 
-export function ProductForm({ product, categories, onSubmit, onCancel }: ProductFormProps) {
+export function ProductForm({ product, categories, defaultMarginPercent = 50, onSubmit, onCancel }: ProductFormProps) {
   const isEditing = product !== null;
 
   const [barcode, setBarcode] = useState(product?.barcode ?? generateBarcode());
@@ -38,7 +39,7 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
   const [description, setDescription] = useState(product?.description ?? '');
   const [categoryId, setCategoryId] = useState<number | ''>(product?.category_id ?? '');
   const [costPrice, setCostPrice] = useState(product?.cost_price?.toString() ?? '');
-  const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? '30');
+  const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? defaultMarginPercent.toString());
   const [salePrice, setSalePrice] = useState(product?.sale_price?.toString() ?? '');
   const [stock, setStock] = useState(product?.stock?.toString() ?? '0');
   const [minStock, setMinStock] = useState(product && product.min_stock >= 0 ? product.min_stock.toString() : '5');

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
+import { useSettings } from '../hooks/useSettings';
 import { formatCurrency } from '../lib/formatters';
 import { ProductForm } from '../components/products/ProductForm';
 import { CategoryManager } from '../components/categories/CategoryManager';
@@ -21,12 +22,14 @@ export function ProductsPage() {
     deleteProduct,
   } = useProducts();
   const { categories, fetchCategories } = useCategories();
+  const { settings } = useSettings();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<number | ''>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
+  const [filterLowStock, setFilterLowStock] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Product | null>(null);
 
@@ -52,6 +55,10 @@ export function ProductsPage() {
       // Category filter
       if (filterCategory !== '' && p.category_id !== filterCategory) return false;
 
+      // Low stock filter
+      if (filterLowStock && p.min_stock >= 0 && p.stock > p.min_stock) return false;
+      if (filterLowStock && p.min_stock < 0) return false;
+
       // Search filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -63,7 +70,7 @@ export function ProductsPage() {
       }
       return true;
     });
-  }, [products, searchQuery, filterCategory, filterStatus]);
+  }, [products, searchQuery, filterCategory, filterStatus, filterLowStock]);
 
   function handleNewProduct() {
     setEditingProduct(null);
@@ -161,6 +168,7 @@ export function ProductsPage() {
         <ProductForm
           product={editingProduct}
           categories={categories}
+          defaultMarginPercent={Number(settings.default_margin_percent) || 50}
           onSubmit={handleFormSubmit}
           onCancel={handleCancel}
         />
@@ -193,6 +201,16 @@ export function ProductsPage() {
       <div className={styles['page__header']}>
         <h1 className={styles['page__title']}>Productos</h1>
         <div className={styles['page__actions']}>
+          {lowStockProducts.length > 0 && (
+            <button
+              className={`${styles['low-stock-alert-btn']} ${filterLowStock ? styles['low-stock-alert-btn--active'] : ''}`}
+              onClick={() => setFilterLowStock(!filterLowStock)}
+              title="Filtrar por stock bajo"
+            >
+              <AlertTriangle size={14} strokeWidth={2} />
+              {lowStockProducts.length}
+            </button>
+          )}
           <button className={styles['btn-secondary']} onClick={() => setViewMode('categories')}>
             <Layers size={16} strokeWidth={1.5} />
             Categorias
@@ -203,17 +221,6 @@ export function ProductsPage() {
           </button>
         </div>
       </div>
-
-      {/* Low stock alert */}
-      {lowStockProducts.length > 0 && (
-        <div className={styles['low-stock-banner']}>
-          <AlertTriangle size={20} strokeWidth={1.5} className={styles['low-stock-banner__icon']} />
-          <span>
-            <span className={styles['low-stock-banner__count']}>{lowStockProducts.length}</span>
-            {' '}producto{lowStockProducts.length !== 1 ? 's' : ''} con stock bajo
-          </span>
-        </div>
-      )}
 
       {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}>{error}</p>}
 
@@ -247,6 +254,14 @@ export function ProductsPage() {
           <option value="active">Activos</option>
           <option value="inactive">Inactivos</option>
           <option value="all">Todos</option>
+        </select>
+        <select
+          className={styles['toolbar__filter']}
+          value={filterLowStock ? 'low' : 'all'}
+          onChange={e => setFilterLowStock(e.target.value === 'low')}
+        >
+          <option value="all">Todos los productos</option>
+          <option value="low">Solo stock bajo</option>
         </select>
       </div>
 
