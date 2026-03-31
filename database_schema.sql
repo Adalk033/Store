@@ -155,6 +155,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('store_phone', ''),
     ('default_credit_days', '5'),
     ('default_surcharge_percent', '10'),
+    ('default_margin_percent', '50'),
     ('ticket_footer_text', 'Gracias por su compra!'),
     ('last_active_page', 'products'),
     ('sales_rows_per_page', '15');

@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
 import { Save, RefreshCw } from 'lucide-react';
 import { generateBarcode } from '../../lib/barcode';
-import { formatCurrency } from '../../lib/formatters';
 import type { Product, Category } from '../../types';
 import styles from './ProductForm.module.css';
 
 interface ProductFormProps {
   product: Product | null;
   categories: Category[];
+  defaultMarginPercent?: number;
   onSubmit: (data: {
     barcode: string;
     name: string;
@@ -26,11 +26,12 @@ interface FormErrors {
   name?: string;
   cost_price?: string;
   margin_percent?: string;
+  sale_price?: string;
   stock?: string;
   min_stock?: string;
 }
 
-export function ProductForm({ product, categories, onSubmit, onCancel }: ProductFormProps) {
+export function ProductForm({ product, categories, defaultMarginPercent = 50, onSubmit, onCancel }: ProductFormProps) {
   const isEditing = product !== null;
 
   const [barcode, setBarcode] = useState(product?.barcode ?? generateBarcode());
@@ -38,7 +39,8 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
   const [description, setDescription] = useState(product?.description ?? '');
   const [categoryId, setCategoryId] = useState<number | ''>(product?.category_id ?? '');
   const [costPrice, setCostPrice] = useState(product?.cost_price?.toString() ?? '');
-  const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? '30');
+  const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? defaultMarginPercent.toString());
+  const [salePrice, setSalePrice] = useState(product?.sale_price?.toString() ?? '');
   const [stock, setStock] = useState(product?.stock?.toString() ?? '0');
   const [minStock, setMinStock] = useState(product && product.min_stock >= 0 ? product.min_stock.toString() : '5');
   const [disableLowStockAlert, setDisableLowStockAlert] = useState(product ? product.min_stock < 0 : false);
@@ -65,10 +67,43 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
     }
   }, [barcode]);
 
-  // Calculated sale price preview
-  const cost = parseFloat(costPrice) || 0;
-  const margin = parseFloat(marginPercent) || 0;
-  const calculatedPrice = Math.round(cost * (1 + margin / 100) * 100) / 100;
+  // Handle cost price change
+  function handleCostPriceChange(value: string) {
+    setCostPrice(value);
+    // If salePrice is set, recalculate margin from the sale price
+    if (salePrice) {
+      const cost = parseFloat(value) || 0;
+      const sale = parseFloat(salePrice) || 0;
+      if (cost > 0) {
+        const newMargin = ((sale / cost) - 1) * 100;
+        setMarginPercent(String(Math.round(newMargin * 10) / 10));
+      }
+    }
+  }
+
+  // Handle margin percent change
+  function handleMarginChange(value: string) {
+    setMarginPercent(value);
+    // Recalculate sale price based on margin
+    const cost = parseFloat(costPrice) || 0;
+    const margin = parseFloat(value) || 0;
+    if (cost > 0) {
+      const newPrice = Math.round(cost * (1 + margin / 100) * 100) / 100;
+      setSalePrice(String(newPrice));
+    }
+  }
+
+  // Handle sale price change
+  function handleSalePriceChange(value: string) {
+    setSalePrice(value);
+    // Recalculate margin from sale price, but skip if sale price is empty/NaN
+    const cost = parseFloat(costPrice) || 0;
+    const sale = parseFloat(value);
+    if (cost > 0 && !Number.isNaN(sale)) {
+      const newMargin = ((sale / cost) - 1) * 100;
+      setMarginPercent(String(Math.round(newMargin * 10) / 10));
+    }
+  }
 
   function regenerateBarcode() {
     if (!isEditing) {
@@ -87,6 +122,9 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
     }
     if (marginPercent === '' || parseFloat(marginPercent) < 0) {
       newErrors.margin_percent = 'El margen no puede ser negativo';
+    }
+    if (salePrice && parseFloat(salePrice) <= 0) {
+      newErrors.sale_price = 'El precio de venta debe ser mayor a 0';
     }
     if (!isEditing && (stock === '' || parseInt(stock) < 0)) {
       newErrors.stock = 'El stock no puede ser negativo';
@@ -203,7 +241,7 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
           </select>
         </div>
 
-        {/* Cost + Margin */}
+        {/* Cost + Margin + Sale Price */}
         <div className={styles['form__row']}>
           <div className={styles['form__field']}>
             <label className={styles['form__label']}>Precio de costo *</label>
@@ -213,7 +251,7 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
               step="0.01"
               min="0"
               value={costPrice}
-              onChange={e => setCostPrice(e.target.value)}
+              onChange={e => handleCostPriceChange(e.target.value)}
               placeholder="0.00"
             />
             {errors.cost_price && <span className={styles['form__error']}>{errors.cost_price}</span>}
@@ -226,17 +264,24 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
               step="0.1"
               min="0"
               value={marginPercent}
-              onChange={e => setMarginPercent(e.target.value)}
+              onChange={e => handleMarginChange(e.target.value)}
               placeholder="30"
             />
             {errors.margin_percent && <span className={styles['form__error']}>{errors.margin_percent}</span>}
           </div>
-        </div>
-
-        {/* Sale price preview */}
-        <div className={styles['price-preview']}>
-          <div className={styles['price-preview__label']}>Precio de venta (calculado)</div>
-          <div className={styles['price-preview__value']}>{formatCurrency(calculatedPrice)}</div>
+          <div className={styles['form__field']}>
+            <label className={styles['form__label']}>Precio de venta</label>
+            <input
+              className={`${styles['form__input']} ${errors.sale_price ? styles['form__input--error'] : ''}`}
+              type="number"
+              step="0.01"
+              min="0"
+              value={salePrice}
+              onChange={e => handleSalePriceChange(e.target.value)}
+              placeholder="auto"
+            />
+            {errors.sale_price && <span className={styles['form__error']}>{errors.sale_price}</span>}
+          </div>
         </div>
 
         {/* Stock + Min stock */}

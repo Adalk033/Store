@@ -17,6 +17,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     ticket_footer_text: '',
     default_credit_days: '5',
     default_surcharge_percent: '10',
+    default_margin_percent: '50',
   });
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
@@ -35,6 +36,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       ticket_footer_text: settings.ticket_footer_text || '',
       default_credit_days: settings.default_credit_days || '5',
       default_surcharge_percent: settings.default_surcharge_percent || '10',
+      default_margin_percent: settings.default_margin_percent || '50',
     });
   }, [settings]);
 
@@ -53,12 +55,17 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       // Validate numeric fields
       const days = Number(form.default_credit_days);
       const surcharge = Number(form.default_surcharge_percent);
+      const margin = Number(form.default_margin_percent);
       if (isNaN(days) || days < 1) {
         showNotification('error', 'Los dias de credito deben ser al menos 1');
         return;
       }
       if (isNaN(surcharge) || surcharge < 0) {
         showNotification('error', 'El porcentaje de recargo no puede ser negativo');
+        return;
+      }
+      if (isNaN(margin) || margin < 0) {
+        showNotification('error', 'El margen por defecto no puede ser negativo');
         return;
       }
 
@@ -160,6 +167,27 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
             rows={2}
           />
           <span className={styles['field__hint']}>Se muestra al final de cada ticket impreso</span>
+        </div>
+      </div>
+
+      {/* Products defaults */}
+      <div className={styles.section}>
+        <h2 className={styles['section__title']}>Productos</h2>
+        <p className={styles['section__description']}>
+          Valores predeterminados para nuevos productos
+        </p>
+
+        <div className={styles.field}>
+          <label className={styles['field__label']}>Utilidad (margen) por defecto (%)</label>
+          <input
+            className={styles['field__input']}
+            type="number"
+            min={0}
+            step={0.5}
+            value={form.default_margin_percent}
+            onChange={e => handleChange('default_margin_percent', e.target.value)}
+          />
+          <span className={styles['field__hint']}>Se aplica automáticamente al crear nuevo producto</span>
         </div>
       </div>
 
