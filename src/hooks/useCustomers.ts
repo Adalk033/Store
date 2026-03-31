@@ -42,11 +42,37 @@ export function useCustomers() {
     }
   }, []);
 
+  const updateCustomer = useCallback(async (
+    id: number,
+    data: {
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      notes?: string | null;
+      is_active?: number;
+    },
+  ) => {
+    try {
+      const updated = await window.electronAPI.customers.update(id, data);
+      if (!updated) {
+        throw new Error('No se pudo actualizar el cliente');
+      }
+
+      setCustomers(prev => prev.map(customer => (customer.id === id ? updated : customer)));
+      return updated;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar cliente';
+      console.error('useCustomers.updateCustomer:', err);
+      throw new Error(message);
+    }
+  }, []);
+
   return {
     customers,
     loading,
     error,
     fetchCustomers,
     createCustomer,
+    updateCustomer,
   };
 }

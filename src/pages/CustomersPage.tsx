@@ -25,7 +25,12 @@ interface CustomerCreditSummary {
 }
 
 export function CustomersPage() {
-  const { customers, loading: loadingCustomers, error: customersError } = useCustomers();
+  const {
+    customers,
+    loading: loadingCustomers,
+    error: customersError,
+    updateCustomer,
+  } = useCustomers();
   const {
     credits,
     loading: loadingCredits,
@@ -42,6 +47,10 @@ export function CustomersPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState<CustomerFilter>('all');
+  const [contactForm, setContactForm] = useState({ phone: '', email: '', notes: '' });
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactFeedback, setContactFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchCredits();
@@ -115,6 +124,13 @@ export function CustomersPage() {
     setSelectedCustomer(customer);
     setSelectedCredit(null);
     setCreditPayments([]);
+    setContactForm({
+      phone: customer.phone ?? '',
+      email: customer.email ?? '',
+      notes: customer.notes ?? '',
+    });
+    setIsEditingContact(false);
+    setContactFeedback(null);
     setViewMode('profile');
     await fetchCreditsByCustomer(customer.id);
   }
@@ -130,7 +146,68 @@ export function CustomersPage() {
     setSelectedCustomer(null);
     setSelectedCredit(null);
     setCreditPayments([]);
+    setIsEditingContact(false);
+    setContactFeedback(null);
     await fetchCredits();
+  }
+
+  function startEditingContact() {
+    if (!selectedCustomer) return;
+
+    setContactForm({
+      phone: selectedCustomer.phone ?? '',
+      email: selectedCustomer.email ?? '',
+      notes: selectedCustomer.notes ?? '',
+    });
+    setIsEditingContact(true);
+    setContactFeedback(null);
+  }
+
+  function cancelEditingContact() {
+    if (!selectedCustomer) return;
+
+    setContactForm({
+      phone: selectedCustomer.phone ?? '',
+      email: selectedCustomer.email ?? '',
+      notes: selectedCustomer.notes ?? '',
+    });
+    setIsEditingContact(false);
+    setContactFeedback(null);
+  }
+
+  async function handleSaveContact(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (!selectedCustomer) return;
+
+    const phone = contactForm.phone.trim();
+    const email = contactForm.email.trim();
+    const notes = contactForm.notes.trim();
+
+    setSavingContact(true);
+    setContactFeedback(null);
+
+    try {
+      const updated = await updateCustomer(selectedCustomer.id, {
+        phone: phone || null,
+        email: email || null,
+        notes: notes || null,
+      });
+
+      setSelectedCustomer(updated);
+      setContactForm({
+        phone: updated.phone ?? '',
+        email: updated.email ?? '',
+        notes: updated.notes ?? '',
+      });
+      setIsEditingContact(false);
+      setContactFeedback({ type: 'success', message: 'Datos de contacto actualizados correctamente' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo actualizar el cliente';
+      setContactFeedback({ type: 'error', message });
+    } finally {
+      setSavingContact(false);
+    }
   }
 
   function getProgressPercent(credit: Credit): number {
@@ -194,6 +271,93 @@ export function CustomersPage() {
               </div>
               <p>{selectedCustomer.notes?.trim() ? selectedCustomer.notes : 'Sin notas registradas'}</p>
             </div>
+
+            <section className={styles['contact-form']}>
+              <div className={styles['contact-form__header']}>
+                <h3 className={styles['contact-form__title']}>Datos de contacto</h3>
+                {!isEditingContact && (
+                  <button type="button" className={styles['btn-secondary']} onClick={startEditingContact}>
+                    Editar datos
+                  </button>
+                )}
+              </div>
+
+              {isEditingContact ? (
+                <form className={styles['contact-form__editor']} onSubmit={handleSaveContact}>
+                  <div className={styles['contact-form__field']}>
+                    <label className={styles['contact-form__label']} htmlFor="customer-phone">Telefono</label>
+                    <input
+                      id="customer-phone"
+                      className={styles['contact-form__input']}
+                      type="text"
+                      value={contactForm.phone}
+                      onChange={(event) => setContactForm(prev => ({ ...prev, phone: event.target.value }))}
+                      placeholder="Telefono del cliente"
+                    />
+                  </div>
+
+                  <div className={styles['contact-form__field']}>
+                    <label className={styles['contact-form__label']} htmlFor="customer-email">Correo</label>
+                    <input
+                      id="customer-email"
+                      className={styles['contact-form__input']}
+                      type="email"
+                      value={contactForm.email}
+                      onChange={(event) => setContactForm(prev => ({ ...prev, email: event.target.value }))}
+                      placeholder="Correo del cliente"
+                    />
+                  </div>
+
+                  <div className={styles['contact-form__field']}>
+                    <label className={styles['contact-form__label']} htmlFor="customer-notes">Notas</label>
+                    <textarea
+                      id="customer-notes"
+                      className={styles['contact-form__textarea']}
+                      value={contactForm.notes}
+                      onChange={(event) => setContactForm(prev => ({ ...prev, notes: event.target.value }))}
+                      placeholder="Notas sobre el cliente"
+                      rows={3}
+                    />
+                  </div>
+
+                  {contactFeedback && (
+                    <p className={contactFeedback.type === 'success' ? styles['contact-form__feedback--success'] : styles['contact-form__feedback--error']}>
+                      {contactFeedback.message}
+                    </p>
+                  )}
+
+                  <div className={styles['contact-form__actions']}>
+                    <button type="button" className={styles['btn-secondary']} onClick={cancelEditingContact} disabled={savingContact}>
+                      Cancelar
+                    </button>
+                    <button type="submit" className={styles['btn-primary']} disabled={savingContact}>
+                      {savingContact ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className={styles['contact-form__summary']}>
+                  <div className={styles['contact-form__row']}>
+                    <span className={styles['contact-form__row-label']}>Telefono</span>
+                    <span className={styles['contact-form__row-value']}>{selectedCustomer.phone ?? 'Sin telefono'}</span>
+                  </div>
+                  <div className={styles['contact-form__row']}>
+                    <span className={styles['contact-form__row-label']}>Correo</span>
+                    <span className={styles['contact-form__row-value']}>{selectedCustomer.email ?? 'Sin correo'}</span>
+                  </div>
+                  <div className={styles['contact-form__row']}>
+                    <span className={styles['contact-form__row-label']}>Notas</span>
+                    <span className={styles['contact-form__row-value']}>{selectedCustomer.notes?.trim() ? selectedCustomer.notes : 'Sin notas registradas'}</span>
+                  </div>
+                </div>
+              )}
+
+              {!isEditingContact && contactFeedback && (
+                <p className={contactFeedback.type === 'success' ? styles['contact-form__feedback--success'] : styles['contact-form__feedback--error']}>
+                  {contactFeedback.message}
+                </p>
+              )}
+            </section>
           </div>
 
           <div className={styles['summary-grid']}>
