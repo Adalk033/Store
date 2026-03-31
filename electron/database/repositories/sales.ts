@@ -10,6 +10,7 @@ import type {
 interface CreateSaleData {
   sale_type: 'cash' | 'credit';
   customer_id?: number | null;
+  sale_date?: string;
   items: Array<{
     product_id: number;
     quantity: number;
@@ -29,8 +30,53 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function toLocalDateTimeString(date: Date): string {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())} ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`;
+}
+
+function resolveSaleCreatedAt(saleDate?: string): string {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (!saleDate) {
+    return toLocalDateTimeString(now);
+  }
+
+  const trimmedDate = saleDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+    throw new Error('La fecha de la venta no tiene un formato valido');
+  }
+
+  const [year, month, day] = trimmedDate.split('-').map(Number);
+  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    Number.isNaN(selectedDate.getTime()) ||
+    selectedDate.getFullYear() !== year ||
+    selectedDate.getMonth() !== month - 1 ||
+    selectedDate.getDate() !== day
+  ) {
+    throw new Error('La fecha de la venta no es valida');
+  }
+
+  if (selectedDate.getTime() > todayStart.getTime()) {
+    throw new Error('No se permiten fechas futuras para la venta');
+  }
+
+  if (selectedDate.getTime() === todayStart.getTime()) {
+    return toLocalDateTimeString(now);
+  }
+
+  return `${trimmedDate} 00:00:00`;
+}
+
 export function createSale(data: CreateSaleData): Sale {
   const db = getDatabase();
+  const saleCreatedAt = resolveSaleCreatedAt(data.sale_date);
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -78,8 +124,8 @@ export function createSale(data: CreateSaleData): Sale {
   const transaction = db.transaction(() => {
     // Insert sale
     const saleResult = db.prepare(`
-      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id)
-      VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, created_at)
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
     `).run(
       data.sale_type,
       data.customer_id ?? null,
@@ -87,7 +133,8 @@ export function createSale(data: CreateSaleData): Sale {
       subtotal,
       cashReceived,
       cashChange,
-      cashRegisterId
+      cashRegisterId,
+      saleCreatedAt
     );
 
     const saleId = Number(saleResult.lastInsertRowid);
@@ -103,14 +150,14 @@ export function createSale(data: CreateSaleData): Sale {
       'UPDATE products SET stock = stock - ? WHERE id = ?'
     );
     const insertMovement = db.prepare(`
-      INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes)
-      VALUES (?, 'out', ?, ?, 'Venta automatica')
+      INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes, created_at)
+      VALUES (?, 'out', ?, ?, 'Venta automatica', ?)
     `);
 
     for (const item of data.items) {
       insertItem.run(saleId, item.product_id, item.quantity, item.unit_price);
       updateStock.run(item.quantity, item.product_id);
-      insertMovement.run(item.product_id, -item.quantity, saleId);
+      insertMovement.run(item.product_id, -item.quantity, saleId, saleCreatedAt);
     }
 
     // Create credit record for credit sales
@@ -139,26 +186,30 @@ export function createSale(data: CreateSaleData): Sale {
           total_due,
           amount_paid,
           status,
-          paid_at
+          paid_at,
+          created_at
         )
-        VALUES (?, ?, ?, date('now', 'localtime', '+' || ? || ' days'), ?, ?, ?, ?, CASE WHEN ? = 'paid' THEN datetime('now','localtime') ELSE NULL END)
+        VALUES (?, ?, ?, date(?, '+' || ? || ' days'), ?, ?, ?, ?, CASE WHEN ? = 'paid' THEN ? ELSE NULL END, ?)
       `).run(
         saleId,
         data.customer_id,
         subtotal,
+        saleCreatedAt,
         creditDays,
         surchargePercent,
         subtotal,
         initialPayment,
         status,
-        status
+        status,
+        saleCreatedAt,
+        saleCreatedAt
       );
 
       if (initialPayment > 0) {
         const creditId = Number(creditResult.lastInsertRowid);
         db.prepare(
-          'INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES (?, ?, ?)'
-        ).run(creditId, initialPayment, cashRegisterId);
+          'INSERT INTO credit_payments (credit_id, amount, cash_register_id, created_at) VALUES (?, ?, ?, ?)'
+        ).run(creditId, initialPayment, cashRegisterId, saleCreatedAt);
       }
     }
 

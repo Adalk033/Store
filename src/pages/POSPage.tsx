@@ -32,6 +32,34 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function getTodayLocalDateInput(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${padDatePart(now.getMonth() + 1)}-${padDatePart(now.getDate())}`;
+}
+
+function isFutureDateInput(value: string): boolean {
+  if (!value) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    Number.isNaN(selectedDate.getTime()) ||
+    selectedDate.getFullYear() !== year ||
+    selectedDate.getMonth() !== month - 1 ||
+    selectedDate.getDate() !== day
+  ) {
+    return true;
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return selectedDate.getTime() > todayStart.getTime();
+}
+
 export function POSPage() {
   const { products, fetchProducts } = useProducts();
   const { customers, createCustomer } = useCustomers();
@@ -43,6 +71,7 @@ export function POSPage() {
 
   // Credit sale modal
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [saleDateInput, setSaleDateInput] = useState(getTodayLocalDateInput());
   const [creditCustomerId, setCreditCustomerId] = useState<number | ''>('');
   const [creditDays, setCreditDays] = useState(5);
   const [creditSurcharge, setCreditSurcharge] = useState(10);
@@ -194,6 +223,8 @@ export function POSPage() {
     [cartSubtotal, creditInitialPaymentValue]
   );
 
+  const isSaleDateInvalid = saleDateInput.trim() === '' || isFutureDateInput(saleDateInput);
+
   // Add product to cart
   const addToCart = useCallback(
     (product: Product) => {
@@ -277,12 +308,17 @@ export function POSPage() {
   function handleCashSaleStart() {
     if (cart.length === 0 || saleLoading) return;
     setCashReceivedInput(roundMoney(cartSubtotal).toFixed(2));
+    setSaleDateInput(getTodayLocalDateInput());
     setShowCashModal(true);
   }
 
   // Process cash sale
   async function handleCashSale() {
     if (cart.length === 0) return;
+    if (isSaleDateInvalid) {
+      showNotification('error', 'Selecciona una fecha valida de venta (hoy o anterior)');
+      return;
+    }
     if (!isCashReceivedValid) {
       showNotification('error', 'El efectivo recibido debe ser mayor o igual al total');
       return;
@@ -291,6 +327,7 @@ export function POSPage() {
     try {
       const sale = await createSale({
         sale_type: 'cash',
+        sale_date: saleDateInput,
         items: cart.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -325,6 +362,7 @@ export function POSPage() {
   // Open credit modal
   function handleCreditSaleStart() {
     if (cart.length === 0) return;
+    setSaleDateInput(getTodayLocalDateInput());
     setCreditCustomerId('');
     setCreditInitialPayment('0');
     setShowNewCustomer(false);
@@ -336,6 +374,10 @@ export function POSPage() {
   // Process credit sale
   async function handleCreditSale() {
     if (cart.length === 0 || creditCustomerId === '') return;
+    if (isSaleDateInvalid) {
+      showNotification('error', 'Selecciona una fecha valida de venta (hoy o anterior)');
+      return;
+    }
     if (!isCreditInitialPaymentValid) {
       showNotification('error', 'El abono inicial debe ser entre 0 y el total de la venta');
       return;
@@ -344,6 +386,7 @@ export function POSPage() {
     try {
       const sale = await createSale({
         sale_type: 'credit',
+        sale_date: saleDateInput,
         customer_id: Number(creditCustomerId),
         items: cart.map(item => ({
           product_id: item.product_id,
@@ -579,6 +622,23 @@ export function POSPage() {
             <div className={styles['modal__body']}>
               {/* Customer selection */}
               <div className={styles['modal__field']}>
+                <label className={styles['modal__label']}>Fecha de venta</label>
+                <input
+                  className={styles['modal__input']}
+                  type="date"
+                  value={saleDateInput}
+                  max={getTodayLocalDateInput()}
+                  required
+                  onChange={e => setSaleDateInput(e.target.value)}
+                />
+                {isSaleDateInvalid && (
+                  <div className={styles['modal__error']}>
+                    Selecciona una fecha valida sin futuro.
+                  </div>
+                )}
+              </div>
+
+              <div className={styles['modal__field']}>
                 <label className={styles['modal__label']}>Cliente</label>
                 <select
                   className={styles['modal__select']}
@@ -718,7 +778,7 @@ export function POSPage() {
               </button>
               <button
                 className={styles['modal__btn-primary']}
-                disabled={creditCustomerId === '' || saleLoading || !isCreditInitialPaymentValid}
+                disabled={creditCustomerId === '' || saleLoading || !isCreditInitialPaymentValid || isSaleDateInvalid}
                 onClick={handleCreditSale}
               >
                 Confirmar venta a credito
@@ -742,6 +802,23 @@ export function POSPage() {
               <div className={styles['cash-modal__summary']}>
                 <span>Total a cobrar</span>
                 <strong>{formatCurrency(cartSubtotal)}</strong>
+              </div>
+
+              <div className={styles['modal__field']}>
+                <label className={styles['modal__label']}>Fecha de venta</label>
+                <input
+                  className={styles['modal__input']}
+                  type="date"
+                  value={saleDateInput}
+                  max={getTodayLocalDateInput()}
+                  required
+                  onChange={e => setSaleDateInput(e.target.value)}
+                />
+                {isSaleDateInvalid && (
+                  <div className={styles['modal__error']}>
+                    Selecciona una fecha valida sin futuro.
+                  </div>
+                )}
               </div>
 
               <div className={styles['modal__field']}>
@@ -778,7 +855,7 @@ export function POSPage() {
               </button>
               <button
                 className={styles['modal__btn-primary']}
-                disabled={!isCashReceivedValid || saleLoading}
+                disabled={!isCashReceivedValid || saleLoading || isSaleDateInvalid}
                 onClick={handleCashSale}
               >
                 Cobrar

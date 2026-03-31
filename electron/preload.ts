@@ -64,6 +64,7 @@ const electronAPI = {
     create: (data: {
       sale_type: 'cash' | 'credit';
       customer_id?: number | null;
+      sale_date?: string;
       items: Array<{ product_id: number; quantity: number; unit_price: number }>;
       cash_register_id?: number | null;
       credit_days?: number;
