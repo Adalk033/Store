@@ -29,3 +29,17 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+#Claves internas
+*.pem
+*.key
+*.crt
+*.pfx
+*.cer
+*.csr
+*.der
+*.jks
+*.p12
+*.keystore
+*.env
+.env.*

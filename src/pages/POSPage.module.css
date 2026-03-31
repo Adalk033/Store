@@ -591,6 +591,21 @@
   margin-top: 2px;
 }
 
+.cash-modal__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.cash-modal__change {
+  color: var(--color-success);
+}
+
 /* Sale ticket / receipt view */
 .ticket-overlay {
   position: fixed;

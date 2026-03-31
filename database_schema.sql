@@ -1,4 +1,4 @@
--- MichiPapeleria database schema (SQLite)
+-- store-internal database schema (SQLite)
 -- Run this file to create the database structure from scratch.
 
 PRAGMA journal_mode = WAL;
@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS sales (
     subtotal          REAL NOT NULL,
     surcharge         REAL DEFAULT 0,
     total             REAL NOT NULL,
+    cash_received     REAL,
+    cash_change       REAL,
     cash_register_id  INTEGER REFERENCES cash_register_periods(id),
     created_at        TEXT DEFAULT (datetime('now','localtime'))
 );

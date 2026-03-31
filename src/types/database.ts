@@ -41,6 +41,8 @@ export interface Sale {
   subtotal: number;
   surcharge: number;
   total: number;
+  cash_received: number | null;
+  cash_change: number | null;
   cash_register_id: number | null;
   created_at: string;
 }

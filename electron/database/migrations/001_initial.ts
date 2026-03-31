@@ -69,6 +69,8 @@ export function runMigrations(): void {
         subtotal          REAL NOT NULL,
         surcharge         REAL DEFAULT 0,
         total             REAL NOT NULL,
+        cash_received     REAL,
+        cash_change       REAL,
         cash_register_id  INTEGER REFERENCES cash_register_periods(id),
         created_at        TEXT DEFAULT (datetime('now','localtime'))
     );
@@ -172,6 +174,20 @@ export function runMigrations(): void {
       END;
     `);
   }
+
+    const salesColumns = db
+        .prepare("PRAGMA table_info('sales')")
+        .all() as Array<{ name: string }>;
+    const hasCashReceived = salesColumns.some(column => column.name === 'cash_received');
+    const hasCashChange = salesColumns.some(column => column.name === 'cash_change');
+
+    if (!hasCashReceived) {
+        db.exec('ALTER TABLE sales ADD COLUMN cash_received REAL');
+    }
+
+    if (!hasCashChange) {
+        db.exec('ALTER TABLE sales ADD COLUMN cash_change REAL');
+    }
 
   console.log('Database migrations completed successfully');
 }

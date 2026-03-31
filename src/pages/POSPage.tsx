@@ -28,6 +28,10 @@ interface TicketData {
   footerText: string;
 }
 
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function POSPage() {
   const { products, fetchProducts } = useProducts();
   const { customers, createCustomer } = useCustomers();
@@ -42,10 +46,15 @@ export function POSPage() {
   const [creditCustomerId, setCreditCustomerId] = useState<number | ''>('');
   const [creditDays, setCreditDays] = useState(5);
   const [creditSurcharge, setCreditSurcharge] = useState(10);
+  const [creditInitialPayment, setCreditInitialPayment] = useState('0');
   // New customer form inside credit modal
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
+
+  // Cash sale modal
+  const [showCashModal, setShowCashModal] = useState(false);
+  const [cashReceivedInput, setCashReceivedInput] = useState('');
 
   // Ticket view
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
@@ -81,7 +90,7 @@ export function POSPage() {
       switch (e.key) {
         case 'F1':
           e.preventDefault();
-          handleCashSale();
+          handleCashSaleStart();
           return;
         case 'F2':
           e.preventDefault();
@@ -99,6 +108,8 @@ export function POSPage() {
         case 'Escape':
           if (ticketData) {
             setTicketData(null);
+          } else if (showCashModal) {
+            closeCashSaleModal();
           } else if (showCreditModal) {
             setShowCreditModal(false);
           }
@@ -118,7 +129,7 @@ export function POSPage() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [ticketData, showCreditModal, cart, saleLoading]);
+  }, [ticketData, showCashModal, showCreditModal, cart, saleLoading]);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -149,6 +160,38 @@ export function POSPage() {
   const cartItemCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
     [cart]
+  );
+
+  const cashReceived = useMemo(() => {
+    if (cashReceivedInput.trim() === '') return 0;
+    const parsed = Number(cashReceivedInput);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [cashReceivedInput]);
+
+  const cashChange = useMemo(
+    () => Math.max(roundMoney(cashReceived - cartSubtotal), 0),
+    [cashReceived, cartSubtotal]
+  );
+
+  const isCashReceivedValid = useMemo(
+    () => cashReceivedInput.trim() !== '' && cashReceived >= cartSubtotal,
+    [cashReceivedInput, cashReceived, cartSubtotal]
+  );
+
+  const creditInitialPaymentValue = useMemo(() => {
+    if (creditInitialPayment.trim() === '') return 0;
+    const parsed = Number(creditInitialPayment);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [creditInitialPayment]);
+
+  const isCreditInitialPaymentValid = useMemo(
+    () => creditInitialPaymentValue >= 0 && creditInitialPaymentValue <= cartSubtotal,
+    [creditInitialPaymentValue, cartSubtotal]
+  );
+
+  const creditRemainingBalance = useMemo(
+    () => Math.max(roundMoney(cartSubtotal - creditInitialPaymentValue), 0),
+    [cartSubtotal, creditInitialPaymentValue]
   );
 
   // Add product to cart
@@ -226,9 +269,24 @@ export function POSPage() {
     searchInputRef.current?.focus();
   }
 
+  function closeCashSaleModal() {
+    setShowCashModal(false);
+    setCashReceivedInput('');
+  }
+
+  function handleCashSaleStart() {
+    if (cart.length === 0 || saleLoading) return;
+    setCashReceivedInput(roundMoney(cartSubtotal).toFixed(2));
+    setShowCashModal(true);
+  }
+
   // Process cash sale
   async function handleCashSale() {
     if (cart.length === 0) return;
+    if (!isCashReceivedValid) {
+      showNotification('error', 'El efectivo recibido debe ser mayor o igual al total');
+      return;
+    }
 
     try {
       const sale = await createSale({
@@ -238,6 +296,8 @@ export function POSPage() {
           quantity: item.quantity,
           unit_price: item.unit_price,
         })),
+        cash_received: roundMoney(cashReceived),
+        cash_change: roundMoney(cashChange),
       });
 
       // Show ticket
@@ -255,6 +315,7 @@ export function POSPage() {
 
       showNotification('success', `Venta #${sale.id} registrada`);
       setCart([]);
+      closeCashSaleModal();
       await fetchProducts();
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al procesar venta');
@@ -265,6 +326,7 @@ export function POSPage() {
   function handleCreditSaleStart() {
     if (cart.length === 0) return;
     setCreditCustomerId('');
+    setCreditInitialPayment('0');
     setShowNewCustomer(false);
     setNewCustomerName('');
     setNewCustomerPhone('');
@@ -274,6 +336,10 @@ export function POSPage() {
   // Process credit sale
   async function handleCreditSale() {
     if (cart.length === 0 || creditCustomerId === '') return;
+    if (!isCreditInitialPaymentValid) {
+      showNotification('error', 'El abono inicial debe ser entre 0 y el total de la venta');
+      return;
+    }
 
     try {
       const sale = await createSale({
@@ -286,6 +352,7 @@ export function POSPage() {
         })),
         credit_days: creditDays,
         surcharge_percent: creditSurcharge,
+        initial_payment: roundMoney(creditInitialPaymentValue),
       });
 
       // Show ticket
@@ -474,7 +541,7 @@ export function POSPage() {
             <button
               className={styles['cart__btn-cash']}
               disabled={cart.length === 0 || saleLoading}
-              onClick={handleCashSale}
+              onClick={handleCashSaleStart}
             >
               <DollarSign size={16} />
               Cobrar
@@ -600,6 +667,23 @@ export function POSPage() {
                 </div>
               </div>
 
+              <div className={styles['modal__field']}>
+                <label className={styles['modal__label']}>Abono inicial (opcional)</label>
+                <input
+                  className={styles['modal__input']}
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={creditInitialPayment}
+                  onChange={e => setCreditInitialPayment(e.target.value)}
+                />
+                {!isCreditInitialPaymentValid && (
+                  <div className={styles['modal__error']}>
+                    El abono inicial debe estar entre 0 y {formatCurrency(cartSubtotal)}.
+                  </div>
+                )}
+              </div>
+
               {/* Summary */}
               <div style={{
                 padding: 'var(--spacing-sm)',
@@ -615,6 +699,14 @@ export function POSPage() {
                   <span>Si se atrasa ({creditSurcharge}%):</span>
                   <span>{formatCurrency(cartSubtotal * (1 + creditSurcharge / 100))}</span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  <span>Abono inicial:</span>
+                  <span>{formatCurrency(Math.max(creditInitialPaymentValue, 0))}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontWeight: 600 }}>
+                  <span>Saldo pendiente:</span>
+                  <span>{formatCurrency(creditRemainingBalance)}</span>
+                </div>
               </div>
             </div>
             <div className={styles['modal__footer']}>
@@ -626,10 +718,70 @@ export function POSPage() {
               </button>
               <button
                 className={styles['modal__btn-primary']}
-                disabled={creditCustomerId === '' || saleLoading}
+                disabled={creditCustomerId === '' || saleLoading || !isCreditInitialPaymentValid}
                 onClick={handleCreditSale}
               >
                 Confirmar venta a credito
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cash sale modal */}
+      {showCashModal && (
+        <div className={styles['modal-overlay']} onClick={closeCashSaleModal}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div className={styles['modal__header']}>
+              <h2 className={styles['modal__title']}>Cobro en efectivo</h2>
+              <button className={styles['modal__close']} onClick={closeCashSaleModal}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className={styles['modal__body']}>
+              <div className={styles['cash-modal__summary']}>
+                <span>Total a cobrar</span>
+                <strong>{formatCurrency(cartSubtotal)}</strong>
+              </div>
+
+              <div className={styles['modal__field']}>
+                <label className={styles['modal__label']}>Efectivo recibido</label>
+                <input
+                  className={styles['modal__input']}
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={cashReceivedInput}
+                  onChange={e => setCashReceivedInput(e.target.value)}
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+
+              <div className={styles['cash-modal__summary']}>
+                <span>Cambio a entregar</span>
+                <strong className={styles['cash-modal__change']}>{formatCurrency(cashChange)}</strong>
+              </div>
+
+              {!isCashReceivedValid && cashReceivedInput.trim() !== '' && (
+                <div className={styles['modal__error']}>
+                  El efectivo recibido debe cubrir el total de la venta.
+                </div>
+              )}
+            </div>
+            <div className={styles['modal__footer']}>
+              <button
+                className={styles['modal__btn-secondary']}
+                onClick={closeCashSaleModal}
+              >
+                Cancelar
+              </button>
+              <button
+                className={styles['modal__btn-primary']}
+                disabled={!isCashReceivedValid || saleLoading}
+                onClick={handleCashSale}
+              >
+                Cobrar
               </button>
             </div>
           </div>
@@ -694,6 +846,18 @@ export function POSPage() {
                   <span>Subtotal:</span>
                   <span>{formatCurrency(ticketData.sale.subtotal)}</span>
                 </div>
+                {ticketData.sale.sale_type === 'cash' && ticketData.sale.cash_received !== null && (
+                  <>
+                    <div className={styles['ticket__total-row']}>
+                      <span>Efectivo:</span>
+                      <span>{formatCurrency(ticketData.sale.cash_received)}</span>
+                    </div>
+                    <div className={styles['ticket__total-row']}>
+                      <span>Cambio:</span>
+                      <span>{formatCurrency(ticketData.sale.cash_change ?? 0)}</span>
+                    </div>
+                  </>
+                )}
                 <div className={`${styles['ticket__total-row']} ${styles['ticket__total-row--grand']}`}>
                   <span>Total:</span>
                   <span>{formatCurrency(ticketData.sale.total)}</span>

@@ -1,8 +1,8 @@
-# CLAUDE.md - MichiPapeleria POS
+# CLAUDE.md - store-internal POS
 
 ## Project Overview
 
-MichiPapeleria is a fully local, single-PC point-of-sale (POS) desktop application for a stationery store (papeleria). It runs entirely offline with no server or cloud dependency. Single store, single admin user.
+store-internal is a fully local, single-PC point-of-sale (POS) desktop application for a stationery store (papeleria). It runs entirely offline with no server or cloud dependency. Single store, single admin user.
 
 ### Core Features
 
@@ -69,7 +69,7 @@ The full design spec lives in `docs/DESIGN.md`. Key tokens are implemented as CS
 - Icons: Lucide Icons, stroke 1.5-2px, 20x20px, color `--color-text-secondary`
 
 ## Project Structure
-michipapeleria/
+store-internal/
 
 ├── electron/
 

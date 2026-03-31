@@ -64,6 +64,9 @@ const electronAPI = {
       cash_register_id?: number | null;
       credit_days?: number;
       surcharge_percent?: number;
+      initial_payment?: number;
+      cash_received?: number;
+      cash_change?: number;
     }) => ipcRenderer.invoke(IPC_CHANNELS.SALES_CREATE, data),
     getAll: (limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),

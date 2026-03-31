@@ -1,8 +1,8 @@
-# AGENTS.md - MichiPapeleria POS
+# AGENTS.md - store-internal POS
 
 ## Project Overview
 
-MichiPapeleria is a fully local, offline desktop POS (point-of-sale) application for a stationery store. Built with Electron + React + TypeScript + SQLite. Runs on a single PC, single store, no cloud.
+store-internal is a fully local, offline desktop POS (point-of-sale) application for a stationery store. Built with Electron + React + TypeScript + SQLite. Runs on a single PC, single store, no cloud.
 
 ### Key Features
 
@@ -67,7 +67,7 @@ The full design spec lives in `docs/DESIGN.md`. Key tokens are implemented as CS
 - Icons: Lucide Icons, stroke 1.5-2px, 20x20px, color `--color-text-secondary`
 
 ## Directory Layout
-michipapeleria/
+store-internal/
 
 ├── electron/
 

@@ -9,7 +9,7 @@ export function getDatabase(): Database.Database {
 
   // In dev use project root; in production use the OS userData folder
   const dbDir = app.isPackaged ? app.getPath('userData') : app.getAppPath();
-  const dbPath = path.join(dbDir, 'michipapeleria.db');
+  const dbPath = path.join(dbDir, 'store-internal.db');
   db = new Database(dbPath);
 
   db.pragma('journal_mode = WAL');
