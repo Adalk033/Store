@@ -158,7 +158,14 @@ export function runMigrations(): void {
         ('business_timezone', 'America/Mexico_City'),
         ('ticket_footer_text', 'Gracias por su compra!'),
         ('last_active_page', 'products'),
-        ('sales_rows_per_page', '15');
+        ('sales_rows_per_page', '15'),
+        ('feature_paginated_cash', '0'),
+        ('feature_paginated_sales', '0'),
+        ('feature_paginated_inventory', '0'),
+        ('feature_paginated_credits', '0'),
+        ('feature_paginated_customers', '0'),
+        ('feature_paginated_products', '0'),
+        ('feature_paginated_reports', '0');
   `);
 
   // Trigger for updated_at on products (CREATE TRIGGER IF NOT EXISTS not supported in all SQLite versions)

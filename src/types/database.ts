@@ -141,3 +141,68 @@ export interface Setting {
   key: string;
   value: string;
 }
+
+// --- Paginated query contract (Fase 0 - Scalability) ---
+
+/**
+ * Sort direction for query results.
+ */
+export type SortDirection = 'ASC' | 'DESC';
+
+/**
+ * Sort specification for paginated queries.
+ * Default for chronological listings: { field: 'created_at', direction: 'DESC' }
+ * Secondary sort is always id DESC for stable ordering.
+ */
+export interface SortSpec {
+  field: string;
+  direction: SortDirection;
+}
+
+/**
+ * Common filter parameters used across all paginated list endpoints.
+ * All fields are optional; only provided fields are applied as AND conditions.
+ */
+export interface QueryFilters {
+  search?: string;       // Text search (case-insensitive, accent-normalized, contains)
+  dateFrom?: string;     // ISO date string YYYY-MM-DD (inclusive)
+  dateTo?: string;       // ISO date string YYYY-MM-DD (inclusive)
+  status?: string;       // Entity-specific status filter (e.g., 'pending', 'open', 'active')
+  type?: string;         // Entity-specific type filter (e.g., 'cash', 'credit', 'in', 'out')
+}
+
+/**
+ * Request parameters for paginated queries.
+ * Sent from renderer to main process via IPC.
+ */
+export interface PaginatedQuery extends QueryFilters {
+  page: number;          // 1-based page number
+  pageSize: number;      // Items per page (default depends on module, typical: 25-50)
+  sort?: SortSpec;       // Optional sort override; defaults to created_at DESC, id DESC
+}
+
+/**
+ * Standard paginated response returned from main process to renderer.
+ * All paginated list endpoints must return this shape.
+ */
+export interface PaginatedResponse<T> {
+  items: T[];            // Current page of results
+  page: number;          // Current page number (1-based, mirrors request)
+  pageSize: number;      // Items per page (mirrors request)
+  total: number;         // Total count of items matching filters (exact)
+  hasMore: boolean;      // Whether more pages exist after current page
+  sort: SortSpec;        // Sort used for this response
+}
+
+/**
+ * Feature flag module identifiers for gradual migration.
+ * Each module can be toggled independently to use paginated endpoints.
+ */
+export type FeatureFlagModule =
+  | 'cash'
+  | 'sales'
+  | 'inventory'
+  | 'credits'
+  | 'customers'
+  | 'products'
+  | 'reports';

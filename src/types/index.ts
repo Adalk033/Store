@@ -14,4 +14,10 @@ export type {
   CashRegisterPeriod,
   CashMovement,
   Setting,
+  SortDirection,
+  SortSpec,
+  QueryFilters,
+  PaginatedQuery,
+  PaginatedResponse,
+  FeatureFlagModule,
 } from './database';
