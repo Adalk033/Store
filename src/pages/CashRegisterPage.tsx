@@ -80,8 +80,10 @@ export function CashRegisterPage() {
     if (viewMode !== 'current') return;
 
     const intervalId = window.setInterval(() => {
-      void fetchSalesSummary(currentPeriod.id);
-    }, 3000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void fetchSalesSummary(currentPeriod.id);
+      }
+    }, 10000);
 
     return () => {
       window.clearInterval(intervalId);
