@@ -33,6 +33,10 @@ export function CashRegisterPage() {
   // Open period form state
   const [periodName, setPeriodName] = useState('');
   const [openingCash, setOpeningCash] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [openError, setOpenError] = useState<string | null>(null);
 
   // Movement form state
@@ -43,6 +47,10 @@ export function CashRegisterPage() {
 
   // Close period state
   const [closingCash, setClosingCash] = useState('');
+  const [closingDate, setClosingDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Detail view for historical periods
@@ -62,18 +70,6 @@ export function CashRegisterPage() {
       fetchMovements(currentPeriod.id);
     }
   }, [currentPeriod, fetchMovements]);
-
-  // Set a default period name based on current month
-  useEffect(() => {
-    if (!currentPeriod && !periodName) {
-      const now = new Date();
-      const monthNames = [
-        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-      ];
-      setPeriodName(`${monthNames[now.getMonth()]} ${now.getFullYear()}`);
-    }
-  }, [currentPeriod, periodName]);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -107,11 +103,13 @@ export function CashRegisterPage() {
       return;
     }
 
+    if (!startDate) {
+      setOpenError('Seleccione una fecha de inicio');
+      return;
+    }
+
     try {
       setSubmitting(true);
-      const today = new Date();
-      const startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
       await openPeriod({
         period_name: periodName.trim(),
         start_date: startDate,
@@ -168,10 +166,22 @@ export function CashRegisterPage() {
       return;
     }
 
+    if (!closingDate) {
+      showNotification('error', 'Seleccione una fecha de cierre');
+      setShowCloseConfirm(false);
+      return;
+    }
+
+    if (closingDate < currentPeriod.start_date) {
+      showNotification('error', 'La fecha de cierre no puede ser menor a la fecha de inicio del periodo');
+      setShowCloseConfirm(false);
+      return;
+    }
+
     try {
       setSubmitting(true);
       setShowCloseConfirm(false);
-      await closePeriod(currentPeriod.id, cash);
+      await closePeriod(currentPeriod.id, cash, closingDate);
       await fetchAllPeriods();
       setClosingCash('');
       showNotification('success', 'Periodo de caja cerrado correctamente');
@@ -216,6 +226,15 @@ export function CashRegisterPage() {
             value={periodName}
             onChange={e => setPeriodName(e.target.value)}
             placeholder="Ej. Marzo 2026"
+          />
+        </div>
+        <div className={styles['form-field']}>
+          <label className={styles['form-field__label']}>Fecha de inicio</label>
+          <input
+            type="date"
+            className={styles['form-field__input']}
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
           />
         </div>
         <div className={styles['form-field']}>
@@ -399,6 +418,16 @@ export function CashRegisterPage() {
           <div className={styles['close-panel__row']}>
             <span className={styles['close-panel__label']}>Total depositos</span>
             <span className={styles['close-panel__value']}>{formatCurrency(movementsSummary.totalDeposits)}</span>
+          </div>
+          <div className={styles['form-field']}>
+            <label className={styles['form-field__label']}>Fecha de cierre</label>
+            <input
+              type="date"
+              className={styles['form-field__input']}
+              value={closingDate}
+              onChange={e => setClosingDate(e.target.value)}
+              min={currentPeriod.start_date}
+            />
           </div>
           <div className={styles['form-field']}>
             <label className={styles['form-field__label']}>Efectivo final contado</label>

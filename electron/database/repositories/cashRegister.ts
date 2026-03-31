@@ -25,7 +25,7 @@ export function openPeriod(data: { period_name: string; start_date: string; open
   return getPeriodById(Number(result.lastInsertRowid))!;
 }
 
-export function closePeriod(id: number, closingCash: number): CashRegisterPeriod {
+export function closePeriod(id: number, closingCash: number, endDate: string): CashRegisterPeriod {
   const db = getDatabase();
 
   const transaction = db.transaction(() => {
@@ -44,14 +44,14 @@ export function closePeriod(id: number, closingCash: number): CashRegisterPeriod
 
     db.prepare(`
       UPDATE cash_register_periods
-      SET end_date = datetime('now','localtime'),
+      SET end_date = ?,
           total_cash_sales = ?,
           total_credit_sales = ?,
           total_expenses = ?,
           closing_cash = ?,
           status = 'closed'
       WHERE id = ?
-    `).run(cashSales.total, creditSales.total, expenses.total, closingCash, id);
+    `).run(endDate, cashSales.total, creditSales.total, expenses.total, closingCash, id);
   });
 
   transaction();

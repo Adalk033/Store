@@ -103,8 +103,8 @@ const electronAPI = {
   cashRegister: {
     open: (data: { period_name: string; start_date: string; opening_cash: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_OPEN, data),
-    close: (id: number, closingCash: number) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_CLOSE, id, closingCash),
+    close: (id: number, closingCash: number, endDate: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_CLOSE, id, closingCash, endDate),
     getCurrent: () => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT),
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_ALL),
     addMovement: (data: {

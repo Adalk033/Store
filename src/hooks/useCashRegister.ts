@@ -66,9 +66,9 @@ export function useCashRegister() {
     }
   }, []);
 
-  const closePeriod = useCallback(async (id: number, closingCash: number): Promise<CashRegisterPeriod> => {
+  const closePeriod = useCallback(async (id: number, closingCash: number, endDate: string): Promise<CashRegisterPeriod> => {
     try {
-      const period = await window.electronAPI.cashRegister.close(id, closingCash);
+      const period = await window.electronAPI.cashRegister.close(id, closingCash, endDate);
       setCurrentPeriod(null);
       return period;
     } catch (err) {

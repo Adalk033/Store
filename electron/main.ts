@@ -108,7 +108,7 @@ function registerIpcHandlers(): void {
 
   // Cash Register
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => cashRegisterRepo.openPeriod(data));
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number) => cashRegisterRepo.closePeriod(id, closingCash));
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number, endDate: string) => cashRegisterRepo.closePeriod(id, closingCash, endDate));
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => cashRegisterRepo.getCurrentPeriod());
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => cashRegisterRepo.getAllPeriods());
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, (_, data) => cashRegisterRepo.addCashMovement(data));
