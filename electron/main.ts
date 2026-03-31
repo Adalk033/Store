@@ -79,6 +79,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_CREATE, (_, data) => productsRepo.createProduct(data));
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_UPDATE, (_, id: number, data) => productsRepo.updateProduct(id, data));
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE, (_, id: number) => productsRepo.deleteProduct(id));
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, (_, id: number) =>
+    productsRepo.canDeleteProductPermanently(id)
+  );
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, (_, id: number) =>
+    productsRepo.deleteProductPermanently(id)
+  );
 
   // Customers
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_ALL, () => customersRepo.getAllCustomers());

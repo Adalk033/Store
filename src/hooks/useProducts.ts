@@ -124,6 +124,30 @@ export function useProducts() {
     }
   }, [fetchProducts]);
 
+  const canDeleteProductPermanently = useCallback(async (id: number) => {
+    try {
+      return await window.electronAPI.products.canDeletePermanently(id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al validar eliminacion permanente';
+      console.error('useProducts.canDeleteProductPermanently:', err);
+      throw new Error(message);
+    }
+  }, []);
+
+  const deleteProductPermanently = useCallback(async (id: number) => {
+    try {
+      const success = await window.electronAPI.products.deletePermanently(id);
+      if (success) {
+        await fetchProducts();
+      }
+      return success;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar permanentemente';
+      console.error('useProducts.deleteProductPermanently:', err);
+      throw new Error(message);
+    }
+  }, [fetchProducts]);
+
   const lowStockProducts = products.filter(
     p => p.min_stock >= 0 && p.stock <= p.min_stock && p.is_active === 1
   );
@@ -138,5 +162,7 @@ export function useProducts() {
     createProduct,
     updateProduct,
     deleteProduct,
+    canDeleteProductPermanently,
+    deleteProductPermanently,
   };
 }

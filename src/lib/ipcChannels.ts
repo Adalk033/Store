@@ -14,6 +14,8 @@ export const IPC_CHANNELS = {
   PRODUCTS_CREATE: 'products:create',
   PRODUCTS_UPDATE: 'products:update',
   PRODUCTS_DELETE: 'products:delete',
+  PRODUCTS_CAN_DELETE_PERMANENTLY: 'products:canDeletePermanently',
+  PRODUCTS_DELETE_PERMANENTLY: 'products:deletePermanently',
   PRODUCTS_SEARCH: 'products:search',
   PRODUCTS_LOW_STOCK: 'products:lowStock',
 

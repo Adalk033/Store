@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
@@ -20,6 +20,8 @@ export function ProductsPage() {
     createProduct,
     updateProduct,
     deleteProduct,
+    canDeleteProductPermanently,
+    deleteProductPermanently,
   } = useProducts();
   const { categories, fetchCategories } = useCategories();
   const { settings } = useSettings();
@@ -32,6 +34,9 @@ export function ProductsPage() {
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Product | null>(null);
+  const [canDeletePermanently, setCanDeletePermanently] = useState(false);
+  const [checkingPermanentDelete, setCheckingPermanentDelete] = useState(false);
+  const [permanentDeleteCheckError, setPermanentDeleteCheckError] = useState<string | null>(null);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -97,6 +102,52 @@ export function ProductsPage() {
       setDeleteCandidate(null);
     }
   }
+
+  async function handleConfirmPermanentDelete() {
+    if (!deleteCandidate) return;
+    try {
+      await deleteProductPermanently(deleteCandidate.id);
+      showNotification('success', `"${deleteCandidate.name}" fue eliminado permanentemente`);
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Error al eliminar permanentemente');
+    } finally {
+      setDeleteCandidate(null);
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!deleteCandidate) {
+      setCanDeletePermanently(false);
+      setCheckingPermanentDelete(false);
+      setPermanentDeleteCheckError(null);
+      return;
+    }
+
+    setCheckingPermanentDelete(true);
+    setCanDeletePermanently(false);
+    setPermanentDeleteCheckError(null);
+
+    canDeleteProductPermanently(deleteCandidate.id)
+      .then(canDelete => {
+        if (!isMounted) return;
+        setCanDeletePermanently(canDelete);
+      })
+      .catch(err => {
+        if (!isMounted) return;
+        const message = err instanceof Error ? err.message : 'No se pudo validar la eliminacion permanente';
+        setPermanentDeleteCheckError(message);
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setCheckingPermanentDelete(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [deleteCandidate, canDeleteProductPermanently]);
 
   async function handleFormSubmit(data: {
     barcode: string;
@@ -368,6 +419,22 @@ export function ProductsPage() {
             <p className={styles['modal__hint']}>
               El producto no se eliminara permanentemente, solo dejara de estar disponible.
             </p>
+            {checkingPermanentDelete && (
+              <p className={styles['modal__hint']}>Validando si se puede eliminar permanentemente...</p>
+            )}
+            {!checkingPermanentDelete && permanentDeleteCheckError && (
+              <p className={styles['modal__hint']}>{permanentDeleteCheckError}</p>
+            )}
+            {!checkingPermanentDelete && !permanentDeleteCheckError && !canDeletePermanently && (
+              <p className={styles['modal__hint']}>
+                Este producto no se puede eliminar permanentemente porque esta asociado a una o mas ventas.
+              </p>
+            )}
+            {!checkingPermanentDelete && !permanentDeleteCheckError && canDeletePermanently && (
+              <p className={styles['modal__hint']}>
+                Este producto no tiene ventas asociadas, puedes eliminarlo permanentemente si lo deseas.
+              </p>
+            )}
             <div className={styles['modal__actions']}>
               <button type="button" className={styles['btn-secondary']} onClick={() => setDeleteCandidate(null)}>
                 Cancelar
@@ -375,6 +442,11 @@ export function ProductsPage() {
               <button type="button" className={styles['btn-danger']} onClick={handleConfirmDelete}>
                 Desactivar producto
               </button>
+              {!checkingPermanentDelete && !permanentDeleteCheckError && canDeletePermanently && (
+                <button type="button" className={styles['btn-danger']} onClick={handleConfirmPermanentDelete}>
+                  Eliminar permanentemente
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -42,6 +42,10 @@ const electronAPI = {
       is_active?: number;
     }) => ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_UPDATE, id, data),
     delete: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_DELETE, id),
+    canDeletePermanently: (id: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, id),
+    deletePermanently: (id: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, id),
   },
 
   // Customers

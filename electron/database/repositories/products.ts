@@ -125,3 +125,25 @@ export function deleteProduct(id: number): boolean {
   const result = db.prepare('UPDATE products SET is_active = 0 WHERE id = ?').run(id);
   return result.changes > 0;
 }
+
+export function canDeleteProductPermanently(id: number): boolean {
+  const db = getDatabase();
+  const row = db.prepare(
+    `SELECT COUNT(1) AS total
+     FROM sale_items
+     WHERE product_id = ?`
+  ).get(id) as { total: number };
+
+  return row.total === 0;
+}
+
+export function deleteProductPermanently(id: number): boolean {
+  const db = getDatabase();
+
+  if (!canDeleteProductPermanently(id)) {
+    throw new Error('No se puede eliminar permanentemente: el producto tiene ventas asociadas.');
+  }
+
+  const result = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  return result.changes > 0;
+}
