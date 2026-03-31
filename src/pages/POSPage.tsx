@@ -46,6 +46,7 @@ export function POSPage() {
   const [creditCustomerId, setCreditCustomerId] = useState<number | ''>('');
   const [creditDays, setCreditDays] = useState(5);
   const [creditSurcharge, setCreditSurcharge] = useState(10);
+  const [creditInitialPayment, setCreditInitialPayment] = useState('0');
   // New customer form inside credit modal
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -175,6 +176,22 @@ export function POSPage() {
   const isCashReceivedValid = useMemo(
     () => cashReceivedInput.trim() !== '' && cashReceived >= cartSubtotal,
     [cashReceivedInput, cashReceived, cartSubtotal]
+  );
+
+  const creditInitialPaymentValue = useMemo(() => {
+    if (creditInitialPayment.trim() === '') return 0;
+    const parsed = Number(creditInitialPayment);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [creditInitialPayment]);
+
+  const isCreditInitialPaymentValid = useMemo(
+    () => creditInitialPaymentValue >= 0 && creditInitialPaymentValue <= cartSubtotal,
+    [creditInitialPaymentValue, cartSubtotal]
+  );
+
+  const creditRemainingBalance = useMemo(
+    () => Math.max(roundMoney(cartSubtotal - creditInitialPaymentValue), 0),
+    [cartSubtotal, creditInitialPaymentValue]
   );
 
   // Add product to cart
@@ -309,6 +326,7 @@ export function POSPage() {
   function handleCreditSaleStart() {
     if (cart.length === 0) return;
     setCreditCustomerId('');
+    setCreditInitialPayment('0');
     setShowNewCustomer(false);
     setNewCustomerName('');
     setNewCustomerPhone('');
@@ -318,6 +336,10 @@ export function POSPage() {
   // Process credit sale
   async function handleCreditSale() {
     if (cart.length === 0 || creditCustomerId === '') return;
+    if (!isCreditInitialPaymentValid) {
+      showNotification('error', 'El abono inicial debe ser entre 0 y el total de la venta');
+      return;
+    }
 
     try {
       const sale = await createSale({
@@ -330,6 +352,7 @@ export function POSPage() {
         })),
         credit_days: creditDays,
         surcharge_percent: creditSurcharge,
+        initial_payment: roundMoney(creditInitialPaymentValue),
       });
 
       // Show ticket
@@ -644,6 +667,23 @@ export function POSPage() {
                 </div>
               </div>
 
+              <div className={styles['modal__field']}>
+                <label className={styles['modal__label']}>Abono inicial (opcional)</label>
+                <input
+                  className={styles['modal__input']}
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={creditInitialPayment}
+                  onChange={e => setCreditInitialPayment(e.target.value)}
+                />
+                {!isCreditInitialPaymentValid && (
+                  <div className={styles['modal__error']}>
+                    El abono inicial debe estar entre 0 y {formatCurrency(cartSubtotal)}.
+                  </div>
+                )}
+              </div>
+
               {/* Summary */}
               <div style={{
                 padding: 'var(--spacing-sm)',
@@ -659,6 +699,14 @@ export function POSPage() {
                   <span>Si se atrasa ({creditSurcharge}%):</span>
                   <span>{formatCurrency(cartSubtotal * (1 + creditSurcharge / 100))}</span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  <span>Abono inicial:</span>
+                  <span>{formatCurrency(Math.max(creditInitialPaymentValue, 0))}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontWeight: 600 }}>
+                  <span>Saldo pendiente:</span>
+                  <span>{formatCurrency(creditRemainingBalance)}</span>
+                </div>
               </div>
             </div>
             <div className={styles['modal__footer']}>
@@ -670,7 +718,7 @@ export function POSPage() {
               </button>
               <button
                 className={styles['modal__btn-primary']}
-                disabled={creditCustomerId === '' || saleLoading}
+                disabled={creditCustomerId === '' || saleLoading || !isCreditInitialPaymentValid}
                 onClick={handleCreditSale}
               >
                 Confirmar venta a credito

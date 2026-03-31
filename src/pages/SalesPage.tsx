@@ -413,6 +413,18 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                     <span>Recargo:</span>
                     <span>{formatCurrency(selectedSale.surcharge)}</span>
                   </div>
+                  {selectedSale.sale_type === 'cash' && selectedSale.cash_received !== null && (
+                    <>
+                      <div className={styles['ticket__total-row']}>
+                        <span>Efectivo:</span>
+                        <span>{formatCurrency(selectedSale.cash_received)}</span>
+                      </div>
+                      <div className={styles['ticket__total-row']}>
+                        <span>Cambio:</span>
+                        <span>{formatCurrency(selectedSale.cash_change ?? 0)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className={`${styles['ticket__total-row']} ${styles['ticket__total-row--grand']}`}>
                     <span>Total:</span>
                     <span>{formatCurrency(selectedSale.total)}</span>

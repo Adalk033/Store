@@ -21,6 +21,7 @@ export function useSales() {
     cash_register_id?: number | null;
     credit_days?: number;
     surcharge_percent?: number;
+    initial_payment?: number;
     cash_received?: number;
     cash_change?: number;
   }): Promise<Sale> => {
