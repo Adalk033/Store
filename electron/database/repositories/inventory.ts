@@ -7,12 +7,42 @@ interface AddMovementData {
   quantity: number;
   reference_id?: number | null;
   notes?: string | null;
+  cost_price?: number;
+  margin_percent?: number;
 }
 
 export function addInventoryMovement(data: AddMovementData): InventoryMovement {
   const db = getDatabase();
 
   const transaction = db.transaction(() => {
+    if (data.type === 'in' && (data.cost_price !== undefined || data.margin_percent !== undefined)) {
+      if (data.cost_price !== undefined && (!Number.isFinite(data.cost_price) || data.cost_price <= 0)) {
+        throw new Error('El precio de costo debe ser mayor a 0');
+      }
+
+      if (data.margin_percent !== undefined && (!Number.isFinite(data.margin_percent) || data.margin_percent < 0)) {
+        throw new Error('El porcentaje de utilidad no puede ser negativo');
+      }
+
+      const priceFields: string[] = [];
+      const priceValues: number[] = [];
+
+      if (data.cost_price !== undefined) {
+        priceFields.push('cost_price = ?');
+        priceValues.push(data.cost_price);
+      }
+
+      if (data.margin_percent !== undefined) {
+        priceFields.push('margin_percent = ?');
+        priceValues.push(data.margin_percent);
+      }
+
+      if (priceFields.length > 0) {
+        db.prepare(`UPDATE products SET ${priceFields.join(', ')} WHERE id = ?`)
+          .run(...priceValues, data.product_id);
+      }
+    }
+
     const result = db.prepare(`
       INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes)
       VALUES (?, ?, ?, ?, ?)

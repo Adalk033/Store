@@ -100,6 +100,8 @@ const electronAPI = {
       quantity: number;
       reference_id?: number | null;
       notes?: string | null;
+      cost_price?: number;
+      margin_percent?: number;
     }) => ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, data),
     getByProduct: (productId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, productId),
