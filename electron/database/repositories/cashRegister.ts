@@ -1,5 +1,5 @@
 import { getDatabase } from '../connection';
-import type { CashRegisterPeriod, CashMovement, SaleListItem } from '../../../src/types/database';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem } from '../../../src/types/database';
 
 export interface CashRegisterSalesSummary {
   sale_count: number;
@@ -136,4 +136,23 @@ export function getSalesByPeriod(cashRegisterId: number, limit = 200, offset = 0
     ORDER BY s.created_at DESC
     LIMIT ? OFFSET ?`
   ).all(cashRegisterId, limit, offset) as SaleListItem[];
+}
+
+export function getCreditPaymentsByPeriod(cashRegisterId: number, limit = 200, offset = 0): CreditPaymentListItem[] {
+  const db = getDatabase();
+
+  return db.prepare(
+    `SELECT
+      cp.*,
+      c.sale_id,
+      c.customer_id,
+      c.status AS credit_status,
+      cu.name AS customer_name
+    FROM credit_payments cp
+    INNER JOIN credits c ON c.id = cp.credit_id
+    LEFT JOIN customers cu ON cu.id = c.customer_id
+    WHERE cp.cash_register_id = ?
+    ORDER BY cp.created_at DESC
+    LIMIT ? OFFSET ?`
+  ).all(cashRegisterId, limit, offset) as CreditPaymentListItem[];
 }

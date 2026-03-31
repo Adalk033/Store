@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
-import type { CashRegisterPeriod, CashMovement, SaleListItem } from '../types';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem } from '../types';
 import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
   const [periods, setPeriods] = useState<CashRegisterPeriod[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [sales, setSales] = useState<SaleListItem[]>([]);
+  const [creditPayments, setCreditPayments] = useState<CreditPaymentListItem[]>([]);
   const [salesSummary, setSalesSummary] = useState<CashRegisterSalesSummary>({
     sale_count: 0,
     total_cash_sales: 0,
@@ -82,6 +83,18 @@ export function useCashRegister() {
     }
   }, []);
 
+  const fetchCreditPayments = useCallback(async (cashRegisterId: number, limit = 50, offset = 0) => {
+    try {
+      const data = await window.electronAPI.cashRegister.getCreditPayments(cashRegisterId, limit, offset);
+      setCreditPayments(data);
+      return data as CreditPaymentListItem[];
+    } catch (err) {
+      console.error('useCashRegister.fetchCreditPayments:', err);
+      setCreditPayments([]);
+      return [] as CreditPaymentListItem[];
+    }
+  }, []);
+
   const openPeriod = useCallback(async (data: {
     period_name: string;
     start_date: string;
@@ -104,6 +117,7 @@ export function useCashRegister() {
       setCurrentPeriod(null);
       setMovements([]);
       setSales([]);
+      setCreditPayments([]);
       return period;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cerrar periodo';
@@ -134,6 +148,7 @@ export function useCashRegister() {
     periods,
     movements,
     sales,
+    creditPayments,
     salesSummary,
     loading,
     error,
@@ -141,6 +156,7 @@ export function useCashRegister() {
     fetchAllPeriods,
     fetchMovements,
     fetchSales,
+    fetchCreditPayments,
     fetchSalesSummary,
     openPeriod,
     closePeriod,

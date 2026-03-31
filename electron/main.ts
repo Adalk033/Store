@@ -124,6 +124,11 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CASH_REGISTER_GET_SALES,
     (_, cashRegisterId: number, limit?: number, offset?: number) => cashRegisterRepo.getSalesByPeriod(cashRegisterId, limit, offset)
   );
+  ipcMain.handle(
+    IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS,
+    (_, cashRegisterId: number, limit?: number, offset?: number) =>
+      cashRegisterRepo.getCreditPaymentsByPeriod(cashRegisterId, limit, offset)
+  );
 
   // Reports
   ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => reportsRepo.getSalesByDateRange(startDate, endDate));

@@ -96,6 +96,13 @@ export interface CreditPayment {
   created_at: string;
 }
 
+export interface CreditPaymentListItem extends CreditPayment {
+  sale_id: number;
+  customer_id: number;
+  customer_name: string | null;
+  credit_status: Credit['status'];
+}
+
 export interface InventoryMovement {
   id: number;
   product_id: number;
