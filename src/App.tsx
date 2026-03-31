@@ -11,6 +11,12 @@ import { ReportsPage } from './pages/ReportsPage';
 import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
 import { SettingsPage } from './pages/SettingsPage';
 
+const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'credits', 'cashRegister', 'reports', 'barcodeLabels', 'settings'];
+
+function isPageId(value: string): value is PageId {
+  return PAGE_IDS.includes(value as PageId);
+}
+
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
@@ -19,6 +25,10 @@ export function App() {
     async function checkConnection() {
       try {
         await window.electronAPI.settings.get('store_name');
+        const lastActivePage = await window.electronAPI.settings.get('last_active_page');
+        if (lastActivePage && isPageId(lastActivePage)) {
+          setCurrentPage(lastActivePage);
+        }
         setDbStatus('connected');
       } catch (error) {
         console.error('Error connecting to database:', error);
@@ -27,6 +37,20 @@ export function App() {
     }
     checkConnection();
   }, []);
+
+  useEffect(() => {
+    if (dbStatus !== 'connected') return;
+
+    async function persistCurrentPage() {
+      try {
+        await window.electronAPI.settings.set('last_active_page', currentPage);
+      } catch (error) {
+        console.error('Error saving last active page:', error);
+      }
+    }
+
+    void persistCurrentPage();
+  }, [currentPage, dbStatus]);
 
   if (dbStatus === 'loading') {
     return (

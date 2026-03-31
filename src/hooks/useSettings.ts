@@ -8,6 +8,7 @@ export interface SettingsMap {
   ticket_footer_text: string;
   default_credit_days: string;
   default_surcharge_percent: string;
+  last_active_page: string;
   [key: string]: string;
 }
 
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: SettingsMap = {
   ticket_footer_text: '',
   default_credit_days: '5',
   default_surcharge_percent: '10',
+  last_active_page: 'products',
 };
 
 export function useSettings() {
