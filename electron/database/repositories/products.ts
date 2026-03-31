@@ -3,31 +3,60 @@ import type { Product } from '../../../src/types/database';
 
 export function getAllProducts(): Product[] {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM products ORDER BY name').all() as Product[];
+  return db.prepare(`
+    SELECT p.*, c.name AS category_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    ORDER BY p.name
+  `).all() as Product[];
 }
 
 export function getProductById(id: number): Product | undefined {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM products WHERE id = ?').get(id) as Product | undefined;
+  return db.prepare(`
+    SELECT p.*, c.name AS category_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    WHERE p.id = ?
+  `).get(id) as Product | undefined;
 }
 
 export function getProductByBarcode(barcode: string): Product | undefined {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM products WHERE barcode = ?').get(barcode) as Product | undefined;
+  return db.prepare(`
+    SELECT p.*, c.name AS category_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    WHERE p.barcode = ?
+  `).get(barcode) as Product | undefined;
 }
 
 export function searchProducts(query: string): Product[] {
   const db = getDatabase();
   const term = `%${query}%`;
   return db.prepare(
-    'SELECT * FROM products WHERE (name LIKE ? OR barcode LIKE ? OR description LIKE ?) AND is_active = 1 ORDER BY name'
-  ).all(term, term, term) as Product[];
+    `SELECT p.*, c.name AS category_name
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE (
+       p.name LIKE ?
+       OR p.barcode LIKE ?
+       OR COALESCE(p.description, '') LIKE ?
+       OR COALESCE(c.name, '') LIKE ?
+     )
+     AND p.is_active = 1
+     ORDER BY p.name`
+  ).all(term, term, term, term) as Product[];
 }
 
 export function getLowStockProducts(): Product[] {
   const db = getDatabase();
   return db.prepare(
-    'SELECT * FROM products WHERE min_stock >= 0 AND stock <= min_stock AND is_active = 1 ORDER BY stock ASC'
+    `SELECT p.*, c.name AS category_name
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE p.min_stock >= 0 AND p.stock <= p.min_stock AND p.is_active = 1
+     ORDER BY p.stock ASC`
   ).all() as Product[];
 }
 

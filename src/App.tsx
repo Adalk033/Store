@@ -22,11 +22,15 @@ function isPageId(value: string): value is PageId {
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
+  const [storeName, setStoreName] = useState('MichiPapeleria');
 
   useEffect(() => {
     async function checkConnection() {
       try {
-        await window.electronAPI.settings.get('store_name');
+        const configuredStoreName = await window.electronAPI.settings.get('store_name');
+        if (configuredStoreName?.trim()) {
+          setStoreName(configuredStoreName.trim());
+        }
         const lastActivePage = await window.electronAPI.settings.get('last_active_page');
         if (lastActivePage && isPageId(lastActivePage)) {
           setCurrentPage(lastActivePage);
@@ -98,7 +102,7 @@ export function App() {
   }
 
   return (
-    <MainLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+    <MainLayout currentPage={currentPage} onNavigate={setCurrentPage} storeName={storeName}>
       {renderPage()}
     </MainLayout>
   );

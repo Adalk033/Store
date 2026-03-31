@@ -132,7 +132,12 @@ export function POSPage() {
     return products.filter(
       p =>
         p.is_active === 1 &&
-        (p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q))
+        (
+          p.name.toLowerCase().includes(q) ||
+          p.barcode.toLowerCase().includes(q) ||
+          (p.description ?? '').toLowerCase().includes(q) ||
+          (p.category_name ?? '').toLowerCase().includes(q)
+        )
     );
   }, [products, searchQuery]);
 
@@ -374,6 +379,16 @@ export function POSPage() {
               >
                 <div className={styles['pos__result-info']}>
                   <div className={styles['pos__result-name']}>{product.name}</div>
+                  <div className={styles['pos__result-context']}>
+                    <span className={styles['pos__result-category']}>
+                      {product.category_name ?? 'Sin categoria'}
+                    </span>
+                    {product.description && (
+                      <span className={styles['pos__result-description']}>
+                        {product.description}
+                      </span>
+                    )}
+                  </div>
                   <div className={styles['pos__result-meta']}>
                     <span>{product.barcode}</span>
                     <span className={`${styles['pos__result-stock']} ${getStockClass(product)}`}>

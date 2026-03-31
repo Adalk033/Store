@@ -13,6 +13,7 @@ export interface Product {
   name: string;
   description: string | null;
   category_id: number | null;
+  category_name?: string | null;
   cost_price: number;
   margin_percent: number;
   sale_price: number; // GENERATED STORED column

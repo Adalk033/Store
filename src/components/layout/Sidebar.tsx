@@ -6,6 +6,7 @@ export type PageId = 'products' | 'inventory' | 'pos' | 'sales' | 'credits' | 'c
 interface SidebarProps {
   currentPage: PageId;
   onNavigate: (page: PageId) => void;
+  storeName: string;
 }
 
 const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabled?: boolean }> = [
@@ -21,12 +22,11 @@ const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabl
   { id: 'settings', label: 'Configuracion', icon: Settings },
 ];
 
-export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export function Sidebar({ currentPage, onNavigate, storeName }: SidebarProps) {
   return (
     <aside className={styles.sidebar}>
       <div className={styles['sidebar__logo']}>
-        <div className={styles['sidebar__logo-text']}>MichiPapeleria</div>
-        <div className={styles['sidebar__logo-subtitle']}>Punto de Venta</div>
+        <div className={styles['sidebar__logo-text']}>{storeName}</div>
       </div>
       <nav className={styles['sidebar__nav']}>
         {NAV_ITEMS.map(item => (
