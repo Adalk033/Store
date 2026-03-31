@@ -16,7 +16,7 @@ import styles from './SalesPage.module.css';
 
 type ViewMode = 'list' | 'detail';
 type SaleTypeFilter = 'all' | 'cash' | 'credit';
-type TimeRangeFilter = '7d' | '30d' | '2m' | '3m' | 'all';
+type TimeRangeFilter = 'select' | '7d' | '30d' | '2m' | '3m' | 'all';
 
 interface SalesPageProps {
   onViewCustomerProfile?: (customerId: number) => void;
@@ -36,7 +36,7 @@ const SALE_TYPE_LABEL: Record<'cash' | 'credit', string> = {
 const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
 function getRangeStartDate(range: TimeRangeFilter): Date | null {
-  if (range === 'all') {
+  if (range === 'all' || range === 'select') {
     return null;
   }
 
@@ -68,6 +68,8 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTypeFilter, setSaleTypeFilter] = useState<SaleTypeFilter>('all');
   const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>('30d');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [currentPage, setCurrentPage] = useState(1);
   const [showTicket, setShowTicket] = useState(false);
@@ -133,13 +135,27 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
   const filteredSales = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const rangeStart = getRangeStartDate(timeRangeFilter);
+    const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
+    const customStartDate = startDateFilter ? new Date(`${startDateFilter}T00:00:00`) : null;
+    const customEndDate = endDateFilter ? new Date(`${endDateFilter}T23:59:59.999`) : null;
+
+    if (customStartDate && customEndDate && customStartDate > customEndDate) {
+      return [];
+    }
 
     return sales.filter((sale) => {
-      if (rangeStart) {
-        const saleDate = new Date(sale.created_at);
-        if (saleDate < rangeStart) {
+      const saleDate = new Date(sale.created_at);
+
+      if (hasCustomDateFilter) {
+        if (customStartDate && saleDate < customStartDate) {
           return false;
         }
+
+        if (customEndDate && saleDate > customEndDate) {
+          return false;
+        }
+      } else if (rangeStart && saleDate < rangeStart) {
+        return false;
       }
 
       if (saleTypeFilter !== 'all' && sale.sale_type !== saleTypeFilter) {
@@ -154,7 +170,39 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
         || sale.customer_name?.toLowerCase().includes(query)
         || sale.total.toFixed(2).includes(query);
     });
-  }, [sales, saleTypeFilter, searchQuery, timeRangeFilter]);
+  }, [sales, saleTypeFilter, searchQuery, timeRangeFilter, startDateFilter, endDateFilter]);
+
+  const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
+  const hasInvalidDateRange = Boolean(
+    startDateFilter
+      && endDateFilter
+      && new Date(`${startDateFilter}T00:00:00`) > new Date(`${endDateFilter}T23:59:59.999`),
+  );
+
+  function handleTimeRangeFilterChange(nextFilter: TimeRangeFilter) {
+    setTimeRangeFilter(nextFilter);
+
+    if (nextFilter !== 'select') {
+      setStartDateFilter('');
+      setEndDateFilter('');
+    }
+  }
+
+  function handleStartDateFilterChange(value: string) {
+    setStartDateFilter(value);
+
+    if (value || endDateFilter) {
+      setTimeRangeFilter('select');
+    }
+  }
+
+  function handleEndDateFilterChange(value: string) {
+    setEndDateFilter(value);
+
+    if (value || startDateFilter) {
+      setTimeRangeFilter('select');
+    }
+  }
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(filteredSales.length / rowsPerPage)),
@@ -168,7 +216,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, saleTypeFilter, timeRangeFilter, rowsPerPage]);
+  }, [searchQuery, saleTypeFilter, timeRangeFilter, startDateFilter, endDateFilter, rowsPerPage]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -526,14 +574,35 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
         <select
           className={styles['toolbar__filter']}
           value={timeRangeFilter}
-          onChange={(event) => setTimeRangeFilter(event.target.value as TimeRangeFilter)}
+          onChange={(event) => handleTimeRangeFilterChange(event.target.value as TimeRangeFilter)}
+          disabled={hasCustomDateFilter}
         >
+          <option value="select">Seleccionar</option>
           <option value="30d">Ultimos 30 dias</option>
           <option value="7d">Ultimos 7 dias</option>
           <option value="2m">Ultimos 2 meses</option>
           <option value="3m">Ultimos 3 meses</option>
           <option value="all">Todo</option>
         </select>
+
+        <div className={styles['toolbar__date-group']}>
+          <input
+            className={styles['toolbar__filter']}
+            type="date"
+            value={startDateFilter}
+            onChange={(event) => handleStartDateFilterChange(event.target.value)}
+            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
+            aria-label="Fecha inicial"
+          />
+          <input
+            className={styles['toolbar__filter']}
+            type="date"
+            value={endDateFilter}
+            onChange={(event) => handleEndDateFilterChange(event.target.value)}
+            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
+            aria-label="Fecha final"
+          />
+        </div>
 
         <select
           className={styles['toolbar__filter']}
@@ -557,6 +626,12 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
           ))}
         </select>
       </section>
+
+      {hasInvalidDateRange && (
+        <p className={styles['toolbar__hint--error']}>
+          La fecha inicial no puede ser mayor que la fecha final.
+        </p>
+      )}
 
       <section className={styles['table-card']}>
         <div className={styles['table-card__title']}>Historial de ventas</div>
