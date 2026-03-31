@@ -15,8 +15,13 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
 };
 
-export function CreditsPage() {
-  const { credits, loading, error, fetchCredits, fetchCreditsByCustomer, addPayment, getPayments, checkOverdue } = useCredits();
+interface CreditsPageProps {
+  initialCreditId?: number | null;
+  onInitialCreditHandled?: () => void;
+}
+
+export function CreditsPage({ initialCreditId, onInitialCreditHandled }: CreditsPageProps) {
+  const { credits, loading, error, fetchCredits, fetchCreditsByCustomer, addPayment, getPayments, getCreditById, checkOverdue } = useCredits();
   const { customers } = useCustomers();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -116,6 +121,40 @@ export function CreditsPage() {
     setCreditPayments(payments);
     setViewMode('detail');
   }, [getPayments]);
+
+  useEffect(() => {
+    if (!initialCreditId || viewMode !== 'list') {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function openInitialCreditDetail() {
+      try {
+        let targetCredit = credits.find(credit => credit.id === initialCreditId);
+
+        if (!targetCredit) {
+          targetCredit = await getCreditById(initialCreditId);
+        }
+
+        if (!targetCredit || cancelled) {
+          return;
+        }
+
+        await openDetail(targetCredit);
+      } finally {
+        if (!cancelled) {
+          onInitialCreditHandled?.();
+        }
+      }
+    }
+
+    void openInitialCreditDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [credits, getCreditById, initialCreditId, onInitialCreditHandled, openDetail, viewMode]);
 
   function openCustomerView(customer: Customer) {
     setSelectedCustomer(customer);

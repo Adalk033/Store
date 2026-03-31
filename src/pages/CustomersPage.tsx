@@ -27,9 +27,10 @@ interface CustomerCreditSummary {
 interface CustomersPageProps {
   initialCustomerId?: number | null;
   onInitialCustomerHandled?: () => void;
+  onViewCreditDetail?: (creditId: number) => void;
 }
 
-export function CustomersPage({ initialCustomerId, onInitialCustomerHandled }: CustomersPageProps) {
+export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onViewCreditDetail }: CustomersPageProps) {
   const {
     customers,
     loading: loadingCustomers,
@@ -453,7 +454,17 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled }: C
                   const percent = getProgressPercent(credit);
 
                   return (
-                    <tr key={credit.id} className={styles['table__row--clickable']} onClick={() => openCreditDetail(credit)}>
+                    <tr
+                      key={credit.id}
+                      className={styles['table__row--clickable']}
+                      onClick={() => {
+                        if (onViewCreditDetail) {
+                          onViewCreditDetail(credit.id);
+                          return;
+                        }
+                        void openCreditDetail(credit);
+                      }}
+                    >
                       <td>{credit.id}</td>
                       <td>{credit.sale_id}</td>
                       <td>{formatDate(credit.created_at)}</td>
@@ -478,7 +489,11 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled }: C
                           className={styles['btn-secondary']}
                           onClick={(event) => {
                             event.stopPropagation();
-                            openCreditDetail(credit);
+                            if (onViewCreditDetail) {
+                              onViewCreditDetail(credit.id);
+                              return;
+                            }
+                            void openCreditDetail(credit);
                           }}
                         >
                           Ver detalle

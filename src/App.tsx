@@ -24,10 +24,16 @@ export function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('products');
   const [storeName, setStoreName] = useState('MichiPapeleria');
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
+  const [initialCreditId, setInitialCreditId] = useState<number | null>(null);
 
   function openCustomerProfileFromSales(customerId: number) {
     setInitialCustomerId(customerId);
     setCurrentPage('customers');
+  }
+
+  function openCreditDetailFromCustomers(creditId: number) {
+    setInitialCreditId(creditId);
+    setCurrentPage('credits');
   }
 
   useEffect(() => {
@@ -110,13 +116,21 @@ export function App() {
           </ErrorBoundary>
         );
       case 'credits':
-        return <ErrorBoundary pageName="Creditos" key="credits"><CreditsPage /></ErrorBoundary>;
+        return (
+          <ErrorBoundary pageName="Creditos" key="credits">
+            <CreditsPage
+              initialCreditId={initialCreditId}
+              onInitialCreditHandled={() => setInitialCreditId(null)}
+            />
+          </ErrorBoundary>
+        );
       case 'customers':
         return (
           <ErrorBoundary pageName="Clientes" key="customers">
             <CustomersPage
               initialCustomerId={initialCustomerId}
               onInitialCustomerHandled={() => setInitialCustomerId(null)}
+              onViewCreditDetail={openCreditDetailFromCustomers}
             />
           </ErrorBoundary>
         );
