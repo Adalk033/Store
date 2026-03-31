@@ -1,0 +1,444 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText } from 'lucide-react';
+import { useCustomers } from '../hooks/useCustomers';
+import { useCredits } from '../hooks/useCredits';
+import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
+import type { Credit, CreditPayment, Customer } from '../types';
+import styles from './CustomersPage.module.css';
+
+type ViewMode = 'list' | 'profile';
+type CustomerFilter = 'all' | 'withDebt' | 'overdue' | 'withoutCredits';
+
+const STATUS_LABELS: Record<Credit['status'], string> = {
+  pending: 'Pendiente',
+  overdue: 'Vencido',
+  paid: 'Pagado',
+};
+
+interface CustomerCreditSummary {
+  totalCredits: number;
+  activeCredits: number;
+  overdueCredits: number;
+  totalDebt: number;
+  totalPaid: number;
+  lastCreditDate: string | null;
+}
+
+export function CustomersPage() {
+  const { customers, loading: loadingCustomers, error: customersError } = useCustomers();
+  const {
+    credits,
+    loading: loadingCredits,
+    error: creditsError,
+    fetchCredits,
+    fetchCreditsByCustomer,
+    getPayments,
+  } = useCredits();
+
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCredit, setSelectedCredit] = useState<Credit | null>(null);
+  const [creditPayments, setCreditPayments] = useState<CreditPayment[]>([]);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [customerFilter, setCustomerFilter] = useState<CustomerFilter>('all');
+
+  useEffect(() => {
+    fetchCredits();
+  }, [fetchCredits]);
+
+  const creditSummaryByCustomer = useMemo(() => {
+    const summaryMap = new Map<number, CustomerCreditSummary>();
+
+    credits.forEach((credit) => {
+      const current = summaryMap.get(credit.customer_id) ?? {
+        totalCredits: 0,
+        activeCredits: 0,
+        overdueCredits: 0,
+        totalDebt: 0,
+        totalPaid: 0,
+        lastCreditDate: null,
+      };
+
+      current.totalCredits += 1;
+      if (credit.status !== 'paid') {
+        current.activeCredits += 1;
+      }
+      if (credit.status === 'overdue') {
+        current.overdueCredits += 1;
+      }
+      current.totalDebt += credit.total_due - credit.amount_paid;
+      current.totalPaid += credit.amount_paid;
+
+      if (!current.lastCreditDate || new Date(credit.created_at) > new Date(current.lastCreditDate)) {
+        current.lastCreditDate = credit.created_at;
+      }
+
+      summaryMap.set(credit.customer_id, current);
+    });
+
+    return summaryMap;
+  }, [credits]);
+
+  const filteredCustomers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return customers
+      .filter((customer) => {
+        if (!query) return true;
+
+        return customer.name.toLowerCase().includes(query)
+          || customer.phone?.toLowerCase().includes(query)
+          || customer.email?.toLowerCase().includes(query);
+      })
+      .filter((customer) => {
+        const summary = creditSummaryByCustomer.get(customer.id);
+
+        if (customerFilter === 'withDebt') {
+          return (summary?.totalDebt ?? 0) > 0;
+        }
+
+        if (customerFilter === 'overdue') {
+          return (summary?.overdueCredits ?? 0) > 0;
+        }
+
+        if (customerFilter === 'withoutCredits') {
+          return (summary?.totalCredits ?? 0) === 0;
+        }
+
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers, searchQuery, customerFilter, creditSummaryByCustomer]);
+
+  async function openCustomerProfile(customer: Customer) {
+    setSelectedCustomer(customer);
+    setSelectedCredit(null);
+    setCreditPayments([]);
+    setViewMode('profile');
+    await fetchCreditsByCustomer(customer.id);
+  }
+
+  async function openCreditDetail(credit: Credit) {
+    setSelectedCredit(credit);
+    const payments = await getPayments(credit.id);
+    setCreditPayments(payments);
+  }
+
+  async function backToList() {
+    setViewMode('list');
+    setSelectedCustomer(null);
+    setSelectedCredit(null);
+    setCreditPayments([]);
+    await fetchCredits();
+  }
+
+  function getProgressPercent(credit: Credit): number {
+    if (credit.total_due <= 0) return 100;
+    return Math.min(100, Math.round((credit.amount_paid / credit.total_due) * 100));
+  }
+
+  function getProgressClass(percent: number): string {
+    if (percent >= 100) return styles['progress__fill--complete'];
+    if (percent >= 60) return styles['progress__fill--high'];
+    if (percent >= 30) return styles['progress__fill--mid'];
+    return styles['progress__fill--low'];
+  }
+
+  if (viewMode === 'profile' && selectedCustomer) {
+    const customerCredits = credits;
+    const totalDebt = customerCredits
+      .filter(c => c.status !== 'paid')
+      .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
+    const totalPaid = customerCredits.reduce((sum, c) => sum + c.amount_paid, 0);
+    const activeCount = customerCredits.filter(c => c.status !== 'paid').length;
+    const overdueCount = customerCredits.filter(c => c.status === 'overdue').length;
+    const totalFinanced = customerCredits.reduce((sum, c) => sum + c.total_due, 0);
+
+    return (
+      <div className={styles.page}>
+        <div className={styles['page__header']}>
+          <button className={styles['btn-back']} onClick={backToList}>
+            <ArrowLeft size={16} strokeWidth={1.5} />
+            Volver a clientes
+          </button>
+          <h1 className={styles['page__title']}>Perfil del cliente</h1>
+        </div>
+
+        <section className={styles.profile}>
+          <div className={styles['profile__card']}>
+            <h2 className={styles['profile__title']}>
+              <User size={18} strokeWidth={1.5} />
+              {selectedCustomer.name}
+            </h2>
+
+            <div className={styles['profile__meta']}>
+              <span className={styles['profile__meta-item']}>
+                <Phone size={14} strokeWidth={1.5} />
+                {selectedCustomer.phone ?? 'Sin telefono'}
+              </span>
+              <span className={styles['profile__meta-item']}>
+                <Mail size={14} strokeWidth={1.5} />
+                {selectedCustomer.email ?? 'Sin correo'}
+              </span>
+              <span className={styles['profile__meta-item']}>
+                <CalendarDays size={14} strokeWidth={1.5} />
+                Registrado: {formatDate(selectedCustomer.created_at)}
+              </span>
+            </div>
+
+            <div className={styles['profile__notes']}>
+              <div className={styles['profile__notes-title']}>
+                <FileText size={14} strokeWidth={1.5} />
+                Notas
+              </div>
+              <p>{selectedCustomer.notes?.trim() ? selectedCustomer.notes : 'Sin notas registradas'}</p>
+            </div>
+          </div>
+
+          <div className={styles['summary-grid']}>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Deuda actual</span>
+              <span className={`${styles['summary-card__value']} ${totalDebt > 0 ? styles['summary-card__value--error'] : styles['summary-card__value--success']}`}>
+                {formatCurrency(totalDebt)}
+              </span>
+            </div>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Total abonado</span>
+              <span className={`${styles['summary-card__value']} ${styles['summary-card__value--success']}`}>
+                {formatCurrency(totalPaid)}
+              </span>
+            </div>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Total financiado</span>
+              <span className={styles['summary-card__value']}>
+                {formatCurrency(totalFinanced)}
+              </span>
+            </div>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Creditos activos</span>
+              <span className={styles['summary-card__value']}>{activeCount}</span>
+            </div>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Creditos vencidos</span>
+              <span className={`${styles['summary-card__value']} ${overdueCount > 0 ? styles['summary-card__value--error'] : ''}`}>
+                {overdueCount}
+              </span>
+            </div>
+            <div className={styles['summary-card']}>
+              <span className={styles['summary-card__label']}>Historial de creditos</span>
+              <span className={styles['summary-card__value']}>{customerCredits.length}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles['table-card']}>
+          <div className={styles['table-card__title']}>Historial de creditos</div>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Venta</th>
+                <th>Fecha</th>
+                <th>Vencimiento</th>
+                <th>Total</th>
+                <th>Pagado</th>
+                <th>Saldo</th>
+                <th>Progreso</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingCredits ? (
+                <tr><td colSpan={10} className={styles['table__empty']}>Cargando creditos...</td></tr>
+              ) : customerCredits.length === 0 ? (
+                <tr><td colSpan={10} className={styles['table__empty']}>Este cliente no tiene creditos</td></tr>
+              ) : (
+                customerCredits.map(credit => {
+                  const remaining = credit.total_due - credit.amount_paid;
+                  const percent = getProgressPercent(credit);
+
+                  return (
+                    <tr key={credit.id} className={styles['table__row--clickable']} onClick={() => openCreditDetail(credit)}>
+                      <td>{credit.id}</td>
+                      <td>{credit.sale_id}</td>
+                      <td>{formatDate(credit.created_at)}</td>
+                      <td>{formatDate(credit.due_date)}</td>
+                      <td>{formatCurrency(credit.total_due)}</td>
+                      <td className={styles['text--success']}>{formatCurrency(credit.amount_paid)}</td>
+                      <td className={remaining > 0 ? styles['text--error'] : styles['text--success']}>
+                        {formatCurrency(remaining)}
+                      </td>
+                      <td>
+                        <div className={styles.progress}>
+                          <div className={`${styles['progress__fill']} ${getProgressClass(percent)}`} style={{ width: `${percent}%` }} />
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${styles[`badge--${credit.status}`]}`}>
+                          {STATUS_LABELS[credit.status]}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className={styles['btn-secondary']}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openCreditDetail(credit);
+                          }}
+                        >
+                          Ver detalle
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        {selectedCredit && (
+          <section className={styles['detail-card']}>
+            <h3 className={styles['detail-card__title']}>Credito #{selectedCredit.id} - Historial de abonos</h3>
+            <div className={styles['detail-card__meta']}>
+              <span>Creado: {formatDateTime(selectedCredit.created_at)}</span>
+              <span>Vence: {formatDate(selectedCredit.due_date)}</span>
+              <span>Total: {formatCurrency(selectedCredit.total_due)}</span>
+              <span>Pagado: {formatCurrency(selectedCredit.amount_paid)}</span>
+              <span>Saldo: {formatCurrency(selectedCredit.total_due - selectedCredit.amount_paid)}</span>
+            </div>
+
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Fecha y hora</th>
+                  <th>Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creditPayments.length === 0 ? (
+                  <tr><td colSpan={2} className={styles['table__empty']}>Sin abonos registrados</td></tr>
+                ) : (
+                  creditPayments.map(payment => (
+                    <tr key={payment.id}>
+                      <td>{formatDateTime(payment.created_at)}</td>
+                      <td className={styles['text--success']}>+{formatCurrency(payment.amount)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.page}>
+      <div className={styles['page__header']}>
+        <h1 className={styles['page__title']}>Clientes</h1>
+      </div>
+
+      {(customersError || creditsError) && (
+        <p className={styles['error-message']}>
+          {customersError ?? creditsError}
+        </p>
+      )}
+
+      <div className={styles.toolbar}>
+        <div className={styles['search-box']}>
+          <Search size={14} strokeWidth={1.5} className={styles['search-box__icon']} />
+          <input
+            className={styles['search-box__input']}
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar por nombre, telefono o correo"
+          />
+        </div>
+
+        <select
+          className={styles['toolbar__filter']}
+          value={customerFilter}
+          onChange={(event) => setCustomerFilter(event.target.value as CustomerFilter)}
+        >
+          <option value="all">Todos</option>
+          <option value="withDebt">Con deuda activa</option>
+          <option value="overdue">Con creditos vencidos</option>
+          <option value="withoutCredits">Sin creditos</option>
+        </select>
+      </div>
+
+      <div className={styles['table-card']}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Contacto</th>
+              <th>Creditos historicos</th>
+              <th>Creditos activos</th>
+              <th>Deuda actual</th>
+              <th>Ultimo credito</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingCustomers || loadingCredits ? (
+              <tr><td colSpan={7} className={styles['table__empty']}>Cargando clientes...</td></tr>
+            ) : filteredCustomers.length === 0 ? (
+              <tr><td colSpan={7} className={styles['table__empty']}>No hay clientes para mostrar</td></tr>
+            ) : (
+              filteredCustomers.map((customer) => {
+                const summary = creditSummaryByCustomer.get(customer.id);
+                const debt = summary?.totalDebt ?? 0;
+                const active = summary?.activeCredits ?? 0;
+                const historyCount = summary?.totalCredits ?? 0;
+
+                return (
+                  <tr key={customer.id} className={styles['table__row--clickable']} onClick={() => openCustomerProfile(customer)}>
+                    <td>
+                      <div className={styles['customer-cell']}>
+                        <span className={styles['customer-cell__name']}>{customer.name}</span>
+                        {summary && summary.overdueCredits > 0 && (
+                          <span className={`${styles.badge} ${styles['badge--overdue']}`}>
+                            {summary.overdueCredits} vencido(s)
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <div className={styles['contact-cell']}>
+                        <span>{customer.phone ?? 'Sin telefono'}</span>
+                        <span>{customer.email ?? 'Sin correo'}</span>
+                      </div>
+                    </td>
+                    <td>{historyCount}</td>
+                    <td>{active}</td>
+                    <td className={debt > 0 ? styles['text--error'] : styles['text--success']}>
+                      {formatCurrency(debt)}
+                    </td>
+                    <td>{summary?.lastCreditDate ? formatDate(summary.lastCreditDate) : 'Sin creditos'}</td>
+                    <td>
+                      <button
+                        className={styles['btn-secondary']}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openCustomerProfile(customer);
+                        }}
+                      >
+                        Ver perfil
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
