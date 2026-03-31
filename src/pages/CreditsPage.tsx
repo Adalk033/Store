@@ -8,12 +8,34 @@ import styles from './CreditsPage.module.css';
 
 type ViewMode = 'list' | 'detail' | 'customer';
 type TabFilter = 'all' | 'pending' | 'overdue' | 'paid';
+type TimeRangeFilter = 'select' | '7d' | '30d' | '2m' | '3m' | 'all';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
   overdue: 'Vencido',
   paid: 'Pagado',
 };
+
+function getRangeStartDate(range: TimeRangeFilter): Date | null {
+  if (range === 'all' || range === 'select') {
+    return null;
+  }
+
+  const start = new Date();
+
+  if (range === '7d') {
+    start.setDate(start.getDate() - 6);
+  } else if (range === '30d') {
+    start.setDate(start.getDate() - 29);
+  } else if (range === '2m') {
+    start.setMonth(start.getMonth() - 2);
+  } else if (range === '3m') {
+    start.setMonth(start.getMonth() - 3);
+  }
+
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
 
 interface CreditsPageProps {
   initialCreditId?: number | null;
@@ -28,6 +50,9 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCustomerId, setFilterCustomerId] = useState<number | ''>('');
+  const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>('all');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Detail view state
@@ -60,6 +85,15 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
   // Filter credits based on tab, customer, and search
   const filteredCredits = useMemo(() => {
+    const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
+    const presetRangeStart = getRangeStartDate(timeRangeFilter);
+    const customStartDate = startDateFilter ? new Date(`${startDateFilter}T00:00:00`) : null;
+    const customEndDate = endDateFilter ? new Date(`${endDateFilter}T23:59:59.999`) : null;
+
+    if (customStartDate && customEndDate && customStartDate > customEndDate) {
+      return [];
+    }
+
     let result = credits;
 
     if (activeTab !== 'all') {
@@ -68,6 +102,24 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
     if (filterCustomerId !== '') {
       result = result.filter(c => c.customer_id === filterCustomerId);
+    }
+
+    if (hasCustomDateFilter) {
+      result = result.filter(c => {
+        const creditDate = new Date(c.created_at);
+
+        if (customStartDate && creditDate < customStartDate) {
+          return false;
+        }
+
+        if (customEndDate && creditDate > customEndDate) {
+          return false;
+        }
+
+        return true;
+      });
+    } else if (presetRangeStart) {
+      result = result.filter(c => new Date(c.created_at) >= presetRangeStart);
     }
 
     if (searchQuery.trim()) {
@@ -81,7 +133,38 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     }
 
     return result;
-  }, [credits, activeTab, filterCustomerId, searchQuery, customerMap]);
+  }, [credits, activeTab, filterCustomerId, timeRangeFilter, startDateFilter, endDateFilter, searchQuery, customerMap]);
+
+  const hasInvalidDateRange = Boolean(
+    startDateFilter
+      && endDateFilter
+      && new Date(`${startDateFilter}T00:00:00`) > new Date(`${endDateFilter}T23:59:59.999`),
+  );
+
+  function handleTimeRangeFilterChange(nextFilter: TimeRangeFilter) {
+    setTimeRangeFilter(nextFilter);
+
+    if (nextFilter !== 'select') {
+      setStartDateFilter('');
+      setEndDateFilter('');
+    }
+  }
+
+  function handleStartDateFilterChange(value: string) {
+    setStartDateFilter(value);
+
+    if (value || endDateFilter) {
+      setTimeRangeFilter('select');
+    }
+  }
+
+  function handleEndDateFilterChange(value: string) {
+    setEndDateFilter(value);
+
+    if (value || startDateFilter) {
+      setTimeRangeFilter('select');
+    }
+  }
 
   // Summary stats
   const summary = useMemo(() => {
@@ -628,6 +711,37 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             style={{ paddingLeft: 30 }}
           />
         </div>
+
+        <select
+          className={styles['toolbar__filter']}
+          value={timeRangeFilter}
+          onChange={(event) => handleTimeRangeFilterChange(event.target.value as TimeRangeFilter)}
+        >
+          <option value="select">Seleccionar</option>
+          <option value="30d">Ultimos 30 dias</option>
+          <option value="7d">Ultimos 7 dias</option>
+          <option value="2m">Ultimos 2 meses</option>
+          <option value="3m">Ultimos 3 meses</option>
+          <option value="all">Todo</option>
+        </select>
+
+        <div className={styles['toolbar__date-group']}>
+          <input
+            className={styles['toolbar__filter']}
+            type="date"
+            value={startDateFilter}
+            onChange={(event) => handleStartDateFilterChange(event.target.value)}
+            aria-label="Fecha inicial"
+          />
+          <input
+            className={styles['toolbar__filter']}
+            type="date"
+            value={endDateFilter}
+            onChange={(event) => handleEndDateFilterChange(event.target.value)}
+            aria-label="Fecha final"
+          />
+        </div>
+
         <select
           className={styles['toolbar__filter']}
           value={filterCustomerId}
@@ -639,6 +753,12 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
           ))}
         </select>
       </div>
+
+      {hasInvalidDateRange && (
+        <p className={styles['toolbar__hint--error']}>
+          La fecha inicial no puede ser mayor que la fecha final.
+        </p>
+      )}
 
       {/* Credits table */}
       <div className={styles['table-card']}>

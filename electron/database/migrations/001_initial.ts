@@ -176,6 +176,16 @@ export function runMigrations(): void {
     `);
   }
 
+    const creditPaymentColumns = db
+        .prepare("PRAGMA table_info('credit_payments')")
+        .all() as Array<{ name: string }>;
+    const hasCreditPaymentCashRegisterId = creditPaymentColumns.some(column => column.name === 'cash_register_id');
+
+    if (!hasCreditPaymentCashRegisterId) {
+        db.exec('ALTER TABLE credit_payments ADD COLUMN cash_register_id INTEGER REFERENCES cash_register_periods(id)');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_credit_payments_cash_register ON credit_payments(cash_register_id)');
+    }
+
     const salesColumns = db
         .prepare("PRAGMA table_info('sales')")
         .all() as Array<{ name: string }>;

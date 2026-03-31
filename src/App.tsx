@@ -12,8 +12,9 @@ import { CashRegisterPage } from './pages/CashRegisterPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { HelpPage } from './pages/HelpPage';
 
-const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings'];
+const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings', 'help'];
 
 function isPageId(value: string): value is PageId {
   return PAGE_IDS.includes(value as PageId);
@@ -146,6 +147,8 @@ export function App() {
             <SettingsPage onStoreNameChange={setStoreName} />
           </ErrorBoundary>
         );
+      case 'help':
+        return <ErrorBoundary pageName="Ayuda" key="help"><HelpPage /></ErrorBoundary>;
       default:
         return <ErrorBoundary pageName="Productos" key="products-default"><ProductsPage /></ErrorBoundary>;
     }

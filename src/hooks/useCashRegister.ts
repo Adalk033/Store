@@ -1,10 +1,16 @@
 import { useState, useCallback } from 'react';
 import type { CashRegisterPeriod, CashMovement } from '../types';
-
+import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
   const [periods, setPeriods] = useState<CashRegisterPeriod[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [salesSummary, setSalesSummary] = useState<CashRegisterSalesSummary>({
+    sale_count: 0,
+    total_cash_sales: 0,
+    total_credit_sales: 0,
+    total_credit_collected: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +53,19 @@ export function useCashRegister() {
     } catch (err) {
       console.error('useCashRegister.fetchMovements:', err);
       setMovements([]);
+    }
+  }, []);
+
+  const fetchSalesSummary = useCallback(async (cashRegisterId: number) => {
+    try {
+      const data = await window.electronAPI.cashRegister.getSalesSummary(cashRegisterId);
+      setSalesSummary(data);
+      return data;
+    } catch (err) {
+      console.error('useCashRegister.fetchSalesSummary:', err);
+      const empty = { sale_count: 0, total_cash_sales: 0, total_credit_sales: 0, total_credit_collected: 0 };
+      setSalesSummary(empty);
+      return empty;
     }
   }, []);
 
@@ -99,11 +118,13 @@ export function useCashRegister() {
     currentPeriod,
     periods,
     movements,
+    salesSummary,
     loading,
     error,
     fetchCurrentPeriod,
     fetchAllPeriods,
     fetchMovements,
+    fetchSalesSummary,
     openPeriod,
     closePeriod,
     addMovement,

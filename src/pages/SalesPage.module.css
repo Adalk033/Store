@@ -85,6 +85,19 @@
   flex-wrap: wrap;
 }
 
+.toolbar__date-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.toolbar__hint--error {
+  margin: calc(var(--spacing-xs) * -1) 0 0;
+  color: var(--color-error);
+  font-size: var(--font-size-xs);
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -538,6 +551,12 @@
   .toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .toolbar__date-group {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .pagination {

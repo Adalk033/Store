@@ -122,6 +122,8 @@ const electronAPI = {
     }) => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, data),
     getMovements: (cashRegisterId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
+    getSalesSummary: (cashRegisterId: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, cashRegisterId),
   },
 
   // Reports

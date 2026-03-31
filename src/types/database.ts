@@ -92,6 +92,7 @@ export interface CreditPayment {
   id: number;
   credit_id: number;
   amount: number;
+  cash_register_id: number | null;
   created_at: string;
 }
 

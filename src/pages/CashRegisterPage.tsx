@@ -18,10 +18,12 @@ export function CashRegisterPage() {
     currentPeriod,
     periods,
     movements,
+    salesSummary,
     loading,
     fetchCurrentPeriod,
     fetchAllPeriods,
     fetchMovements,
+    fetchSalesSummary,
     openPeriod,
     closePeriod,
     addMovement,
@@ -68,8 +70,25 @@ export function CashRegisterPage() {
   useEffect(() => {
     if (currentPeriod) {
       fetchMovements(currentPeriod.id);
+      void fetchSalesSummary(currentPeriod.id);
     }
-  }, [currentPeriod, fetchMovements]);
+  }, [currentPeriod, fetchMovements, fetchSalesSummary]);
+
+  // Keep sales totals up-to-date while viewing the current open period.
+  useEffect(() => {
+    if (!currentPeriod) return;
+    if (viewMode !== 'current') return;
+
+    const intervalId = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void fetchSalesSummary(currentPeriod.id);
+      }
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [currentPeriod, viewMode, fetchSalesSummary]);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -265,6 +284,8 @@ export function CashRegisterPage() {
   function renderCurrentPeriod() {
     if (!currentPeriod) return renderOpenForm();
 
+    const totalSalesRevenue = salesSummary.total_cash_sales + salesSummary.total_credit_sales;
+
     return (
       <>
         {/* Status Banner */}
@@ -282,6 +303,30 @@ export function CashRegisterPage() {
 
         {/* Summary Cards */}
         <div className={styles.summary}>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Ventas</span>
+            <span className={styles['summary__value']}>{salesSummary.sale_count}</span>
+          </div>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Total vendido</span>
+            <span className={styles['summary__value']}>{formatCurrency(totalSalesRevenue)}</span>
+          </div>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Ventas efectivo</span>
+            <span className={`${styles['summary__value']} ${styles['summary__value--success']}`}>
+              {formatCurrency(salesSummary.total_cash_sales)}
+            </span>
+          </div>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Ventas credito</span>
+            <span className={styles['summary__value']}>{formatCurrency(salesSummary.total_credit_sales)}</span>
+          </div>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Cobros credito</span>
+            <span className={`${styles['summary__value']} ${styles['summary__value--success']}`}>
+              {formatCurrency(salesSummary.total_credit_collected)}
+            </span>
+          </div>
           <div className={styles['summary__card']}>
             <span className={styles['summary__label']}>Gastos</span>
             <span className={`${styles['summary__value']} ${styles['summary__value--error']}`}>
