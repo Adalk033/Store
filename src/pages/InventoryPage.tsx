@@ -7,6 +7,7 @@ import type { Product } from '../types';
 import styles from './InventoryPage.module.css';
 
 type TabId = 'movements' | 'restock' | 'adjustment';
+const MAX_FORM_PRODUCT_OPTIONS = 100;
 
 const TYPE_LABELS: Record<string, string> = {
   in: 'Entrada',
@@ -23,6 +24,7 @@ export function InventoryPage() {
 
   // Form state
   const [formProductId, setFormProductId] = useState<number | ''>('');
+  const [formProductQuery, setFormProductQuery] = useState('');
   const [formQuantity, setFormQuantity] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -33,6 +35,7 @@ export function InventoryPage() {
 
   const clearForm = useCallback(() => {
     setFormProductId('');
+    setFormProductQuery('');
     setFormQuantity('');
     setFormNotes('');
     setFormError(null);
@@ -63,6 +66,21 @@ export function InventoryPage() {
   const activeProducts = useMemo(() => {
     return products.filter(p => p.is_active === 1).sort((a, b) => a.name.localeCompare(b.name));
   }, [products]);
+
+  const formProductOptions = useMemo(() => {
+    const query = formProductQuery.trim().toLowerCase();
+    if (!query) {
+      return activeProducts.slice(0, MAX_FORM_PRODUCT_OPTIONS);
+    }
+
+    return activeProducts
+      .filter(product => {
+        const nameMatches = product.name.toLowerCase().includes(query);
+        const barcodeMatches = product.barcode.toLowerCase().includes(query);
+        return nameMatches || barcodeMatches;
+      })
+      .slice(0, MAX_FORM_PRODUCT_OPTIONS);
+  }, [activeProducts, formProductQuery]);
 
   // Filtered movements
   const filteredMovements = useMemo(() => {
@@ -173,16 +191,26 @@ export function InventoryPage() {
           <form className={styles.form} onSubmit={handleSubmit}>
             <div className={styles['form__field']}>
               <label className={styles['form__label']}>Producto *</label>
+              <input
+                className={styles['form__input']}
+                type="search"
+                value={formProductQuery}
+                onChange={e => setFormProductQuery(e.target.value)}
+                placeholder="Buscar por nombre o codigo..."
+              />
               <select
                 className={styles['form__select']}
                 value={formProductId}
                 onChange={e => setFormProductId(e.target.value ? Number(e.target.value) : '')}
               >
                 <option value="">Seleccionar producto...</option>
-                {activeProducts.map(p => (
+                {formProductOptions.map(p => (
                   <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>
                 ))}
               </select>
+              <span className={styles['form__hint']}>
+                Mostrando hasta {MAX_FORM_PRODUCT_OPTIONS} productos por busqueda.
+              </span>
             </div>
 
             {selectedProduct && (
