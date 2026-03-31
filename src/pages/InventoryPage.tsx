@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, PackagePlus, SlidersHorizontal } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, PackagePlus, SlidersHorizontal, X } from 'lucide-react';
 import { useInventory } from '../hooks/useInventory';
 import { useProducts } from '../hooks/useProducts';
 import { formatDateTime } from '../lib/formatters';
@@ -30,6 +30,18 @@ export function InventoryPage() {
 
   // Filter for movements list
   const [filterProductId, setFilterProductId] = useState<number | ''>('');
+
+  const clearForm = useCallback(() => {
+    setFormProductId('');
+    setFormQuantity('');
+    setFormNotes('');
+    setFormError(null);
+  }, []);
+
+  // Clear form every time the active tab changes
+  useEffect(() => {
+    clearForm();
+  }, [activeTab, clearForm]);
 
   useEffect(() => {
     fetchMovements();
@@ -105,9 +117,7 @@ export function InventoryPage() {
       );
 
       // Reset form
-      setFormProductId('');
-      setFormQuantity('');
-      setFormNotes('');
+      clearForm();
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al registrar movimiento');
     } finally {
@@ -216,6 +226,10 @@ export function InventoryPage() {
               <button type="submit" className={styles['btn-primary']} disabled={submitting}>
                 <Plus size={16} strokeWidth={1.5} />
                 {activeTab === 'restock' ? 'Registrar entrada' : 'Registrar ajuste'}
+              </button>
+              <button type="button" className={styles['btn-ghost']} onClick={clearForm}>
+                <X size={14} strokeWidth={1.5} />
+                Limpiar
               </button>
             </div>
           </form>
