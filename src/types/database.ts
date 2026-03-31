@@ -53,6 +53,23 @@ export interface SaleItem {
   line_total: number; // GENERATED STORED column
 }
 
+export interface SaleListItem extends Sale {
+  customer_name: string | null;
+  item_count: number;
+}
+
+export interface SaleDetailItem extends SaleItem {
+  product_name: string;
+  product_barcode: string;
+}
+
+export interface SaleDetail extends Sale {
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  items: SaleDetailItem[];
+}
+
 export interface Credit {
   id: number;
   sale_id: number;

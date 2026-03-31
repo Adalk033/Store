@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Sale } from '../types';
+import type { Sale, SaleDetail, SaleListItem } from '../types';
 
 export interface CartItem {
   product_id: number;
@@ -46,10 +46,30 @@ export function useSales() {
     }
   }, []);
 
+  const getAllSales = useCallback(async (limit = 100, offset = 0): Promise<SaleListItem[]> => {
+    try {
+      return await window.electronAPI.sales.getAll(limit, offset);
+    } catch (err) {
+      console.error('useSales.getAllSales:', err);
+      return [];
+    }
+  }, []);
+
+  const getSaleDetailById = useCallback(async (id: number): Promise<SaleDetail | undefined> => {
+    try {
+      return await window.electronAPI.sales.getDetail(id);
+    } catch (err) {
+      console.error('useSales.getSaleDetailById:', err);
+      return undefined;
+    }
+  }, []);
+
   return {
     loading,
     error,
     createSale,
     getSaleById,
+    getAllSales,
+    getSaleDetailById,
   };
 }

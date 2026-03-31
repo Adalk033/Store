@@ -91,6 +91,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SALES_CREATE, (_, data) => salesRepo.createSale(data));
   ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, (_, limit?: number, offset?: number) => salesRepo.getAllSales(limit, offset));
   ipcMain.handle(IPC_CHANNELS.SALES_GET_BY_ID, (_, id: number) => salesRepo.getSaleById(id));
+  ipcMain.handle(IPC_CHANNELS.SALES_GET_DETAIL, (_, id: number) => salesRepo.getSaleDetailById(id));
 
   // Credits
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => creditsRepo.getAllCredits(status));

@@ -5,6 +5,7 @@ import type { PageId } from './components/layout/Sidebar';
 import { ProductsPage } from './pages/ProductsPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { POSPage } from './pages/POSPage';
+import { SalesPage } from './pages/SalesPage.tsx';
 import { CreditsPage } from './pages/CreditsPage';
 import { CustomersPage } from './pages/CustomersPage.tsx';
 import { CashRegisterPage } from './pages/CashRegisterPage';
@@ -12,7 +13,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings'];
+const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings'];
 
 function isPageId(value: string): value is PageId {
   return PAGE_IDS.includes(value as PageId);
@@ -77,6 +78,8 @@ export function App() {
         return <ErrorBoundary pageName="Inventario" key="inventory"><InventoryPage /></ErrorBoundary>;
       case 'pos':
         return <ErrorBoundary pageName="Punto de Venta" key="pos"><POSPage /></ErrorBoundary>;
+      case 'sales':
+        return <ErrorBoundary pageName="Ventas" key="sales"><SalesPage /></ErrorBoundary>;
       case 'credits':
         return <ErrorBoundary pageName="Creditos" key="credits"><CreditsPage /></ErrorBoundary>;
       case 'customers':

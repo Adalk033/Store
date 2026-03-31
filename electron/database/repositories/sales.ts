@@ -1,5 +1,11 @@
 import { getDatabase } from '../connection';
-import type { Sale, SaleItem } from '../../../src/types/database';
+import type {
+  Sale,
+  SaleItem,
+  SaleDetail,
+  SaleDetailItem,
+  SaleListItem,
+} from '../../../src/types/database';
 
 interface CreateSaleData {
   sale_type: 'cash' | 'credit';
@@ -87,9 +93,53 @@ export function getSaleItems(saleId: number): SaleItem[] {
   return db.prepare('SELECT * FROM sale_items WHERE sale_id = ?').all(saleId) as SaleItem[];
 }
 
-export function getAllSales(limit = 100, offset = 0): Sale[] {
+export function getAllSales(limit = 100, offset = 0): SaleListItem[] {
   const db = getDatabase();
   return db.prepare(
-    'SELECT * FROM sales ORDER BY created_at DESC LIMIT ? OFFSET ?'
-  ).all(limit, offset) as Sale[];
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      COALESCE(SUM(si.quantity), 0) AS item_count
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+    LIMIT ? OFFSET ?`
+  ).all(limit, offset) as SaleListItem[];
+}
+
+export function getSaleDetailById(id: number): SaleDetail | undefined {
+  const db = getDatabase();
+
+  const sale = db.prepare(
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      c.phone AS customer_phone,
+      c.email AS customer_email
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    WHERE s.id = ?`
+  ).get(id) as Omit<SaleDetail, 'items'> | undefined;
+
+  if (!sale) {
+    return undefined;
+  }
+
+  const items = db.prepare(
+    `SELECT
+      si.*,
+      COALESCE(p.name, 'Producto eliminado') AS product_name,
+      COALESCE(p.barcode, '') AS product_barcode
+    FROM sale_items si
+    LEFT JOIN products p ON p.id = si.product_id
+    WHERE si.sale_id = ?
+    ORDER BY si.id ASC`
+  ).all(id) as SaleDetailItem[];
+
+  return {
+    ...sale,
+    items,
+  };
 }

@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   SALES_CREATE: 'sales:create',
   SALES_GET_ALL: 'sales:getAll',
   SALES_GET_BY_ID: 'sales:getById',
+  SALES_GET_DETAIL: 'sales:getDetail',
 
   // Credits
   CREDITS_GET_ALL: 'credits:getAll',

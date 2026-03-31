@@ -68,6 +68,7 @@ const electronAPI = {
     getAll: (limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),
     getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_BY_ID, id),
+    getDetail: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_DETAIL, id),
   },
 
   // Credits
