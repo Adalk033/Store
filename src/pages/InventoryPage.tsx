@@ -114,7 +114,7 @@ export function InventoryPage() {
     }
 
     const margin = Number(formMarginPercent);
-    if (Number.isFinite(margin)) {
+    if (formMarginPercent.trim() !== '' && Number.isFinite(margin)) {
       const nextSalePrice = cost * (1 + margin / 100);
       setFormSalePrice(nextSalePrice.toFixed(2));
     } else {
@@ -128,7 +128,7 @@ export function InventoryPage() {
     const cost = Number(formCostPrice);
     const margin = Number(value);
 
-    if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(margin)) {
+    if (!Number.isFinite(cost) || cost <= 0 || value.trim() === '' || !Number.isFinite(margin)) {
       setFormSalePrice('');
       return;
     }
@@ -195,6 +195,11 @@ export function InventoryPage() {
 
       if (!Number.isFinite(parsedCost) || parsedCost <= 0) {
         setFormError('El precio de costo debe ser mayor a 0');
+        return;
+      }
+
+      if (formMarginPercent.trim() === '') {
+        setFormError('El % de utilidad es requerido');
         return;
       }
 
