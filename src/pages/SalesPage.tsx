@@ -18,6 +18,10 @@ type ViewMode = 'list' | 'detail';
 type SaleTypeFilter = 'all' | 'cash' | 'credit';
 type TimeRangeFilter = '7d' | '30d' | '2m' | '3m' | 'all';
 
+interface SalesPageProps {
+  onViewCustomerProfile?: (customerId: number) => void;
+}
+
 interface TicketStoreSettings {
   storeName: string;
   storeAddress: string;
@@ -52,7 +56,7 @@ function getRangeStartDate(range: TimeRangeFilter): Date | null {
   return start;
 }
 
-export function SalesPage() {
+export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
   const { getAllSales, getSaleDetailById } = useSales();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -252,6 +256,19 @@ export function SalesPage() {
             </span>
           </div>
           <div className={styles['page__header-actions']}>
+            {selectedSale.customer_id !== null && (
+              <button
+                className={styles['btn-secondary']}
+                onClick={() => {
+                  if (selectedSale.customer_id !== null) {
+                    onViewCustomerProfile?.(selectedSale.customer_id);
+                  }
+                }}
+              >
+                <User size={16} strokeWidth={1.5} />
+                Ver cliente
+              </button>
+            )}
             <button className={styles['btn-secondary']} onClick={() => setShowTicket(true)}>
               <Receipt size={16} strokeWidth={1.5} />
               Ver ticket

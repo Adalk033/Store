@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText } from 'lucide-react';
 import { useCustomers } from '../hooks/useCustomers';
 import { useCredits } from '../hooks/useCredits';
@@ -24,7 +24,12 @@ interface CustomerCreditSummary {
   lastCreditDate: string | null;
 }
 
-export function CustomersPage() {
+interface CustomersPageProps {
+  initialCustomerId?: number | null;
+  onInitialCustomerHandled?: () => void;
+}
+
+export function CustomersPage({ initialCustomerId, onInitialCustomerHandled }: CustomersPageProps) {
   const {
     customers,
     loading: loadingCustomers,
@@ -120,7 +125,7 @@ export function CustomersPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [customers, searchQuery, customerFilter, creditSummaryByCustomer]);
 
-  async function openCustomerProfile(customer: Customer) {
+  const openCustomerProfile = useCallback(async (customer: Customer) => {
     setSelectedCustomer(customer);
     setSelectedCredit(null);
     setCreditPayments([]);
@@ -133,7 +138,31 @@ export function CustomersPage() {
     setContactFeedback(null);
     setViewMode('profile');
     await fetchCreditsByCustomer(customer.id);
-  }
+  }, [fetchCreditsByCustomer]);
+
+  useEffect(() => {
+    if (!initialCustomerId || loadingCustomers || viewMode !== 'list') {
+      return;
+    }
+
+    const targetCustomer = customers.find(customer => customer.id === initialCustomerId);
+
+    if (!targetCustomer) {
+      onInitialCustomerHandled?.();
+      return;
+    }
+
+    void openCustomerProfile(targetCustomer).finally(() => {
+      onInitialCustomerHandled?.();
+    });
+  }, [
+    customers,
+    initialCustomerId,
+    loadingCustomers,
+    onInitialCustomerHandled,
+    openCustomerProfile,
+    viewMode,
+  ]);
 
   async function openCreditDetail(credit: Credit) {
     setSelectedCredit(credit);

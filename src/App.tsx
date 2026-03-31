@@ -23,6 +23,12 @@ export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
   const [storeName, setStoreName] = useState('MichiPapeleria');
+  const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
+
+  function openCustomerProfileFromSales(customerId: number) {
+    setInitialCustomerId(customerId);
+    setCurrentPage('customers');
+  }
 
   useEffect(() => {
     async function checkConnection() {
@@ -98,11 +104,22 @@ export function App() {
       case 'pos':
         return <ErrorBoundary pageName="Punto de Venta" key="pos"><POSPage /></ErrorBoundary>;
       case 'sales':
-        return <ErrorBoundary pageName="Ventas" key="sales"><SalesPage /></ErrorBoundary>;
+        return (
+          <ErrorBoundary pageName="Ventas" key="sales">
+            <SalesPage onViewCustomerProfile={openCustomerProfileFromSales} />
+          </ErrorBoundary>
+        );
       case 'credits':
         return <ErrorBoundary pageName="Creditos" key="credits"><CreditsPage /></ErrorBoundary>;
       case 'customers':
-        return <ErrorBoundary pageName="Clientes" key="customers"><CustomersPage /></ErrorBoundary>;
+        return (
+          <ErrorBoundary pageName="Clientes" key="customers">
+            <CustomersPage
+              initialCustomerId={initialCustomerId}
+              onInitialCustomerHandled={() => setInitialCustomerId(null)}
+            />
+          </ErrorBoundary>
+        );
       case 'cashRegister':
         return <ErrorBoundary pageName="Caja" key="cashRegister"><CashRegisterPage /></ErrorBoundary>;
       case 'reports':
