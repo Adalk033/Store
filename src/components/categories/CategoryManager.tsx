@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FolderOpen, Folder, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderOpen, Folder, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { useCategories } from '../../hooks/useCategories';
+import { useProducts } from '../../hooks/useProducts';
 import type { Category } from '../../types';
 import styles from './CategoryManager.module.css';
 
-export function CategoryManager() {
+interface CategoryManagerProps {
+  showHeader?: boolean;
+}
+
+export function CategoryManager({ showHeader = true }: CategoryManagerProps) {
   const {
     categories,
     rootCategories,
@@ -15,12 +20,18 @@ export function CategoryManager() {
     updateCategory,
     deleteCategory,
   } = useCategories();
+  const { products } = useProducts();
 
   const [formName, setFormName] = useState('');
   const [formParentId, setFormParentId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<{
+    id: number;
+    name: string;
+    productCount: number;
+  } | null>(null);
 
   function toggleExpand(id: number) {
     setExpandedIds(prev => {
@@ -69,22 +80,51 @@ export function CategoryManager() {
     }
   }
 
-  async function handleDelete(id: number) {
-    const children = getChildren(id);
+  function getAssociatedProductCount(categoryId: number): number {
+    return products.filter(p => p.category_id === categoryId).length;
+  }
+
+  function handleDeleteRequest(category: Category) {
+    const children = getChildren(category.id);
     if (children.length > 0) {
       setFormError('No se puede eliminar una categoria con subcategorias');
       return;
     }
-    // Check if any products use this category
-    const productsInCategory = categories.filter(c => c.id === id);
-    if (productsInCategory.length === 0) {
-      try {
-        setFormError(null);
-        await deleteCategory(id);
-        if (editingId === id) cancelEdit();
-      } catch (err) {
-        setFormError(err instanceof Error ? err.message : 'Error al eliminar');
+
+    setFormError(null);
+    setDeleteCandidate({
+      id: category.id,
+      name: category.name,
+      productCount: getAssociatedProductCount(category.id),
+    });
+  }
+
+  function handleCloseDeleteModal() {
+    setDeleteCandidate(null);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const children = getChildren(deleteCandidate.id);
+    if (children.length > 0) {
+      setFormError('No se puede eliminar una categoria con subcategorias');
+      handleCloseDeleteModal();
+      return;
+    }
+
+    try {
+      setFormError(null);
+      await deleteCategory(deleteCandidate.id);
+      if (editingId === deleteCandidate.id) {
+        cancelEdit();
       }
+      handleCloseDeleteModal();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Error al eliminar');
+      handleCloseDeleteModal();
     }
   }
 
@@ -122,7 +162,7 @@ export function CategoryManager() {
             </button>
             <button
               className={`${styles['btn-icon']} ${styles['btn-icon--danger']}`}
-              onClick={() => handleDelete(category.id)}
+              onClick={() => handleDeleteRequest(category)}
               title="Eliminar"
             >
               <Trash2 size={14} strokeWidth={1.5} />
@@ -141,7 +181,7 @@ export function CategoryManager() {
                     </button>
                     <button
                       className={`${styles['btn-icon']} ${styles['btn-icon--danger']}`}
-                      onClick={() => handleDelete(child.id)}
+                      onClick={() => handleDeleteRequest(child)}
                       title="Eliminar"
                     >
                       <Trash2 size={14} strokeWidth={1.5} />
@@ -158,9 +198,11 @@ export function CategoryManager() {
 
   return (
     <div className={styles.manager}>
-      <div className={styles['manager__header']}>
-        <h1 className={styles['manager__title']}>Categorias</h1>
-      </div>
+      {showHeader && (
+        <div className={styles['manager__header']}>
+          <h1 className={styles['manager__title']}>Categorias</h1>
+        </div>
+      )}
 
       {error && <p className={styles['error-text']}>{error}</p>}
 
@@ -226,6 +268,42 @@ export function CategoryManager() {
           </form>
         </div>
       </div>
+
+      {deleteCandidate && (
+        <div className={styles['modal-overlay']} role="dialog" aria-modal="true" aria-labelledby="delete-category-title">
+          <div className={styles.modal}>
+            <div className={styles['modal__header']}>
+              <h3 id="delete-category-title" className={styles['modal__title']}>
+                Confirmar eliminacion
+              </h3>
+              <button
+                type="button"
+                className={styles['modal__close']}
+                onClick={handleCloseDeleteModal}
+                aria-label="Cerrar modal"
+              >
+                <X size={18} strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <p className={styles['modal__text']}>
+              Estas seguro que deseas eliminar la categoria "{deleteCandidate.name}"?
+            </p>
+            <p className={styles['modal__warning']}>
+              Hay {deleteCandidate.productCount} articulo{deleteCandidate.productCount === 1 ? '' : 's'} asociado{deleteCandidate.productCount === 1 ? '' : 's'} a esta categoria.
+            </p>
+
+            <div className={styles['modal__actions']}>
+              <button type="button" className={styles['btn-secondary']} onClick={handleCloseDeleteModal}>
+                Cancelar
+              </button>
+              <button type="button" className={styles['btn-danger']} onClick={handleConfirmDelete}>
+                Eliminar categoria
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
