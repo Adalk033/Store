@@ -152,6 +152,45 @@ store-internal/
 - **Constants**: UPPER_SNAKE_CASE (`MAX_CREDIT_DAYS`, `DEFAULT_MARGIN`)
 - **All code in English** (variable names, function names, comments, type names). Only user-facing strings (UI labels, messages) are in Spanish.
 
+## Security
+
+Security is a priority in every phase of development. Every implementation must be verified before it can be considered complete.
+
+### Security Principles
+
+- **Always validate user input.** Even though the app is local, all user-entered data must be sanitized and validated before processing. Do not assume that offline data is trustworthy.
+- **Parameterize all SQL queries.** Never concatenate values directly into SQL strings. Use prepared statements in every query without exception.
+- **Do not store sensitive data in plain text.** If admin credentials are stored (app access password), use secure hashing (bcrypt or argon2). Never store passwords in plain text in SQLite or configuration files.
+- **Restrict IPC channels.** Only expose strictly necessary methods in the preload. Do not expose direct access to the database, `fs`, `child_process`, or dangerous OS APIs.
+- **Disable Node.js integration in the renderer.** Use `contextIsolation: true` and `nodeIntegration: false` in the BrowserWindow configuration. All communication must go through the preload.
+- **Validate data on both sides.** Validate in the renderer (UX) and in the main process (real security). Renderer validation is cosmetic only; the main process validation is what actually protects.
+- **Do not trust renderer content.** Treat IPC messages from the renderer as untrusted input. Validate types, ranges, and formats in every main process handler.
+- **Protect the database.** Consider SQLite encryption (SQLCipher) if the business handles sensitive financial information. At minimum, ensure the `.db` file is not accessible by other OS users (restrictive file permissions).
+- **Content Security Policy (CSP).** Configure a strict CSP in the renderer HTML to prevent script injection. Do not use `unsafe-inline` or `unsafe-eval` unless absolutely necessary.
+
+### Post-Implementation Security Analysis
+
+After every implementation (feature, fix, or significant change), a security analysis must be performed before the task can be considered done.
+
+**Mandatory checklist after every implementation:**
+
+- [ ]  **SQL Injection:** Verify that all new or modified queries use parameterized values (`?`). Look for string concatenations in SQL.
+- [ ]  **Input validation:** Confirm that all user input is validated in the main process (types, ranges, max lengths, allowed characters).
+- [ ]  **IPC channels:** Review that no unnecessary new channels were exposed. Verify that handlers validate their arguments.
+- [ ]  **Renderer permissions:** Confirm that `nodeIntegration` was not enabled, `contextIsolation` was not disabled, and `webSecurity: false` was not added.
+- [ ]  **Sensitive data:** Verify that sensitive data (passwords, credit amounts with personal data) is not being logged to console or log files.
+- [ ]  **Financial data integrity:** Confirm that price, credit, and cash register calculations cannot be manipulated from the renderer. All financial logic must run in the main process.
+- [ ]  **Error handling:** Verify that error messages exposed to the user do not reveal internal structure (table names, system paths, stack traces).
+- [ ]  **Dependencies:** If any dependency was added or updated, verify it has no known vulnerabilities (`npm audit`).
+
+### Security Rules for AI Assistants
+
+1. **Never disable Electron protections.** Do not suggest or implement `nodeIntegration: true`, `contextIsolation: false`, or `webSecurity: false` under any circumstances.
+2. **Never concatenate input in SQL.** If the proposed solution concatenates any value into a SQL string, the solution is incorrect. Period.
+3. **Always validate in the main process.** If an IPC handler receives data and passes it directly to the database without validation, the solution is incorrect.
+4. **Report security risks.** If an insecure pattern is detected in existing code during an implementation, report it as a comment even if fixing it was not requested.
+5. **Security analysis is mandatory.** After completing any implementation, include a brief security analysis at the end stating: what was reviewed, what risks were identified (if any), and confirming that the security checklist was followed.
+
 ## Coding Standards
 
 ### General
