@@ -349,7 +349,9 @@ export function CashRegisterPage() {
             {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles['table__empty']}>
-                  No hay abonos de credito asociados a este periodo
+                  {searchValue.trim()
+                    ? 'Sin resultados para la búsqueda actual'
+                    : 'No hay abonos de credito asociados a este periodo'}
                 </td>
               </tr>
             ) : (
