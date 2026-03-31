@@ -110,7 +110,11 @@ export function App() {
       case 'barcodeLabels':
         return <ErrorBoundary pageName="Etiquetas" key="barcodeLabels"><BarcodeLabelPage /></ErrorBoundary>;
       case 'settings':
-        return <ErrorBoundary pageName="Configuracion" key="settings"><SettingsPage /></ErrorBoundary>;
+        return (
+          <ErrorBoundary pageName="Configuracion" key="settings">
+            <SettingsPage onStoreNameChange={setStoreName} />
+          </ErrorBoundary>
+        );
       default:
         return <ErrorBoundary pageName="Productos" key="products-default"><ProductsPage /></ErrorBoundary>;
     }

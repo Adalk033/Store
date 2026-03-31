@@ -3,7 +3,11 @@ import { Save, Download, Keyboard } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import styles from './SettingsPage.module.css';
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  onStoreNameChange?: (storeName: string) => void;
+}
+
+export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
   const { settings, loading, fetchSettings, saveMultiple } = useSettings();
 
   const [form, setForm] = useState({
@@ -60,6 +64,7 @@ export function SettingsPage() {
 
       const entries = Object.entries(form).map(([key, value]) => ({ key, value }));
       await saveMultiple(entries);
+      onStoreNameChange?.(form.store_name.trim() || 'Tienda');
       showNotification('success', 'Configuracion guardada correctamente');
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al guardar');
