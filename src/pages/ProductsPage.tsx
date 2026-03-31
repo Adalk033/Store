@@ -129,7 +129,7 @@ export function ProductsPage() {
             Volver a productos
           </button>
         </div>
-        <CategoryManager />
+        <CategoryManager showHeader={false} />
       </div>
     );
   }
