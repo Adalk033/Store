@@ -6,7 +6,8 @@ import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListI
 import styles from './CashRegisterPage.module.css';
 
 type ViewMode = 'current' | 'history' | 'detail';
-const SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25] as const;
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25] as const;
+const SALES_PAGE_SIZE_OPTIONS = PAGE_SIZE_OPTIONS;
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   expense: 'Gasto',
