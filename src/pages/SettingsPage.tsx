@@ -187,7 +187,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
             value={form.default_margin_percent}
             onChange={e => handleChange('default_margin_percent', e.target.value)}
           />
-          <span className={styles['field__hint']}>Se aplica automaticamente al crear nuevo producto</span>
+          <span className={styles['field__hint']}>Se aplica automáticamente al crear nuevo producto</span>
         </div>
       </div>
 
