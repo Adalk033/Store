@@ -58,6 +58,21 @@ export function App() {
     void persistCurrentPage();
   }, [currentPage, dbStatus]);
 
+  useEffect(() => {
+    if (dbStatus !== 'connected') return;
+
+    async function refreshStoreName() {
+      try {
+        const configuredStoreName = await window.electronAPI.settings.get('store_name');
+        setStoreName(configuredStoreName?.trim() || 'Tienda');
+      } catch (error) {
+        console.error('Error loading store name:', error);
+      }
+    }
+
+    void refreshStoreName();
+  }, [currentPage, dbStatus]);
+
   if (dbStatus === 'loading') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
