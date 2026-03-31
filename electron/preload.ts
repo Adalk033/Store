@@ -138,6 +138,7 @@ const electronAPI = {
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_ALL),
     set: (key: string, value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, key, value),
+    backupDatabase: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_BACKUP_DB),
   },
 };
 

@@ -16,7 +16,7 @@ const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabl
   { id: 'cashRegister', label: 'Caja', icon: Calculator },
   { id: 'reports', label: 'Reportes', icon: BarChart3 },
   { id: 'barcodeLabels', label: 'Etiquetas', icon: Tag },
-  { id: 'settings', label: 'Configuracion', icon: Settings, disabled: true },
+  { id: 'settings', label: 'Configuracion', icon: Settings },
 ];
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {

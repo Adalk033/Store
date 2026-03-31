@@ -74,8 +74,37 @@ export function POSPage() {
 
   // Global keyboard listener: refocus search input when typing starts
   // This ensures USB barcode scanners work even if focus was lost
+  // Also handles POS keyboard shortcuts (F1-F4, Esc)
   useEffect(() => {
     function handleGlobalKeyDown(e: KeyboardEvent) {
+      // POS keyboard shortcuts - work regardless of focus
+      switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          handleCashSale();
+          return;
+        case 'F2':
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+          return;
+        case 'F3':
+          e.preventDefault();
+          handleCreditSaleStart();
+          return;
+        case 'F4':
+          e.preventDefault();
+          clearCart();
+          return;
+        case 'Escape':
+          if (ticketData) {
+            setTicketData(null);
+          } else if (showCreditModal) {
+            setShowCreditModal(false);
+          }
+          return;
+      }
+
       // Ignore if focus is on another input/select/textarea
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -89,7 +118,7 @@ export function POSPage() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  }, [ticketData, showCreditModal, cart, saleLoading]);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });

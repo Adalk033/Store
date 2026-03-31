@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { closeDatabase } from './database/connection';
 import { runMigrations } from './database/migrations/001_initial';
@@ -124,6 +125,24 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_, key: string) => settingsRepo.getSetting(key));
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, () => settingsRepo.getAllSettings());
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, key: string, value: string) => settingsRepo.setSetting(key, value));
+
+  // Database backup
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_BACKUP_DB, () => {
+    const dbDir = app.isPackaged ? app.getPath('userData') : app.getAppPath();
+    const dbPath = path.join(dbDir, 'michipapeleria.db');
+    const backupDir = path.join(dbDir, 'backups');
+
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupName = `michipapeleria-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupName);
+
+    fs.copyFileSync(dbPath, backupPath);
+    return backupName;
+  });
 }
 
 app.whenReady().then(() => {

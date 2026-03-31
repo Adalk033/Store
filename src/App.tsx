@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
+import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import type { PageId } from './components/layout/Sidebar';
 import { ProductsPage } from './pages/ProductsPage';
 import { InventoryPage } from './pages/InventoryPage';
@@ -8,6 +9,7 @@ import { CreditsPage } from './pages/CreditsPage';
 import { CashRegisterPage } from './pages/CashRegisterPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
@@ -45,21 +47,23 @@ export function App() {
   function renderPage() {
     switch (currentPage) {
       case 'products':
-        return <ProductsPage />;
+        return <ErrorBoundary pageName="Productos" key="products"><ProductsPage /></ErrorBoundary>;
       case 'inventory':
-        return <InventoryPage />;
+        return <ErrorBoundary pageName="Inventario" key="inventory"><InventoryPage /></ErrorBoundary>;
       case 'pos':
-        return <POSPage />;
+        return <ErrorBoundary pageName="Punto de Venta" key="pos"><POSPage /></ErrorBoundary>;
       case 'credits':
-        return <CreditsPage />;
+        return <ErrorBoundary pageName="Creditos" key="credits"><CreditsPage /></ErrorBoundary>;
       case 'cashRegister':
-        return <CashRegisterPage />;
+        return <ErrorBoundary pageName="Caja" key="cashRegister"><CashRegisterPage /></ErrorBoundary>;
       case 'reports':
-        return <ReportsPage />;
+        return <ErrorBoundary pageName="Reportes" key="reports"><ReportsPage /></ErrorBoundary>;
       case 'barcodeLabels':
-        return <BarcodeLabelPage />;
+        return <ErrorBoundary pageName="Etiquetas" key="barcodeLabels"><BarcodeLabelPage /></ErrorBoundary>;
+      case 'settings':
+        return <ErrorBoundary pageName="Configuracion" key="settings"><SettingsPage /></ErrorBoundary>;
       default:
-        return <ProductsPage />;
+        return <ErrorBoundary pageName="Productos" key="products-default"><ProductsPage /></ErrorBoundary>;
     }
   }
 
