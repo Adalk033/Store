@@ -64,6 +64,7 @@ const electronAPI = {
     create: (data: {
       sale_type: 'cash' | 'credit';
       customer_id?: number | null;
+      sale_date?: string;
       items: Array<{ product_id: number; quantity: number; unit_price: number }>;
       cash_register_id?: number | null;
       credit_days?: number;
@@ -99,6 +100,8 @@ const electronAPI = {
       quantity: number;
       reference_id?: number | null;
       notes?: string | null;
+      cost_price?: number;
+      margin_percent?: number;
     }) => ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, data),
     getByProduct: (productId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, productId),
@@ -124,6 +127,10 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
     getSalesSummary: (cashRegisterId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, cashRegisterId),
+    getSales: (cashRegisterId: number, limit?: number, offset?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES, cashRegisterId, limit, offset),
+    getCreditPayments: (cashRegisterId: number, limit?: number, offset?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS, cashRegisterId, limit, offset),
   },
 
   // Reports

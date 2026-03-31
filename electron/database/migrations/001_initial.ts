@@ -155,6 +155,7 @@ export function runMigrations(): void {
         ('default_credit_days', '5'),
         ('default_surcharge_percent', '10'),
         ('default_margin_percent', '50'),
+        ('business_timezone', 'America/Mexico_City'),
         ('ticket_footer_text', 'Gracias por su compra!'),
         ('last_active_page', 'products'),
         ('sales_rows_per_page', '15');
@@ -199,6 +200,8 @@ export function runMigrations(): void {
     if (!hasCashChange) {
         db.exec('ALTER TABLE sales ADD COLUMN cash_change REAL');
     }
+
+        db.exec("UPDATE credits SET due_date = substr(due_date, 1, 10) WHERE due_date IS NOT NULL AND length(due_date) > 10");
 
   console.log('Database migrations completed successfully');
 }

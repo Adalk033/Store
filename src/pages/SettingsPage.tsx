@@ -18,6 +18,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     default_credit_days: '5',
     default_surcharge_percent: '10',
     default_margin_percent: '50',
+    business_timezone: 'America/Mexico_City',
   });
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
@@ -37,6 +38,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       default_credit_days: settings.default_credit_days || '5',
       default_surcharge_percent: settings.default_surcharge_percent || '10',
       default_margin_percent: settings.default_margin_percent || '50',
+      business_timezone: settings.business_timezone || 'America/Mexico_City',
     });
   }, [settings]);
 
@@ -66,6 +68,10 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       }
       if (isNaN(margin) || margin < 0) {
         showNotification('error', 'El margen por defecto no puede ser negativo');
+        return;
+      }
+      if (!form.business_timezone.trim()) {
+        showNotification('error', 'La zona horaria no puede estar vacia');
         return;
       }
 
@@ -223,6 +229,20 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
             />
             <span className={styles['field__hint']}>Se aplica una sola vez si se pasa del plazo</span>
           </div>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles['field__label']}>Zona horaria de negocio (IANA)</label>
+          <input
+            className={styles['field__input']}
+            type="text"
+            value={form.business_timezone}
+            onChange={e => handleChange('business_timezone', e.target.value)}
+            placeholder="America/Mexico_City"
+          />
+          <span className={styles['field__hint']}>
+            Ejemplos: America/Mexico_City, America/Cancun, America/Tijuana
+          </span>
         </div>
       </div>
 

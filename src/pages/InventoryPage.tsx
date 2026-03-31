@@ -26,6 +26,9 @@ export function InventoryPage() {
   const [formProductId, setFormProductId] = useState<number | ''>('');
   const [formProductQuery, setFormProductQuery] = useState('');
   const [formQuantity, setFormQuantity] = useState('');
+  const [formCostPrice, setFormCostPrice] = useState('');
+  const [formMarginPercent, setFormMarginPercent] = useState('');
+  const [formSalePrice, setFormSalePrice] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,6 +40,9 @@ export function InventoryPage() {
     setFormProductId('');
     setFormProductQuery('');
     setFormQuantity('');
+    setFormCostPrice('');
+    setFormMarginPercent('');
+    setFormSalePrice('');
     setFormNotes('');
     setFormError(null);
   }, []);
@@ -90,6 +96,72 @@ export function InventoryPage() {
 
   const selectedProduct = formProductId !== '' ? productMap.get(formProductId) : null;
 
+  const handleCostPriceChange = useCallback((value: string) => {
+    setFormCostPrice(value);
+
+    const cost = Number(value);
+    if (!Number.isFinite(cost) || cost <= 0) {
+      setFormMarginPercent('');
+      setFormSalePrice('');
+      return;
+    }
+
+    const sale = Number(formSalePrice);
+    if (Number.isFinite(sale) && sale > 0) {
+      const margin = ((sale / cost) - 1) * 100;
+      setFormMarginPercent(margin.toFixed(2));
+      return;
+    }
+
+    const margin = Number(formMarginPercent);
+    if (formMarginPercent.trim() !== '' && Number.isFinite(margin)) {
+      const nextSalePrice = cost * (1 + margin / 100);
+      setFormSalePrice(nextSalePrice.toFixed(2));
+    } else {
+      setFormSalePrice('');
+    }
+  }, [formMarginPercent, formSalePrice]);
+
+  const handleMarginPercentChange = useCallback((value: string) => {
+    setFormMarginPercent(value);
+
+    const cost = Number(formCostPrice);
+    const margin = Number(value);
+
+    if (!Number.isFinite(cost) || cost <= 0 || value.trim() === '' || !Number.isFinite(margin)) {
+      setFormSalePrice('');
+      return;
+    }
+
+    const nextSalePrice = cost * (1 + margin / 100);
+    setFormSalePrice(nextSalePrice.toFixed(2));
+  }, [formCostPrice]);
+
+  const handleSalePriceChange = useCallback((value: string) => {
+    setFormSalePrice(value);
+
+    const cost = Number(formCostPrice);
+    const sale = Number(value);
+
+    if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(sale) || sale <= 0) {
+      setFormMarginPercent('');
+      return;
+    }
+
+    const nextMargin = ((sale / cost) - 1) * 100;
+    setFormMarginPercent(nextMargin.toFixed(2));
+  }, [formCostPrice]);
+
+  useEffect(() => {
+    if (activeTab !== 'restock' || !selectedProduct) {
+      return;
+    }
+
+    setFormCostPrice(selectedProduct.cost_price.toFixed(2));
+    setFormMarginPercent(selectedProduct.margin_percent.toFixed(2));
+    setFormSalePrice(selectedProduct.sale_price.toFixed(2));
+  }, [activeTab, selectedProduct]);
+
   function getMovementType(): 'in' | 'adjustment' {
     return activeTab === 'restock' ? 'in' : 'adjustment';
   }
@@ -114,6 +186,32 @@ export function InventoryPage() {
     const movementType = getMovementType();
     const finalQuantity = movementType === 'in' ? Math.abs(qty) : qty;
 
+    let costPrice: number | undefined;
+    let marginPercent: number | undefined;
+
+    if (movementType === 'in') {
+      const parsedCost = Number(formCostPrice);
+      const parsedMargin = Number(formMarginPercent);
+
+      if (!Number.isFinite(parsedCost) || parsedCost <= 0) {
+        setFormError('El precio de costo debe ser mayor a 0');
+        return;
+      }
+
+      if (formMarginPercent.trim() === '') {
+        setFormError('El % de utilidad es requerido');
+        return;
+      }
+
+      if (!Number.isFinite(parsedMargin) || parsedMargin < 0) {
+        setFormError('El % de utilidad no puede ser negativo');
+        return;
+      }
+
+      costPrice = Number(parsedCost.toFixed(2));
+      marginPercent = Number(parsedMargin.toFixed(2));
+    }
+
     setSubmitting(true);
     try {
       await addMovement({
@@ -121,6 +219,8 @@ export function InventoryPage() {
         type: movementType,
         quantity: finalQuantity,
         notes: formNotes.trim() || null,
+        cost_price: costPrice,
+        margin_percent: marginPercent,
       });
 
       // Refresh products to reflect updated stock
@@ -236,7 +336,60 @@ export function InventoryPage() {
                   <span className={styles['form__hint']}>Positivo = agregar, negativo = quitar</span>
                 )}
               </div>
+
+              {activeTab === 'restock' && (
+                <div className={styles['form__field']}>
+                  <label className={styles['form__label']}>Precio de costo *</label>
+                  <input
+                    className={`${styles['form__input']} ${formError ? styles['form__input--error'] : ''}`}
+                    type="number"
+                    value={formCostPrice}
+                    onChange={e => handleCostPriceChange(e.target.value)}
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
             </div>
+
+            {activeTab === 'restock' && (
+              <>
+                <div className={styles['form__field']}>
+                  <label className={styles['form__label']}>% de utilidad *</label>
+                  <input
+                    className={`${styles['form__input']} ${formError ? styles['form__input--error'] : ''}`}
+                    type="number"
+                    value={formMarginPercent}
+                    onChange={e => handleMarginPercentChange(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className={styles['form__price-preview']}>
+                  <div className={styles['form__price-preview-item']}>
+                    <span className={styles['form__hint']}>Precio venta actual</span>
+                    <strong>
+                      {selectedProduct ? `$${selectedProduct.sale_price.toFixed(2)}` : '-'}
+                    </strong>
+                  </div>
+                  <div className={styles['form__price-preview-item']}>
+                    <span className={styles['form__hint']}>Precio venta nuevo</span>
+                    <input
+                      className={styles['form__price-input']}
+                      type="number"
+                      value={formSalePrice}
+                      onChange={e => handleSalePriceChange(e.target.value)}
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className={styles['form__field']}>
               <label className={styles['form__label']}>Notas</label>

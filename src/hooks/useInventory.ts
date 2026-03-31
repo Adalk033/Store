@@ -42,6 +42,8 @@ export function useInventory() {
     quantity: number;
     reference_id?: number | null;
     notes?: string | null;
+    cost_price?: number;
+    margin_percent?: number;
   }) => {
     try {
       const created = await window.electronAPI.inventory.addMovement(data);

@@ -9,6 +9,7 @@ export type {
   SaleDetail,
   Credit,
   CreditPayment,
+  CreditPaymentListItem,
   InventoryMovement,
   CashRegisterPeriod,
   CashMovement,
