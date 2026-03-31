@@ -216,7 +216,9 @@ export function CashRegisterPage() {
             {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className={styles['table__empty']}>
-                  No hay ventas asociadas a este periodo
+                  {searchValue.trim()
+                    ? 'Sin resultados para la busqueda'
+                    : 'No hay ventas asociadas a este periodo'}
                 </td>
               </tr>
             ) : (
