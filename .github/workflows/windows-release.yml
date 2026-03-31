@@ -26,7 +26,7 @@ jobs:
         run: npm ci
 
       - name: Build Windows x64 package
-        run: npm run electron:build -- --win --x64
+        run: npm run electron:build -- --win --x64 --publish never
 
       - name: Create release tag
         id: release_tag
