@@ -164,8 +164,8 @@ export function runMigrations(): void {
         ('feature_paginated_inventory', '1'),
         ('feature_paginated_credits', '1'),
         ('feature_paginated_customers', '1'),
-        ('feature_paginated_products', '0'),
-        ('feature_paginated_reports', '0');
+        ('feature_paginated_products', '1'),
+        ('feature_paginated_reports', '1');
   `);
 
   // Trigger for updated_at on products (CREATE TRIGGER IF NOT EXISTS not supported in all SQLite versions)
@@ -228,6 +228,61 @@ export function runMigrations(): void {
     UPDATE settings SET value = '1' WHERE key = 'feature_paginated_credits' AND value = '0';
     UPDATE settings SET value = '1' WHERE key = 'feature_paginated_customers' AND value = '0';
   `);
+
+  // Phase 4 indices for paginated products and reports queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_products_active_name ON products(is_active, name);
+  `);
+
+  // Phase 4: enable pagination flags for products and reports (idempotent for existing DBs)
+  db.exec(`
+    UPDATE settings SET value = '1' WHERE key = 'feature_paginated_products' AND value = '0';
+    UPDATE settings SET value = '1' WHERE key = 'feature_paginated_reports' AND value = '0';
+  `);
+
+  // --- Phase 5: Hardening cloud ---
+
+  // 5a. Data versions table for cache invalidation
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS data_versions (
+      module      TEXT PRIMARY KEY,
+      version     INTEGER NOT NULL DEFAULT 0,
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    INSERT OR IGNORE INTO data_versions (module, version) VALUES
+      ('cash', 0),
+      ('sales', 0),
+      ('inventory', 0),
+      ('credits', 0),
+      ('customers', 0),
+      ('products', 0);
+  `);
+
+  // 5b. Idempotency key columns on critical mutation tables
+  const salesCols = db.prepare("PRAGMA table_info('sales')").all() as Array<{ name: string }>;
+  if (!salesCols.some(c => c.name === 'idempotency_key')) {
+    db.exec('ALTER TABLE sales ADD COLUMN idempotency_key TEXT');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency ON sales(idempotency_key)');
+  }
+
+  const cpCols = db.prepare("PRAGMA table_info('credit_payments')").all() as Array<{ name: string }>;
+  if (!cpCols.some(c => c.name === 'idempotency_key')) {
+    db.exec('ALTER TABLE credit_payments ADD COLUMN idempotency_key TEXT');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_payments_idempotency ON credit_payments(idempotency_key)');
+  }
+
+  const cmCols = db.prepare("PRAGMA table_info('cash_movements')").all() as Array<{ name: string }>;
+  if (!cmCols.some(c => c.name === 'idempotency_key')) {
+    db.exec('ALTER TABLE cash_movements ADD COLUMN idempotency_key TEXT');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_movements_idempotency ON cash_movements(idempotency_key)');
+  }
+
+  // 5c. Version column on cash_register_periods for optimistic locking
+  const crpCols = db.prepare("PRAGMA table_info('cash_register_periods')").all() as Array<{ name: string }>;
+  if (!crpCols.some(c => c.name === 'version')) {
+    db.exec('ALTER TABLE cash_register_periods ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
+  }
 
   console.log('Database migrations completed successfully');
 }

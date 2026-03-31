@@ -1,6 +1,7 @@
 import { getDatabase } from '../connection';
-import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse, SortSpec } from '../../../src/types/database';
-import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse, SortSpec, IdempotentResult } from '../../../src/types/database';
+import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus, isValidIdempotencyKey } from '../../lib/queryHelpers';
+import { incrementVersion } from '../../lib/dataVersions';
 
 export interface CashRegisterSalesSummary {
   sale_count: number;
@@ -24,24 +25,48 @@ export function getCurrentPeriod(): CashRegisterPeriod | undefined {
 export function openPeriod(data: { period_name: string; start_date: string; opening_cash: number }): CashRegisterPeriod {
   const db = getDatabase();
 
-  // Ensure no other period is open
-  const existing = getCurrentPeriod();
-  if (existing) {
-    throw new Error('Ya existe un periodo de caja abierto. Cierre el periodo actual antes de abrir uno nuevo.');
-  }
+  // Atomic check-and-insert in a transaction to prevent race conditions
+  const transaction = db.transaction(() => {
+    const existing = db.prepare(
+      "SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1"
+    ).get() as { id: number } | undefined;
 
-  const result = db.prepare(`
-    INSERT INTO cash_register_periods (period_name, start_date, opening_cash)
-    VALUES (?, ?, ?)
-  `).run(data.period_name, data.start_date, data.opening_cash);
+    if (existing) {
+      throw new Error('Ya existe un periodo de caja abierto. Cierre el periodo actual antes de abrir uno nuevo.');
+    }
 
-  return getPeriodById(Number(result.lastInsertRowid))!;
+    const result = db.prepare(`
+      INSERT INTO cash_register_periods (period_name, start_date, opening_cash, version)
+      VALUES (?, ?, ?, 1)
+    `).run(data.period_name, data.start_date, data.opening_cash);
+
+    return Number(result.lastInsertRowid);
+  });
+
+  const newId = transaction();
+  incrementVersion('cash');
+  return getPeriodById(newId)!;
 }
 
-export function closePeriod(id: number, closingCash: number, endDate: string): CashRegisterPeriod {
+export function closePeriod(id: number, closingCash: number, endDate: string, expectedVersion?: number): CashRegisterPeriod {
   const db = getDatabase();
 
   const transaction = db.transaction(() => {
+    // Optimistic lock: verify version has not changed since the client fetched the period
+    if (typeof expectedVersion === 'number') {
+      const current = db.prepare(
+        'SELECT version FROM cash_register_periods WHERE id = ? AND status = ?'
+      ).get(id, 'open') as { version: number } | undefined;
+
+      if (!current) {
+        throw new Error('El periodo de caja no existe o ya fue cerrado.');
+      }
+
+      if (current.version !== expectedVersion) {
+        throw new Error('El periodo de caja fue modificado por otra operacion. Recargue e intente de nuevo.');
+      }
+    }
+
     // Calculate totals from actual data
     const cashSales = db.prepare(
       "SELECT COALESCE(SUM(total), 0) as total FROM sales WHERE cash_register_id = ? AND sale_type = 'cash'"
@@ -59,7 +84,7 @@ export function closePeriod(id: number, closingCash: number, endDate: string): C
       'SELECT COALESCE(SUM(amount), 0) as total FROM credit_payments WHERE cash_register_id = ?'
     ).get(id) as { total: number };
 
-    db.prepare(`
+    const updateResult = db.prepare(`
       UPDATE cash_register_periods
       SET end_date = ?,
           total_cash_sales = ?,
@@ -67,12 +92,18 @@ export function closePeriod(id: number, closingCash: number, endDate: string): C
           total_credit_collected = ?,
           total_expenses = ?,
           closing_cash = ?,
-          status = 'closed'
-      WHERE id = ?
+          status = 'closed',
+          version = version + 1
+      WHERE id = ? AND status = 'open'
     `).run(endDate, cashSales.total, creditSales.total, creditCollected.total, expenses.total, closingCash, id);
+
+    if (updateResult.changes === 0) {
+      throw new Error('El periodo de caja ya fue cerrado por otra operacion.');
+    }
   });
 
   transaction();
+  incrementVersion('cash');
   return getPeriodById(id)!;
 }
 
@@ -91,16 +122,33 @@ export function addCashMovement(data: {
   type: 'expense' | 'withdrawal' | 'deposit';
   amount: number;
   description?: string | null;
-}): CashMovement {
+  idempotency_key?: string;
+}): IdempotentResult<CashMovement> {
   const db = getDatabase();
-  const result = db.prepare(`
-    INSERT INTO cash_movements (cash_register_id, type, amount, description)
-    VALUES (?, ?, ?, ?)
-  `).run(data.cash_register_id, data.type, data.amount, data.description ?? null);
 
-  return db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(
+  // Idempotency check
+  const idempotencyKey = isValidIdempotencyKey(data.idempotency_key) ? data.idempotency_key : null;
+  if (idempotencyKey) {
+    const existing = db.prepare(
+      'SELECT id FROM cash_movements WHERE idempotency_key = ?'
+    ).get(idempotencyKey) as { id: number } | undefined;
+    if (existing) {
+      const movement = db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(existing.id) as CashMovement;
+      return { data: movement, created: false };
+    }
+  }
+
+  const result = db.prepare(`
+    INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(data.cash_register_id, data.type, data.amount, data.description ?? null, idempotencyKey);
+
+  const movement = db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(
     Number(result.lastInsertRowid)
   ) as CashMovement;
+
+  incrementVersion('cash');
+  return { data: movement, created: true };
 }
 
 export function getMovementsByPeriod(cashRegisterId: number): CashMovement[] {

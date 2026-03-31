@@ -11,6 +11,7 @@ import {
   buildLikePattern,
   isValidDateFilter,
   isValidStatus,
+  isValidIdempotencyKey,
 } from '../../lib/queryHelpers';
 import type {
   Credit,
@@ -20,7 +21,9 @@ import type {
   PaginatedQuery,
   PaginatedResponse,
   SortSpec,
+  IdempotentResult,
 } from '../../../src/types/database';
+import { incrementVersion } from '../../lib/dataVersions';
 
 export function getAllCredits(status?: string): Credit[] {
   const db = getDatabase();
@@ -42,10 +45,21 @@ export function getCreditById(id: number): Credit | undefined {
   return db.prepare('SELECT * FROM credits WHERE id = ?').get(id) as Credit | undefined;
 }
 
-export function addCreditPayment(creditId: number, amount: number): Credit {
+export function addCreditPayment(creditId: number, amount: number, idempotencyKeyInput?: string): IdempotentResult<Credit> {
   const db = getDatabase();
   const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
   const nowDateTime = getBusinessNowDateTime(businessTimeZone);
+
+  // Idempotency check: return existing credit state if same key was already processed
+  const idempotencyKey = isValidIdempotencyKey(idempotencyKeyInput) ? idempotencyKeyInput : null;
+  if (idempotencyKey) {
+    const existing = db.prepare(
+      'SELECT credit_id FROM credit_payments WHERE idempotency_key = ?'
+    ).get(idempotencyKey) as { credit_id: number } | undefined;
+    if (existing) {
+      return { data: getCreditById(existing.credit_id)!, created: false };
+    }
+  }
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -58,8 +72,8 @@ export function addCreditPayment(creditId: number, amount: number): Credit {
   const transaction = db.transaction(() => {
     // Insert payment record
     db.prepare(
-      'INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES (?, ?, ?)'
-    ).run(creditId, amount, openPeriod.id);
+      'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key) VALUES (?, ?, ?, ?)'
+    ).run(creditId, amount, openPeriod.id, idempotencyKey);
 
     // Update credit amount_paid
     db.prepare(
@@ -78,7 +92,8 @@ export function addCreditPayment(creditId: number, amount: number): Credit {
   });
 
   transaction();
-  return getCreditById(creditId)!;
+  incrementVersion('credits');
+  return { data: getCreditById(creditId)!, created: true };
 }
 
 export function getCreditPayments(creditId: number): CreditPayment[] {
@@ -128,7 +143,12 @@ export function checkOverdueCredits(): number {
     return overdueCredits.length;
   });
 
-  return transaction();
+  const count = transaction();
+  if (count > 0) {
+    incrementVersion('credits');
+    incrementVersion('sales');
+  }
+  return count;
 }
 
 // --- Paginated endpoints (Phase 3) ---

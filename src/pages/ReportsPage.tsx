@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -14,6 +14,7 @@ import type {
   CreditsOverviewRow,
 } from '../../electron/database/repositories/reports';
 import type { PieLabelRenderProps } from 'recharts';
+import type { PaginatedResponse } from '../types';
 import styles from './ReportsPage.module.css';
 
 type ReportTab = 'sales' | 'products' | 'profit' | 'inventory' | 'credits';
@@ -123,7 +124,18 @@ function getPresetDates(preset: string): { start: string; end: string } {
 }
 
 export function ReportsPage() {
-  const { loading, getSalesByDate, getTopProducts, getProfitReport, getInventoryReport, getInventorySummary, getCreditsOverview } = useReports();
+  const {
+    loading,
+    getSalesByDate,
+    getTopProducts,
+    getProfitReport,
+    getInventoryReport,
+    getInventorySummary,
+    getCreditsOverview,
+    getInventoryReportPaginated,
+    getProfitReportPaginated,
+    getTopProductsPaginated,
+  } = useReports();
 
   const [activeTab, setActiveTab] = useState<ReportTab>('sales');
   const [activePreset, setActivePreset] = useState('month');
@@ -142,38 +154,48 @@ export function ReportsPage() {
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
   const [creditsData, setCreditsData] = useState<CreditsOverviewRow[]>([]);
 
-  // Per-table UI state (search + pagination)
+  // Per-table UI state (search + pagination) - server-side paginated
   const [salesTopSearch, setSalesTopSearch] = useState('');
   const [salesTopPage, setSalesTopPage] = useState(1);
-  const [salesTopRowsPerPage, setSalesTopRowsPerPage] = usePersistedRowsPerPage('sales.topProducts', 5);
+  const [salesTopRowsPerPage, setSalesTopRowsPerPage] = usePersistedRowsPerPage('sales.topProducts', 25);
+  const [salesTopPaginatedData, setSalesTopPaginatedData] = useState<PaginatedResponse<TopProductRow> | null>(null);
 
   const [productsDetailSearch, setProductsDetailSearch] = useState('');
   const [productsDetailPage, setProductsDetailPage] = useState(1);
-  const [productsDetailRowsPerPage, setProductsDetailRowsPerPage] = usePersistedRowsPerPage('products.detailTopProducts', 5);
+  const [productsDetailRowsPerPage, setProductsDetailRowsPerPage] = usePersistedRowsPerPage('products.detailTopProducts', 25);
+  const [productsDetailPaginatedData, setProductsDetailPaginatedData] = useState<PaginatedResponse<TopProductRow> | null>(null);
 
   const [profitDetailSearch, setProfitDetailSearch] = useState('');
   const [profitDetailPage, setProfitDetailPage] = useState(1);
-  const [profitDetailRowsPerPage, setProfitDetailRowsPerPage] = usePersistedRowsPerPage('profit.detail', 5);
+  const [profitDetailRowsPerPage, setProfitDetailRowsPerPage] = usePersistedRowsPerPage('profit.detail', 25);
+  const [profitDetailPaginatedData, setProfitDetailPaginatedData] = useState<PaginatedResponse<ProfitRow> | null>(null);
 
   const [inventoryDetailSearch, setInventoryDetailSearch] = useState('');
   const [inventoryDetailPage, setInventoryDetailPage] = useState(1);
-  const [inventoryDetailRowsPerPage, setInventoryDetailRowsPerPage] = usePersistedRowsPerPage('inventory.detail', 5);
+  const [inventoryDetailRowsPerPage, setInventoryDetailRowsPerPage] = usePersistedRowsPerPage('inventory.detail', 25);
+  const [inventoryDetailPaginatedData, setInventoryDetailPaginatedData] = useState<PaginatedResponse<InventoryValueRow> | null>(null);
 
   const [creditsSummarySearch, setCreditsSummarySearch] = useState('');
   const [creditsSummaryPage, setCreditsSummaryPage] = useState(1);
   const [creditsSummaryRowsPerPage, setCreditsSummaryRowsPerPage] = usePersistedRowsPerPage('credits.summaryByStatus', 5);
+
+  // Debounce refs for paginated table searches
+  const salesTopSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productsDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profitDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inventoryDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
   }
 
-  // Load data based on active tab
+  // Load data based on active tab (charts + summary)
   const loadSalesReport = useCallback(async () => {
     try {
       const [sales, top] = await Promise.all([
         getSalesByDate(startDate, endDate),
-        getTopProducts(startDate, endDate, 100),
+        getTopProducts(startDate, endDate, 10),
       ]);
       setSalesData(sales);
       setTopProducts(top);
@@ -185,7 +207,7 @@ export function ReportsPage() {
 
   const loadTopProductsReport = useCallback(async () => {
     try {
-      const data = await getTopProducts(startDate, endDate, 200);
+      const data = await getTopProducts(startDate, endDate, 10);
       setTopProducts(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar productos';
@@ -193,48 +215,66 @@ export function ReportsPage() {
     }
   }, [startDate, endDate, getTopProducts]);
 
-  const salesTopFiltered = useMemo(() => {
-    return filterByQuery(topProducts, salesTopSearch, r => [r.product_name, r.total_quantity, r.total_revenue]);
-  }, [topProducts, salesTopSearch]);
-  const salesTopPagination = useMemo(() => {
-    return paginateRows(salesTopFiltered, salesTopPage, salesTopRowsPerPage);
-  }, [salesTopFiltered, salesTopPage, salesTopRowsPerPage]);
+  // Server-side paginated table loaders
+  const loadSalesTopTable = useCallback(async (page: number, search: string, pageSize: number) => {
+    try {
+      const data = await getTopProductsPaginated({
+        page,
+        pageSize,
+        search: search.trim() || undefined,
+        dateFrom: startDate,
+        dateTo: endDate,
+      });
+      setSalesTopPaginatedData(data);
+    } catch (err) {
+      console.error('ReportsPage.loadSalesTopTable:', err);
+    }
+  }, [startDate, endDate, getTopProductsPaginated]);
 
-  const productsDetailFiltered = useMemo(() => {
-    return filterByQuery(topProducts, productsDetailSearch, r => [r.product_name, r.total_quantity, r.total_revenue]);
-  }, [topProducts, productsDetailSearch]);
-  const productsDetailPagination = useMemo(() => {
-    return paginateRows(productsDetailFiltered, productsDetailPage, productsDetailRowsPerPage);
-  }, [productsDetailFiltered, productsDetailPage, productsDetailRowsPerPage]);
+  const loadProductsDetailTable = useCallback(async (page: number, search: string, pageSize: number) => {
+    try {
+      const data = await getTopProductsPaginated({
+        page,
+        pageSize,
+        search: search.trim() || undefined,
+        dateFrom: startDate,
+        dateTo: endDate,
+      });
+      setProductsDetailPaginatedData(data);
+    } catch (err) {
+      console.error('ReportsPage.loadProductsDetailTable:', err);
+    }
+  }, [startDate, endDate, getTopProductsPaginated]);
 
-  const profitDetailFiltered = useMemo(() => {
-    return filterByQuery(profitData, profitDetailSearch, r => [
-      r.product_name,
-      r.total_quantity,
-      r.total_revenue,
-      r.total_cost,
-      r.profit,
-      r.margin,
-    ]);
-  }, [profitData, profitDetailSearch]);
-  const profitDetailPagination = useMemo(() => {
-    return paginateRows(profitDetailFiltered, profitDetailPage, profitDetailRowsPerPage);
-  }, [profitDetailFiltered, profitDetailPage, profitDetailRowsPerPage]);
+  const loadProfitDetailTable = useCallback(async (page: number, search: string, pageSize: number) => {
+    try {
+      const data = await getProfitReportPaginated({
+        page,
+        pageSize,
+        search: search.trim() || undefined,
+        dateFrom: startDate,
+        dateTo: endDate,
+      });
+      setProfitDetailPaginatedData(data);
+    } catch (err) {
+      console.error('ReportsPage.loadProfitDetailTable:', err);
+    }
+  }, [startDate, endDate, getProfitReportPaginated]);
 
-  const inventoryDetailFiltered = useMemo(() => {
-    return filterByQuery(inventoryData, inventoryDetailSearch, r => [
-      r.product_name,
-      r.stock,
-      r.cost_price,
-      r.sale_price,
-      r.stock_value_cost,
-      r.stock_value_sale,
-    ]);
-  }, [inventoryData, inventoryDetailSearch]);
-  const inventoryDetailPagination = useMemo(() => {
-    return paginateRows(inventoryDetailFiltered, inventoryDetailPage, inventoryDetailRowsPerPage);
-  }, [inventoryDetailFiltered, inventoryDetailPage, inventoryDetailRowsPerPage]);
+  const loadInventoryDetailTable = useCallback(async (page: number, search: string, pageSize: number) => {
+    try {
+      const data = await getInventoryReportPaginated({
+        page,
+        pageSize,
+        search: search.trim() || undefined,
+      });
+      setInventoryDetailPaginatedData(data);
+    } catch (err) {
+      console.error('ReportsPage.loadInventoryDetailTable:', err);
+    }
+  }, [getInventoryReportPaginated]);
 
+  // Credits summary uses client-side filtering (small aggregated dataset)
   const creditsSummaryFiltered = useMemo(() => {
     return filterByQuery(creditsData, creditsSummarySearch, r => [
       r.status,
@@ -249,22 +289,67 @@ export function ReportsPage() {
     return paginateRows(creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage);
   }, [creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage]);
 
-  // Clamp pages when data/filter changes
-  useEffect(() => {
-    if (salesTopPage > salesTopPagination.totalPages) setSalesTopPage(1);
-  }, [salesTopPage, salesTopPagination.totalPages]);
-  useEffect(() => {
-    if (productsDetailPage > productsDetailPagination.totalPages) setProductsDetailPage(1);
-  }, [productsDetailPage, productsDetailPagination.totalPages]);
-  useEffect(() => {
-    if (profitDetailPage > profitDetailPagination.totalPages) setProfitDetailPage(1);
-  }, [profitDetailPage, profitDetailPagination.totalPages]);
-  useEffect(() => {
-    if (inventoryDetailPage > inventoryDetailPagination.totalPages) setInventoryDetailPage(1);
-  }, [inventoryDetailPage, inventoryDetailPagination.totalPages]);
   useEffect(() => {
     if (creditsSummaryPage > creditsSummaryPagination.totalPages) setCreditsSummaryPage(1);
   }, [creditsSummaryPage, creditsSummaryPagination.totalPages]);
+
+  // Paginated table effects: load table data on page/pageSize change
+  useEffect(() => {
+    if (activeTab === 'sales') loadSalesTopTable(salesTopPage, salesTopSearch, salesTopRowsPerPage);
+  }, [activeTab, salesTopPage, salesTopRowsPerPage, loadSalesTopTable]);
+
+  useEffect(() => {
+    if (activeTab === 'products') loadProductsDetailTable(productsDetailPage, productsDetailSearch, productsDetailRowsPerPage);
+  }, [activeTab, productsDetailPage, productsDetailRowsPerPage, loadProductsDetailTable]);
+
+  useEffect(() => {
+    if (activeTab === 'profit') loadProfitDetailTable(profitDetailPage, profitDetailSearch, profitDetailRowsPerPage);
+  }, [activeTab, profitDetailPage, profitDetailRowsPerPage, loadProfitDetailTable]);
+
+  useEffect(() => {
+    if (activeTab === 'inventory') loadInventoryDetailTable(inventoryDetailPage, inventoryDetailSearch, inventoryDetailRowsPerPage);
+  }, [activeTab, inventoryDetailPage, inventoryDetailRowsPerPage, loadInventoryDetailTable]);
+
+  // Debounced search effects for paginated tables
+  useEffect(() => {
+    if (activeTab !== 'sales') return;
+    if (salesTopSearchTimer.current) clearTimeout(salesTopSearchTimer.current);
+    salesTopSearchTimer.current = setTimeout(() => {
+      setSalesTopPage(1);
+      loadSalesTopTable(1, salesTopSearch, salesTopRowsPerPage);
+    }, 300);
+    return () => { if (salesTopSearchTimer.current) clearTimeout(salesTopSearchTimer.current); };
+  }, [salesTopSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'products') return;
+    if (productsDetailSearchTimer.current) clearTimeout(productsDetailSearchTimer.current);
+    productsDetailSearchTimer.current = setTimeout(() => {
+      setProductsDetailPage(1);
+      loadProductsDetailTable(1, productsDetailSearch, productsDetailRowsPerPage);
+    }, 300);
+    return () => { if (productsDetailSearchTimer.current) clearTimeout(productsDetailSearchTimer.current); };
+  }, [productsDetailSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'profit') return;
+    if (profitDetailSearchTimer.current) clearTimeout(profitDetailSearchTimer.current);
+    profitDetailSearchTimer.current = setTimeout(() => {
+      setProfitDetailPage(1);
+      loadProfitDetailTable(1, profitDetailSearch, profitDetailRowsPerPage);
+    }, 300);
+    return () => { if (profitDetailSearchTimer.current) clearTimeout(profitDetailSearchTimer.current); };
+  }, [profitDetailSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory') return;
+    if (inventoryDetailSearchTimer.current) clearTimeout(inventoryDetailSearchTimer.current);
+    inventoryDetailSearchTimer.current = setTimeout(() => {
+      setInventoryDetailPage(1);
+      loadInventoryDetailTable(1, inventoryDetailSearch, inventoryDetailRowsPerPage);
+    }, 300);
+    return () => { if (inventoryDetailSearchTimer.current) clearTimeout(inventoryDetailSearchTimer.current); };
+  }, [inventoryDetailSearch]);
 
   const loadProfitReport = useCallback(async () => {
     try {
@@ -448,83 +533,82 @@ export function ReportsPage() {
           </div>
         )}
 
-        {topProducts.length > 0 && (
-          <div className={styles['table-card']}>
-            <h3 className={styles['table-card__title']}>Productos Mas Vendidos</h3>
+        <div className={styles['table-card']}>
+          <h3 className={styles['table-card__title']}>Productos Mas Vendidos</h3>
 
-            <div className={styles['table-controls']}>
-              <input
-                type="text"
-                className={styles['table-controls__search']}
-                placeholder="Buscar..."
-                value={salesTopSearch}
-                onChange={e => { setSalesTopSearch(e.target.value); setSalesTopPage(1); }}
-              />
+          <div className={styles['table-controls']}>
+            <input
+              type="text"
+              className={styles['table-controls__search']}
+              placeholder="Buscar..."
+              value={salesTopSearch}
+              onChange={e => setSalesTopSearch(e.target.value)}
+            />
 
-              <div className={styles['table-controls__right']}>
-                <label className={styles['table-controls__label']}>
-                  Filas
-                  <select
-                    className={styles['table-controls__select']}
-                    value={salesTopRowsPerPage}
-                    onChange={e => { setSalesTopRowsPerPage(Number(e.target.value)); setSalesTopPage(1); }}
-                  >
-                    {TABLE_ROWS_OPTIONS.map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
+            <div className={styles['table-controls__right']}>
+              <label className={styles['table-controls__label']}>
+                Filas
+                <select
+                  className={styles['table-controls__select']}
+                  value={salesTopRowsPerPage}
+                  onChange={e => { setSalesTopRowsPerPage(Number(e.target.value)); setSalesTopPage(1); }}
+                >
+                  {TABLE_ROWS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
 
-                <div className={styles.pager}>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setSalesTopPage(p => Math.max(1, p - 1))}
-                    disabled={salesTopPage <= 1}
-                  >
-                    Anterior
-                  </button>
-                  <span className={styles['pager__text']}>
-                    Pagina {Math.min(salesTopPage, salesTopPagination.totalPages)} de {salesTopPagination.totalPages}
-                  </span>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setSalesTopPage(p => Math.min(salesTopPagination.totalPages, p + 1))}
-                    disabled={salesTopPage >= salesTopPagination.totalPages}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+              <div className={styles.pager}>
+                <button
+                  className={styles['pager__btn']}
+                  onClick={() => setSalesTopPage(p => Math.max(1, p - 1))}
+                  disabled={salesTopPage <= 1}
+                >
+                  Anterior
+                </button>
+                <span className={styles['pager__text']}>
+                  Pagina {salesTopPage} de {Math.max(1, Math.ceil((salesTopPaginatedData?.total ?? 0) / salesTopRowsPerPage))}
+                  {salesTopPaginatedData ? ` (${salesTopPaginatedData.total})` : ''}
+                </span>
+                <button
+                  className={styles['pager__btn']}
+                  onClick={() => setSalesTopPage(p => p + 1)}
+                  disabled={!salesTopPaginatedData?.hasMore}
+                >
+                  Siguiente
+                </button>
               </div>
             </div>
-
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Producto</th>
-                  <th>Cantidad</th>
-                  <th>Ingresos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesTopPagination.pageRows.length > 0 ? (
-                  salesTopPagination.pageRows.map((p, i) => (
-                    <tr key={p.product_id}>
-                      <td>{(Math.min(salesTopPage, salesTopPagination.totalPages) - 1) * salesTopRowsPerPage + i + 1}</td>
-                      <td>{p.product_name}</td>
-                      <td>{p.total_quantity}</td>
-                      <td>{formatCurrency(p.total_revenue)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
-        )}
+
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Ingresos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(salesTopPaginatedData?.items ?? []).length > 0 ? (
+                (salesTopPaginatedData?.items ?? []).map((p, i) => (
+                  <tr key={p.product_id}>
+                    <td>{(salesTopPage - 1) * salesTopRowsPerPage + i + 1}</td>
+                    <td>{p.product_name}</td>
+                    <td>{p.total_quantity}</td>
+                    <td>{formatCurrency(p.total_revenue)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </>
     );
   }
@@ -589,83 +673,82 @@ export function ReportsPage() {
           </div>
         )}
 
-        {topProducts.length > 0 && (
-          <div className={styles['table-card']}>
-            <h3 className={styles['table-card__title']}>Detalle de Productos Vendidos</h3>
+        <div className={styles['table-card']}>
+          <h3 className={styles['table-card__title']}>Detalle de Productos Vendidos</h3>
 
-            <div className={styles['table-controls']}>
-              <input
-                type="text"
-                className={styles['table-controls__search']}
-                placeholder="Buscar..."
-                value={productsDetailSearch}
-                onChange={e => { setProductsDetailSearch(e.target.value); setProductsDetailPage(1); }}
-              />
+          <div className={styles['table-controls']}>
+            <input
+              type="text"
+              className={styles['table-controls__search']}
+              placeholder="Buscar..."
+              value={productsDetailSearch}
+              onChange={e => setProductsDetailSearch(e.target.value)}
+            />
 
-              <div className={styles['table-controls__right']}>
-                <label className={styles['table-controls__label']}>
-                  Filas
-                  <select
-                    className={styles['table-controls__select']}
-                    value={productsDetailRowsPerPage}
-                    onChange={e => { setProductsDetailRowsPerPage(Number(e.target.value)); setProductsDetailPage(1); }}
-                  >
-                    {TABLE_ROWS_OPTIONS.map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
+            <div className={styles['table-controls__right']}>
+              <label className={styles['table-controls__label']}>
+                Filas
+                <select
+                  className={styles['table-controls__select']}
+                  value={productsDetailRowsPerPage}
+                  onChange={e => { setProductsDetailRowsPerPage(Number(e.target.value)); setProductsDetailPage(1); }}
+                >
+                  {TABLE_ROWS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
 
-                <div className={styles.pager}>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setProductsDetailPage(p => Math.max(1, p - 1))}
-                    disabled={productsDetailPage <= 1}
-                  >
-                    Anterior
-                  </button>
-                  <span className={styles['pager__text']}>
-                    Pagina {Math.min(productsDetailPage, productsDetailPagination.totalPages)} de {productsDetailPagination.totalPages}
-                  </span>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setProductsDetailPage(p => Math.min(productsDetailPagination.totalPages, p + 1))}
-                    disabled={productsDetailPage >= productsDetailPagination.totalPages}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+              <div className={styles.pager}>
+                <button
+                  className={styles['pager__btn']}
+                  onClick={() => setProductsDetailPage(p => Math.max(1, p - 1))}
+                  disabled={productsDetailPage <= 1}
+                >
+                  Anterior
+                </button>
+                <span className={styles['pager__text']}>
+                  Pagina {productsDetailPage} de {Math.max(1, Math.ceil((productsDetailPaginatedData?.total ?? 0) / productsDetailRowsPerPage))}
+                  {productsDetailPaginatedData ? ` (${productsDetailPaginatedData.total})` : ''}
+                </span>
+                <button
+                  className={styles['pager__btn']}
+                  onClick={() => setProductsDetailPage(p => p + 1)}
+                  disabled={!productsDetailPaginatedData?.hasMore}
+                >
+                  Siguiente
+                </button>
               </div>
             </div>
-
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Producto</th>
-                  <th>Cantidad Vendida</th>
-                  <th>Ingresos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productsDetailPagination.pageRows.length > 0 ? (
-                  productsDetailPagination.pageRows.map((p, i) => (
-                    <tr key={p.product_id}>
-                      <td>{(Math.min(productsDetailPage, productsDetailPagination.totalPages) - 1) * productsDetailRowsPerPage + i + 1}</td>
-                      <td>{p.product_name}</td>
-                      <td>{p.total_quantity}</td>
-                      <td>{formatCurrency(p.total_revenue)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
-        )}
+
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Producto</th>
+                <th>Cantidad Vendida</th>
+                <th>Ingresos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(productsDetailPaginatedData?.items ?? []).length > 0 ? (
+                (productsDetailPaginatedData?.items ?? []).map((p, i) => (
+                  <tr key={p.product_id}>
+                    <td>{(productsDetailPage - 1) * productsDetailRowsPerPage + i + 1}</td>
+                    <td>{p.product_name}</td>
+                    <td>{p.total_quantity}</td>
+                    <td>{formatCurrency(p.total_revenue)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className={styles.table__empty} colSpan={4}>No hay resultados</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </>
     );
   }
@@ -725,7 +808,7 @@ export function ReportsPage() {
                   className={styles['table-controls__search']}
                   placeholder="Buscar..."
                   value={profitDetailSearch}
-                  onChange={e => { setProfitDetailSearch(e.target.value); setProfitDetailPage(1); }}
+                  onChange={e => setProfitDetailSearch(e.target.value)}
                 />
 
                 <div className={styles['table-controls__right']}>
@@ -751,12 +834,13 @@ export function ReportsPage() {
                       Anterior
                     </button>
                     <span className={styles['pager__text']}>
-                      Pagina {Math.min(profitDetailPage, profitDetailPagination.totalPages)} de {profitDetailPagination.totalPages}
+                      Pagina {profitDetailPage} de {Math.max(1, Math.ceil((profitDetailPaginatedData?.total ?? 0) / profitDetailRowsPerPage))}
+                      {profitDetailPaginatedData ? ` (${profitDetailPaginatedData.total})` : ''}
                     </span>
                     <button
                       className={styles['pager__btn']}
-                      onClick={() => setProfitDetailPage(p => Math.min(profitDetailPagination.totalPages, p + 1))}
-                      disabled={profitDetailPage >= profitDetailPagination.totalPages}
+                      onClick={() => setProfitDetailPage(p => p + 1)}
+                      disabled={!profitDetailPaginatedData?.hasMore}
                     >
                       Siguiente
                     </button>
@@ -776,8 +860,8 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {profitDetailPagination.pageRows.length > 0 ? (
-                    profitDetailPagination.pageRows.map(p => (
+                  {(profitDetailPaginatedData?.items ?? []).length > 0 ? (
+                    (profitDetailPaginatedData?.items ?? []).map(p => (
                       <tr key={p.product_id}>
                         <td>{p.product_name}</td>
                         <td>{p.total_quantity}</td>
@@ -874,7 +958,7 @@ export function ReportsPage() {
                   className={styles['table-controls__search']}
                   placeholder="Buscar..."
                   value={inventoryDetailSearch}
-                  onChange={e => { setInventoryDetailSearch(e.target.value); setInventoryDetailPage(1); }}
+                  onChange={e => setInventoryDetailSearch(e.target.value)}
                 />
 
                 <div className={styles['table-controls__right']}>
@@ -900,12 +984,13 @@ export function ReportsPage() {
                       Anterior
                     </button>
                     <span className={styles['pager__text']}>
-                      Pagina {Math.min(inventoryDetailPage, inventoryDetailPagination.totalPages)} de {inventoryDetailPagination.totalPages}
+                      Pagina {inventoryDetailPage} de {Math.max(1, Math.ceil((inventoryDetailPaginatedData?.total ?? 0) / inventoryDetailRowsPerPage))}
+                      {inventoryDetailPaginatedData ? ` (${inventoryDetailPaginatedData.total})` : ''}
                     </span>
                     <button
                       className={styles['pager__btn']}
-                      onClick={() => setInventoryDetailPage(p => Math.min(inventoryDetailPagination.totalPages, p + 1))}
-                      disabled={inventoryDetailPage >= inventoryDetailPagination.totalPages}
+                      onClick={() => setInventoryDetailPage(p => p + 1)}
+                      disabled={!inventoryDetailPaginatedData?.hasMore}
                     >
                       Siguiente
                     </button>
@@ -925,8 +1010,8 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inventoryDetailPagination.pageRows.length > 0 ? (
-                    inventoryDetailPagination.pageRows.map(p => (
+                  {(inventoryDetailPaginatedData?.items ?? []).length > 0 ? (
+                    (inventoryDetailPaginatedData?.items ?? []).map(p => (
                       <tr key={p.product_id}>
                         <td>{p.product_name}</td>
                         <td>

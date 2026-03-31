@@ -9,7 +9,7 @@ import styles from './InventoryPage.module.css';
 type TabId = 'movements' | 'restock' | 'adjustment';
 type MovementTypeFilter = 'all' | 'in' | 'out' | 'adjustment';
 const MAX_FORM_PRODUCT_OPTIONS = 100;
-const DEFAULT_ROWS_PER_PAGE = 50;
+const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
 const TYPE_LABELS: Record<string, string> = {
   in: 'Entrada',
@@ -30,7 +30,7 @@ export function InventoryPage() {
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [movementsError, setMovementsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Search and filters for movements
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,6 +77,32 @@ export function InventoryPage() {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
   }, [searchQuery]);
+
+  // Load persisted rows per page
+  useEffect(() => {
+    async function loadPersistedRows() {
+      try {
+        const persisted = await window.electronAPI.settings.get('inventory_rows_per_page');
+        const parsed = Number(persisted);
+        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
+          setRowsPerPage(parsed);
+        }
+      } catch (err) {
+        console.error('InventoryPage.loadPersistedRows:', err);
+      }
+    }
+    void loadPersistedRows();
+  }, []);
+
+  async function handleRowsPerPageChange(value: number) {
+    setRowsPerPage(value);
+    setCurrentPage(1);
+    try {
+      await window.electronAPI.settings.set('inventory_rows_per_page', String(value));
+    } catch (err) {
+      console.error('InventoryPage.handleRowsPerPageChange:', err);
+    }
+  }
 
   const hasInvalidDateRange = Boolean(
     startDateFilter
@@ -535,6 +561,18 @@ export function InventoryPage() {
                 onChange={(e) => handleEndDateFilterChange(e.target.value)}
               />
             </div>
+
+            <select
+              className={styles['toolbar__filter']}
+              value={rowsPerPage}
+              onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
+            >
+              {ROWS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option} filas
+                </option>
+              ))}
+            </select>
           </div>
 
           {hasInvalidDateRange && (

@@ -150,6 +150,7 @@ export interface CashRegisterPeriod {
   total_expenses: number;
   closing_cash: number | null;
   status: 'open' | 'closed';
+  version: number;
   created_at: string;
 }
 
@@ -231,3 +232,98 @@ export type FeatureFlagModule =
   | 'customers'
   | 'products'
   | 'reports';
+
+// --- Cursor/keyset pagination (Phase 5 - Hardening cloud) ---
+
+/**
+ * Cursor for keyset pagination.
+ * Encodes the (created_at, id) pair as an opaque string: "created_at|id"
+ */
+export type CursorToken = string;
+
+/**
+ * Request for cursor-based pagination.
+ * Use `cursor` to fetch the next page after a known position.
+ * On first request, omit `cursor` to start from the beginning.
+ */
+export interface CursorPaginatedQuery extends QueryFilters {
+  pageSize: number;
+  cursor?: CursorToken;
+  sort?: SortSpec;
+}
+
+/**
+ * Response for cursor-based pagination.
+ * `nextCursor` is null when there are no more results.
+ */
+export interface CursorPaginatedResponse<T> {
+  items: T[];
+  pageSize: number;
+  nextCursor: CursorToken | null;
+  hasMore: boolean;
+  sort: SortSpec;
+}
+
+// --- Data versioning (Phase 5 - Hardening cloud) ---
+
+/**
+ * Tracks the version number per module for cache invalidation.
+ * Renderer polls versions and refreshes data only when version changes.
+ */
+export interface DataVersion {
+  module: string;
+  version: number;
+  updated_at: string;
+}
+
+/**
+ * Map of module name -> current version number.
+ * Returned by the data versions check endpoint.
+ */
+export type DataVersionMap = Record<string, number>;
+
+// --- Idempotency (Phase 5 - Hardening cloud) ---
+
+/**
+ * Result wrapper for idempotent operations.
+ * `created` is true if a new record was inserted, false if an existing one was returned.
+ */
+export interface IdempotentResult<T> {
+  data: T;
+  created: boolean;
+}
+
+// --- Metrics (Phase 5 - Hardening cloud) ---
+
+/**
+ * Single metric entry recorded per IPC call.
+ */
+export interface IpcMetricEntry {
+  channel: string;
+  durationMs: number;
+  payloadBytes: number;
+  success: boolean;
+  timestamp: number;
+}
+
+/**
+ * Aggregated metrics summary for a single channel.
+ */
+export interface ChannelMetricsSummary {
+  channel: string;
+  callCount: number;
+  errorCount: number;
+  p50Ms: number;
+  p95Ms: number;
+  avgPayloadBytes: number;
+}
+
+/**
+ * Overall metrics summary returned by the metrics endpoint.
+ */
+export interface MetricsSummary {
+  channels: ChannelMetricsSummary[];
+  totalCalls: number;
+  totalErrors: number;
+  uptimeMs: number;
+}

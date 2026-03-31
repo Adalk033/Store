@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../src/lib/ipcChannels';
-import type { PaginatedQuery } from '../src/types/database';
+import type { PaginatedQuery, CursorPaginatedQuery } from '../src/types/database';
 
 // Typed API exposed to the renderer process
 const electronAPI = {
@@ -47,6 +47,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, id),
     deletePermanently: (id: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, id),
+    getAllPaginated: (query: PaginatedQuery & { categoryId?: number; lowStock?: boolean }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_GET_ALL_PAGINATED, query),
   },
 
   // Customers
@@ -75,6 +77,7 @@ const electronAPI = {
       initial_payment?: number;
       cash_received?: number;
       cash_change?: number;
+      idempotency_key?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.SALES_CREATE, data),
     getAll: (limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),
@@ -84,6 +87,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_PAGINATED, query),
     getSummary: (query: { search?: string; type?: string; dateFrom?: string; dateTo?: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_SUMMARY, query),
+    getAllCursor: (query: CursorPaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_CURSOR, query),
   },
 
   // Credits
@@ -92,8 +97,8 @@ const electronAPI = {
     getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_ID, id),
     getByCustomer: (customerId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, customerId),
-    addPayment: (creditId: number, amount: number) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_ADD_PAYMENT, creditId, amount),
+    addPayment: (creditId: number, amount: number, idempotencyKey?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_ADD_PAYMENT, creditId, amount, idempotencyKey),
     getPayments: (creditId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS, creditId),
     checkOverdue: () => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_CHECK_OVERDUE),
@@ -132,8 +137,8 @@ const electronAPI = {
   cashRegister: {
     open: (data: { period_name: string; start_date: string; opening_cash: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_OPEN, data),
-    close: (id: number, closingCash: number, endDate: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_CLOSE, id, closingCash, endDate),
+    close: (id: number, closingCash: number, endDate: string, expectedVersion?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_CLOSE, id, closingCash, endDate, expectedVersion),
     getCurrent: () => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT),
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_ALL),
     addMovement: (data: {
@@ -141,6 +146,7 @@ const electronAPI = {
       type: 'expense' | 'withdrawal' | 'deposit';
       amount: number;
       description?: string | null;
+      idempotency_key?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, data),
     getMovements: (cashRegisterId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
@@ -174,6 +180,12 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY),
     creditsOverview: () =>
       ipcRenderer.invoke(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW),
+    inventoryPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_INVENTORY_PAGINATED, query),
+    profitPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_PROFIT_PAGINATED, query),
+    topProductsPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_TOP_PRODUCTS_PAGINATED, query),
   },
 
   // Settings
@@ -183,6 +195,16 @@ const electronAPI = {
     set: (key: string, value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, key, value),
     backupDatabase: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_BACKUP_DB),
+  },
+
+  // Data Versions (Phase 5)
+  dataVersions: {
+    getAll: () => ipcRenderer.invoke(IPC_CHANNELS.DATA_VERSIONS_GET_ALL),
+  },
+
+  // Metrics (Phase 5)
+  metrics: {
+    getSummary: () => ipcRenderer.invoke(IPC_CHANNELS.METRICS_GET_SUMMARY),
   },
 };
 

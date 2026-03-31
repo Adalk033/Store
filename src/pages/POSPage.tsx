@@ -19,6 +19,8 @@ import type { Product, Sale, Customer } from '../types';
 import { formatCurrency, formatDateTime } from '../lib/formatters';
 import styles from './POSPage.module.css';
 
+const SEARCH_RESULT_LIMIT = 20;
+
 interface TicketData {
   sale: Sale;
   items: CartItem[];
@@ -61,7 +63,7 @@ function isFutureDateInput(value: string): boolean {
 }
 
 export function POSPage() {
-  const { products, fetchProducts } = useProducts();
+  const { searchProductsRemote } = useProducts();
   const { customers, createCustomer } = useCustomers();
   const { createSale, loading: saleLoading } = useSales();
 
@@ -165,21 +167,31 @@ export function POSPage() {
     setTimeout(() => setNotification(null), 3000);
   }
 
-  // Filter products by search
-  const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return products.filter(
-      p =>
-        p.is_active === 1 &&
-        (
-          p.name.toLowerCase().includes(q) ||
-          p.barcode.toLowerCase().includes(q) ||
-          (p.description ?? '').toLowerCase().includes(q) ||
-          (p.category_name ?? '').toLowerCase().includes(q)
-        )
-    );
-  }, [products, searchQuery]);
+  // Remote search: debounced query to server
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const searchTimerRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    if (searchTimerRef2.current) clearTimeout(searchTimerRef2.current);
+    searchTimerRef2.current = setTimeout(async () => {
+      try {
+        const results = await searchProductsRemote(searchQuery, SEARCH_RESULT_LIMIT);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('POSPage.remoteSearch:', err);
+        setSearchResults([]);
+      }
+    }, 200);
+    return () => {
+      if (searchTimerRef2.current) clearTimeout(searchTimerRef2.current);
+    };
+  }, [searchQuery, searchProductsRemote]);
+
+  const filteredProducts = searchResults;
 
   // Cart totals
   const cartSubtotal = useMemo(
@@ -262,19 +274,25 @@ export function POSPage() {
 
   // Handle barcode direct match (Enter key)
   const handleSearchKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    async (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && searchQuery.trim()) {
-        const exactMatch = products.find(
-          p => p.barcode === searchQuery.trim() && p.is_active === 1
-        );
-        if (exactMatch) {
-          addToCart(exactMatch);
-        } else if (filteredProducts.length === 1) {
+        try {
+          // Exact barcode lookup via server
+          const exactMatch = await window.electronAPI.products.getByBarcode(searchQuery.trim());
+          if (exactMatch && exactMatch.is_active === 1) {
+            addToCart(exactMatch);
+            return;
+          }
+        } catch (err) {
+          console.error('POSPage.barcodeLookup:', err);
+        }
+        // Fallback: add first search result if only one
+        if (filteredProducts.length === 1) {
           addToCart(filteredProducts[0]);
         }
       }
     },
-    [searchQuery, products, filteredProducts, addToCart]
+    [searchQuery, filteredProducts, addToCart]
   );
 
   function updateQuantity(productId: number, delta: number) {
@@ -353,7 +371,7 @@ export function POSPage() {
       showNotification('success', `Venta #${sale.id} registrada`);
       setCart([]);
       closeCashSaleModal();
-      await fetchProducts();
+      setSearchResults([]);
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al procesar venta');
     }
@@ -416,7 +434,7 @@ export function POSPage() {
       showNotification('success', `Venta a credito #${sale.id} registrada`);
       setCart([]);
       setShowCreditModal(false);
-      await fetchProducts();
+      setSearchResults([]);
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al procesar venta a credito');
     }

@@ -1,6 +1,7 @@
 import { getDatabase } from '../connection';
 import type { InventoryMovement, InventoryMovementListItem, PaginatedQuery, PaginatedResponse, SortSpec } from '../../../src/types/database';
 import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
+import { incrementVersion } from '../../lib/dataVersions';
 
 interface AddMovementData {
   product_id: number;
@@ -72,6 +73,8 @@ export function addInventoryMovement(data: AddMovementData): InventoryMovement {
   });
 
   const id = transaction();
+  incrementVersion('inventory');
+  incrementVersion('products');
   return getMovementById(id)!;
 }
 

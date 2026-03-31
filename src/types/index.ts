@@ -24,4 +24,13 @@ export type {
   PaginatedQuery,
   PaginatedResponse,
   FeatureFlagModule,
+  CursorToken,
+  CursorPaginatedQuery,
+  CursorPaginatedResponse,
+  DataVersion,
+  DataVersionMap,
+  IdempotentResult,
+  IpcMetricEntry,
+  ChannelMetricsSummary,
+  MetricsSummary,
 } from './database';

@@ -76,3 +76,109 @@ export function calcLimitOffset(page: number, pageSize: number): { limit: number
     offset: (page - 1) * pageSize,
   };
 }
+
+// --- Cursor/keyset pagination helpers (Phase 5) ---
+
+/**
+ * Cursor separator used in encoded tokens.
+ */
+const CURSOR_SEPARATOR = '|';
+
+/**
+ * Encode a (created_at, id) pair into an opaque cursor token.
+ */
+export function encodeCursor(createdAt: string, id: number): string {
+  return `${createdAt}${CURSOR_SEPARATOR}${id}`;
+}
+
+/**
+ * Decode a cursor token back into (created_at, id).
+ * Returns null if the token is invalid.
+ */
+export function decodeCursor(cursor: string): { createdAt: string; id: number } | null {
+  if (!cursor || typeof cursor !== 'string') return null;
+
+  const sepIndex = cursor.lastIndexOf(CURSOR_SEPARATOR);
+  if (sepIndex < 1) return null;
+
+  const createdAt = cursor.slice(0, sepIndex);
+  const idStr = cursor.slice(sepIndex + 1);
+  const id = Number(idStr);
+
+  if (!Number.isInteger(id) || id < 1) return null;
+  // created_at format: "YYYY-MM-DD HH:MM:SS" (19 chars)
+  if (createdAt.length < 10 || createdAt.length > 26) return null;
+
+  return { createdAt, id };
+}
+
+/**
+ * Sanitize cursor pagination parameters.
+ */
+export function sanitizeCursorPagination(pageSize: unknown): number {
+  const MIN = 1;
+  const MAX = 200;
+  const DEFAULT = 50;
+
+  let safe = typeof pageSize === 'number' && Number.isInteger(pageSize) ? pageSize : DEFAULT;
+  if (safe < MIN) safe = MIN;
+  if (safe > MAX) safe = MAX;
+  return safe;
+}
+
+/**
+ * Build keyset WHERE clause for DESC ordering (created_at DESC, id DESC).
+ * Returns the SQL fragment and parameters to append.
+ */
+export function buildCursorWhereDesc(
+  cursor: string | undefined,
+  tableAlias: string
+): { sql: string; params: unknown[] } {
+  if (!cursor) return { sql: '', params: [] };
+
+  const decoded = decodeCursor(cursor);
+  if (!decoded) return { sql: '', params: [] };
+
+  return {
+    sql: `(${tableAlias}.created_at < ? OR (${tableAlias}.created_at = ? AND ${tableAlias}.id < ?))`,
+    params: [decoded.createdAt, decoded.createdAt, decoded.id],
+  };
+}
+
+/**
+ * Build keyset WHERE clause for ASC ordering (created_at ASC, id ASC).
+ */
+export function buildCursorWhereAsc(
+  cursor: string | undefined,
+  tableAlias: string
+): { sql: string; params: unknown[] } {
+  if (!cursor) return { sql: '', params: [] };
+
+  const decoded = decodeCursor(cursor);
+  if (!decoded) return { sql: '', params: [] };
+
+  return {
+    sql: `(${tableAlias}.created_at > ? OR (${tableAlias}.created_at = ? AND ${tableAlias}.id > ?))`,
+    params: [decoded.createdAt, decoded.createdAt, decoded.id],
+  };
+}
+
+// --- Idempotency key helpers (Phase 5) ---
+
+/**
+ * Generate a UUID v4 idempotency key.
+ * Uses crypto.randomUUID() which is available in Node.js 19+.
+ */
+export function generateIdempotencyKey(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Validate that a value looks like a UUID v4 idempotency key.
+ */
+export function isValidIdempotencyKey(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}

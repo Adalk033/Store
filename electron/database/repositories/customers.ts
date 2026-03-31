@@ -12,6 +12,7 @@ import type {
   PaginatedResponse,
   SortSpec,
 } from '../../../src/types/database';
+import { incrementVersion } from '../../lib/dataVersions';
 
 export function getAllCustomers(): Customer[] {
   const db = getDatabase();
@@ -35,7 +36,9 @@ export function createCustomer(data: CreateCustomerData): Customer {
   const result = db.prepare(
     'INSERT INTO customers (name, phone, email, notes) VALUES (?, ?, ?, ?)'
   ).run(data.name, data.phone ?? null, data.email ?? null, data.notes ?? null);
-  return getCustomerById(Number(result.lastInsertRowid))!;
+  const customer = getCustomerById(Number(result.lastInsertRowid))!;
+  incrementVersion('customers');
+  return customer;
 }
 
 interface UpdateCustomerData {
@@ -61,12 +64,14 @@ export function updateCustomer(id: number, data: UpdateCustomerData): Customer |
 
   values.push(id);
   db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  incrementVersion('customers');
   return getCustomerById(id);
 }
 
 export function deleteCustomer(id: number): boolean {
   const db = getDatabase();
   const result = db.prepare('UPDATE customers SET is_active = 0 WHERE id = ?').run(id);
+  if (result.changes > 0) incrementVersion('customers');
   return result.changes > 0;
 }
 

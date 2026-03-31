@@ -15,8 +15,22 @@ import type {
   PaginatedQuery,
   PaginatedResponse,
   SortSpec,
+  CursorPaginatedQuery,
+  CursorPaginatedResponse,
+  IdempotentResult,
 } from '../../../src/types/database';
-import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus } from '../../lib/queryHelpers';
+import {
+  sanitizePagination,
+  calcLimitOffset,
+  buildLikePattern,
+  isValidDateFilter,
+  isValidStatus,
+  sanitizeCursorPagination,
+  buildCursorWhereDesc,
+  encodeCursor,
+  isValidIdempotencyKey,
+} from '../../lib/queryHelpers';
+import { incrementVersion } from '../../lib/dataVersions';
 
 interface CreateSaleData {
   sale_type: 'cash' | 'credit';
@@ -35,6 +49,8 @@ interface CreateSaleData {
   // Cash-specific fields (used when sale_type === 'cash')
   cash_received?: number;
   cash_change?: number;
+  // Idempotency (Phase 5)
+  idempotency_key?: string;
 }
 
 function roundMoney(value: number): number {
@@ -81,10 +97,21 @@ function resolveSaleCreatedAt(saleDate: string | undefined, businessTimeZone: st
   return `${trimmedDate} 00:00:00`;
 }
 
-export function createSale(data: CreateSaleData): Sale {
+export function createSale(data: CreateSaleData): IdempotentResult<Sale> {
   const db = getDatabase();
   const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
   const saleCreatedAt = resolveSaleCreatedAt(data.sale_date, businessTimeZone);
+
+  // Idempotency check: return existing sale if same key was already processed
+  const idempotencyKey = isValidIdempotencyKey(data.idempotency_key) ? data.idempotency_key : null;
+  if (idempotencyKey) {
+    const existing = db.prepare(
+      'SELECT id FROM sales WHERE idempotency_key = ?'
+    ).get(idempotencyKey) as { id: number } | undefined;
+    if (existing) {
+      return { data: getSaleById(existing.id)!, created: false };
+    }
+  }
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -132,8 +159,8 @@ export function createSale(data: CreateSaleData): Sale {
   const transaction = db.transaction(() => {
     // Insert sale
     const saleResult = db.prepare(`
-      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, created_at)
-      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
+      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, created_at, idempotency_key)
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
     `).run(
       data.sale_type,
       data.customer_id ?? null,
@@ -142,7 +169,8 @@ export function createSale(data: CreateSaleData): Sale {
       cashReceived,
       cashChange,
       cashRegisterId,
-      saleCreatedAt
+      saleCreatedAt,
+      idempotencyKey
     );
 
     const saleId = Number(saleResult.lastInsertRowid);
@@ -225,7 +253,9 @@ export function createSale(data: CreateSaleData): Sale {
   });
 
   const saleId = transaction();
-  return getSaleById(saleId)!;
+  incrementVersion('sales');
+  incrementVersion('inventory');
+  return { data: getSaleById(saleId)!, created: true };
 }
 
 export function getSaleById(id: number): Sale | undefined {
@@ -410,5 +440,81 @@ export function getSaleDetailById(id: number): SaleDetail | undefined {
   return {
     ...sale,
     items,
+  };
+}
+
+// --- Cursor/keyset paginated endpoint (Phase 5 - Hardening cloud) ---
+
+export function getAllSalesCursor(
+  query: CursorPaginatedQuery
+): CursorPaginatedResponse<SaleListItem> {
+  const db = getDatabase();
+  const pageSize = sanitizeCursorPagination(query.pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  // Cursor keyset condition
+  const cursorWhere = buildCursorWhereDesc(query.cursor, 's');
+  if (cursorWhere.sql) {
+    conditions.push(cursorWhere.sql);
+    params.push(...cursorWhere.params);
+  }
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(c.name) LIKE ? OR CAST(s.id AS TEXT) LIKE ? OR CAST(s.total AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidStatus(query.type, ALLOWED_SALE_TYPES)) {
+    conditions.push('s.sale_type = ?');
+    params.push(query.type);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("s.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("s.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  // Fetch one extra to determine hasMore
+  const items = db.prepare(
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      COALESCE(SUM(si.quantity), 0) AS item_count
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    ${whereClause}
+    GROUP BY s.id
+    ORDER BY s.created_at DESC, s.id DESC
+    LIMIT ?`
+  ).all(...params, pageSize + 1) as SaleListItem[];
+
+  const hasMore = items.length > pageSize;
+  if (hasMore) items.pop();
+
+  const lastItem = items[items.length - 1];
+  const nextCursor = hasMore && lastItem
+    ? encodeCursor(lastItem.created_at, lastItem.id)
+    : null;
+
+  return {
+    items,
+    pageSize,
+    nextCursor,
+    hasMore,
+    sort,
   };
 }

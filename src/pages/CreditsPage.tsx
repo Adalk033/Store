@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
 };
 
-const ROWS_PER_PAGE = 25;
+const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
 function formatDateYMD(date: Date): string {
   const y = date.getFullYear();
@@ -60,6 +60,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   const [creditItems, setCreditItems] = useState<CreditListItem[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
   const [summary, setSummary] = useState<CreditsSummary>({ countActive: 0, totalPending: 0, totalOverdue: 0, totalCollected: 0 });
 
   // Detail view state
@@ -90,6 +91,32 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
 
+  // Load persisted rows per page
+  useEffect(() => {
+    async function loadPersistedRows() {
+      try {
+        const persisted = await window.electronAPI.settings.get('credits_rows_per_page');
+        const parsed = Number(persisted);
+        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
+          setRowsPerPage(parsed);
+        }
+      } catch (err) {
+        console.error('CreditsPage.loadPersistedRows:', err);
+      }
+    }
+    void loadPersistedRows();
+  }, []);
+
+  async function handleRowsPerPageChange(value: number) {
+    setRowsPerPage(value);
+    setCurrentPage(1);
+    try {
+      await window.electronAPI.settings.set('credits_rows_per_page', String(value));
+    } catch (err) {
+      console.error('CreditsPage.handleRowsPerPageChange:', err);
+    }
+  }
+
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
@@ -114,7 +141,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   const loadCredits = useCallback(async () => {
     const query: PaginatedQuery = {
       page: currentPage,
-      pageSize: ROWS_PER_PAGE,
+      pageSize: rowsPerPage,
       search: debouncedSearch || undefined,
       status: activeTab !== 'all' ? activeTab : undefined,
       dateFrom: effectiveDates.dateFrom,
@@ -137,7 +164,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     if (summaryResult) {
       setSummary(summaryResult);
     }
-  }, [currentPage, debouncedSearch, activeTab, effectiveDates, fetchCreditsPaginated, fetchSummary]);
+  }, [currentPage, rowsPerPage, debouncedSearch, activeTab, effectiveDates, fetchCreditsPaginated, fetchSummary]);
 
   useEffect(() => {
     if (viewMode === 'list') {
@@ -151,8 +178,8 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   );
 
   const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(totalCredits / ROWS_PER_PAGE)),
-    [totalCredits],
+    () => Math.max(1, Math.ceil(totalCredits / rowsPerPage)),
+    [totalCredits, rowsPerPage],
   );
 
   useEffect(() => {
@@ -229,7 +256,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     setSelectedCustomer(customer);
     setCustomerPage(1);
     setViewMode('customer');
-    const result = await fetchCreditsByCustomerPaginated(customer.id, { page: 1, pageSize: ROWS_PER_PAGE });
+    const result = await fetchCreditsByCustomerPaginated(customer.id, { page: 1, pageSize: rowsPerPage });
     if (result) {
       setCustomerCredits(result.items);
       setCustomerCreditsTotal(result.total);
@@ -237,7 +264,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   }
 
   async function loadCustomerCreditsPage(customerId: number, page: number) {
-    const result = await fetchCreditsByCustomerPaginated(customerId, { page, pageSize: ROWS_PER_PAGE });
+    const result = await fetchCreditsByCustomerPaginated(customerId, { page, pageSize: rowsPerPage });
     if (result) {
       setCustomerCredits(result.items);
       setCustomerCreditsTotal(result.total);
@@ -499,7 +526,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
       .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
     const totalPaid = customerCredits.reduce((sum, c) => sum + c.amount_paid, 0);
     const activeCount = customerCredits.filter(c => c.status !== 'paid').length;
-    const customerTotalPages = Math.max(1, Math.ceil(customerCreditsTotal / ROWS_PER_PAGE));
+    const customerTotalPages = Math.max(1, Math.ceil(customerCreditsTotal / rowsPerPage));
 
     return (
       <div className={styles.page}>
@@ -609,7 +636,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
           </table>
         </div>
 
-        {customerCreditsTotal > ROWS_PER_PAGE && (
+        {customerCreditsTotal > rowsPerPage && (
           <div className={styles.pagination}>
             <span className={styles['pagination__meta']}>
               {customerCreditsTotal} credito(s) del cliente
@@ -745,6 +772,18 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             aria-label="Fecha final"
           />
         </div>
+
+        <select
+          className={styles['toolbar__filter']}
+          value={rowsPerPage}
+          onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
+        >
+          {ROWS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option} filas
+            </option>
+          ))}
+        </select>
       </div>
 
       {hasInvalidDateRange && (
@@ -841,7 +880,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
       {/* Pagination */}
       <div className={styles.pagination}>
         <span className={styles['pagination__meta']}>
-          {totalCredits} credito(s) encontrado(s)
+          Mostrando {creditItems.length} de {totalCredits} credito(s)
         </span>
         <div className={styles['pagination__actions']}>
           <button className={styles['btn-secondary']} disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>

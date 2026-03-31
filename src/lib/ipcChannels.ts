@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   PRODUCTS_DELETE_PERMANENTLY: 'products:deletePermanently',
   PRODUCTS_SEARCH: 'products:search',
   PRODUCTS_LOW_STOCK: 'products:lowStock',
+  PRODUCTS_GET_ALL_PAGINATED: 'products:getAllPaginated',
 
   // Customers
   CUSTOMERS_GET_ALL: 'customers:getAll',
@@ -34,6 +35,7 @@ export const IPC_CHANNELS = {
   SALES_GET_DETAIL: 'sales:getDetail',
   SALES_GET_ALL_PAGINATED: 'sales:getAllPaginated',
   SALES_GET_SUMMARY: 'sales:getSummary',
+  SALES_GET_ALL_CURSOR: 'sales:getAllCursor',
 
   // Credits
   CREDITS_GET_ALL: 'credits:getAll',
@@ -76,12 +78,21 @@ export const IPC_CHANNELS = {
   REPORTS_INVENTORY: 'reports:inventory',
   REPORTS_INVENTORY_SUMMARY: 'reports:inventorySummary',
   REPORTS_CREDITS_OVERVIEW: 'reports:creditsOverview',
+  REPORTS_INVENTORY_PAGINATED: 'reports:inventoryPaginated',
+  REPORTS_PROFIT_PAGINATED: 'reports:profitPaginated',
+  REPORTS_TOP_PRODUCTS_PAGINATED: 'reports:topProductsPaginated',
 
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_GET_ALL: 'settings:getAll',
   SETTINGS_SET: 'settings:set',
   SETTINGS_BACKUP_DB: 'settings:backupDatabase',
+
+  // Data Versions (Phase 5)
+  DATA_VERSIONS_GET_ALL: 'dataVersions:getAll',
+
+  // Metrics (Phase 5)
+  METRICS_GET_SUMMARY: 'metrics:getSummary',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
