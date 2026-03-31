@@ -1,4 +1,10 @@
 import { getDatabase } from '../connection';
+import { getSetting } from './settings';
+import {
+  getBusinessNowDateTime,
+  getBusinessTodayDate,
+  resolveBusinessTimeZone,
+} from '../../lib/time';
 import type { Credit, CreditPayment } from '../../../src/types/database';
 
 export function getAllCredits(status?: string): Credit[] {
@@ -23,6 +29,8 @@ export function getCreditById(id: number): Credit | undefined {
 
 export function addCreditPayment(creditId: number, amount: number): Credit {
   const db = getDatabase();
+  const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
+  const nowDateTime = getBusinessNowDateTime(businessTimeZone);
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -47,8 +55,8 @@ export function addCreditPayment(creditId: number, amount: number): Credit {
     const credit = getCreditById(creditId)!;
     if (credit.amount_paid >= credit.total_due) {
       db.prepare(
-        "UPDATE credits SET status = 'paid', paid_at = datetime('now','localtime') WHERE id = ?"
-      ).run(creditId);
+        "UPDATE credits SET status = 'paid', paid_at = ? WHERE id = ?"
+      ).run(nowDateTime, creditId);
     }
 
     return creditId;
@@ -68,13 +76,15 @@ export function getCreditPayments(creditId: number): CreditPayment[] {
 // Check and apply surcharges to overdue credits
 export function checkOverdueCredits(): number {
   const db = getDatabase();
+  const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
+  const todayDate = getBusinessTodayDate(businessTimeZone);
 
   const overdueCredits = db.prepare(`
     SELECT * FROM credits
     WHERE status = 'pending'
       AND surcharge_applied = 0
-      AND due_date < datetime('now','localtime')
-  `).all() as Credit[];
+      AND due_date < ?
+  `).all(todayDate) as Credit[];
 
   const updateCredit = db.prepare(`
     UPDATE credits

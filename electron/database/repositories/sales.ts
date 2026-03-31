@@ -1,4 +1,11 @@
 import { getDatabase } from '../connection';
+import { getSetting } from './settings';
+import {
+  addDaysToDate,
+  extractDatePart,
+  getBusinessNowDateTime,
+  resolveBusinessTimeZone,
+} from '../../lib/time';
 import type {
   Sale,
   SaleItem,
@@ -30,20 +37,24 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function padDatePart(value: number): string {
-  return String(value).padStart(2, '0');
+function isValidDateString(dateValue: string): boolean {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  return (
+    !Number.isNaN(selectedDate.getTime()) &&
+    selectedDate.getFullYear() === year &&
+    selectedDate.getMonth() === month - 1 &&
+    selectedDate.getDate() === day
+  );
 }
 
-function toLocalDateTimeString(date: Date): string {
-  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())} ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`;
-}
-
-function resolveSaleCreatedAt(saleDate?: string): string {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+function resolveSaleCreatedAt(saleDate: string | undefined, businessTimeZone: string): string {
+  const nowLocalDateTime = getBusinessNowDateTime(businessTimeZone);
+  const todayLocalDate = extractDatePart(nowLocalDateTime);
 
   if (!saleDate) {
-    return toLocalDateTimeString(now);
+    return nowLocalDateTime;
   }
 
   const trimmedDate = saleDate.trim();
@@ -51,24 +62,16 @@ function resolveSaleCreatedAt(saleDate?: string): string {
     throw new Error('La fecha de la venta no tiene un formato valido');
   }
 
-  const [year, month, day] = trimmedDate.split('-').map(Number);
-  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-  if (
-    Number.isNaN(selectedDate.getTime()) ||
-    selectedDate.getFullYear() !== year ||
-    selectedDate.getMonth() !== month - 1 ||
-    selectedDate.getDate() !== day
-  ) {
+  if (!isValidDateString(trimmedDate)) {
     throw new Error('La fecha de la venta no es valida');
   }
 
-  if (selectedDate.getTime() > todayStart.getTime()) {
+  if (trimmedDate > todayLocalDate) {
     throw new Error('No se permiten fechas futuras para la venta');
   }
 
-  if (selectedDate.getTime() === todayStart.getTime()) {
-    return toLocalDateTimeString(now);
+  if (trimmedDate === todayLocalDate) {
+    return nowLocalDateTime;
   }
 
   return `${trimmedDate} 00:00:00`;
@@ -76,7 +79,8 @@ function resolveSaleCreatedAt(saleDate?: string): string {
 
 export function createSale(data: CreateSaleData): Sale {
   const db = getDatabase();
-  const saleCreatedAt = resolveSaleCreatedAt(data.sale_date);
+  const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
+  const saleCreatedAt = resolveSaleCreatedAt(data.sale_date, businessTimeZone);
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -165,6 +169,7 @@ export function createSale(data: CreateSaleData): Sale {
       const creditDays = data.credit_days ?? 5;
       const surchargePercent = data.surcharge_percent ?? 0;
       const initialPayment = roundMoney(data.initial_payment ?? 0);
+      const dueDate = addDaysToDate(extractDatePart(saleCreatedAt), creditDays);
 
       if (initialPayment < 0) {
         throw new Error('El abono inicial no puede ser negativo');
@@ -189,13 +194,12 @@ export function createSale(data: CreateSaleData): Sale {
           paid_at,
           created_at
         )
-        VALUES (?, ?, ?, date(?, '+' || ? || ' days'), ?, ?, ?, ?, CASE WHEN ? = 'paid' THEN ? ELSE NULL END, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'paid' THEN ? ELSE NULL END, ?)
       `).run(
         saleId,
         data.customer_id,
         subtotal,
-        saleCreatedAt,
-        creditDays,
+        dueDate,
         surchargePercent,
         subtotal,
         initialPayment,

@@ -9,6 +9,7 @@ export interface SettingsMap {
   default_credit_days: string;
   default_surcharge_percent: string;
   default_margin_percent: string;
+  business_timezone: string;
   last_active_page: string;
   [key: string]: string;
 }
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: SettingsMap = {
   default_credit_days: '5',
   default_surcharge_percent: '10',
   default_margin_percent: '50',
+  business_timezone: 'America/Mexico_City',
   last_active_page: 'products',
 };
 
