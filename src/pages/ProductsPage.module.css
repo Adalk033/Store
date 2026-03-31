@@ -295,3 +295,91 @@
   color: var(--color-error);
   background-color: rgba(239, 68, 68, 0.08);
 }
+
+/* Delete confirmation modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(17, 24, 39, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm);
+  z-index: 1200;
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  background-color: var(--color-card);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal__title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.modal__close:hover {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.modal__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.modal__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.btn-danger {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background-color: var(--color-error);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+}

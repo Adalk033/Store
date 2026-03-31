@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers } from 'lucide-react';
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
 import { formatCurrency } from '../lib/formatters';
@@ -28,6 +28,7 @@ export function ProductsPage() {
   const [filterCategory, setFilterCategory] = useState<number | ''>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Product | null>(null);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -74,12 +75,19 @@ export function ProductsPage() {
     setViewMode('form');
   }
 
-  async function handleDeleteProduct(product: Product) {
+  function handleDeleteProduct(product: Product) {
+    setDeleteCandidate(product);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteCandidate) return;
     try {
-      await deleteProduct(product.id);
-      showNotification('success', `"${product.name}" fue desactivado`);
+      await deleteProduct(deleteCandidate.id);
+      showNotification('success', `"${deleteCandidate.name}" fue desactivado`);
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al eliminar');
+    } finally {
+      setDeleteCandidate(null);
     }
   }
 
@@ -316,6 +324,39 @@ export function ProductsPage() {
           </tbody>
         </table>
       </div>
+      {deleteCandidate && (
+        <div className={styles['modal-overlay']} role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
+          <div className={styles.modal}>
+            <div className={styles['modal__header']}>
+              <h3 id="delete-product-title" className={styles['modal__title']}>
+                Confirmar desactivacion
+              </h3>
+              <button
+                type="button"
+                className={styles['modal__close']}
+                onClick={() => setDeleteCandidate(null)}
+                aria-label="Cerrar modal"
+              >
+                <X size={18} strokeWidth={1.75} />
+              </button>
+            </div>
+            <p className={styles['modal__text']}>
+              Estas seguro que deseas desactivar el producto &ldquo;{deleteCandidate.name}&rdquo;?
+            </p>
+            <p className={styles['modal__hint']}>
+              El producto no se eliminara permanentemente, solo dejara de estar disponible.
+            </p>
+            <div className={styles['modal__actions']}>
+              <button type="button" className={styles['btn-secondary']} onClick={() => setDeleteCandidate(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={styles['btn-danger']} onClick={handleConfirmDelete}>
+                Desactivar producto
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

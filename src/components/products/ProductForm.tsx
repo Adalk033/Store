@@ -258,14 +258,6 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
           )}
           <div className={styles['form__field']}>
             <label className={styles['form__label']}>Stock minimo (alerta)</label>
-            <label className={styles['form__checkbox-row']}>
-              <input
-                type="checkbox"
-                checked={disableLowStockAlert}
-                onChange={e => setDisableLowStockAlert(e.target.checked)}
-              />
-              <span>No alertar stock bajo para este producto</span>
-            </label>
             <input
               className={`${styles['form__input']} ${errors.min_stock ? styles['form__input--error'] : ''}`}
               type="number"
@@ -275,6 +267,16 @@ export function ProductForm({ product, categories, onSubmit, onCancel }: Product
               placeholder="5"
               disabled={disableLowStockAlert}
             />
+            <div className={styles['form__toggle-container']}>
+              <label className={styles['form__checkbox-row']}>
+                <input
+                  type="checkbox"
+                  checked={disableLowStockAlert}
+                  onChange={e => setDisableLowStockAlert(e.target.checked)}
+                />
+                <span>No alertar stock bajo para este producto</span>
+              </label>
+            </div>
             {errors.min_stock && <span className={styles['form__error']}>{errors.min_stock}</span>}
             {disableLowStockAlert && (
               <span className={styles['form__hint']}>
