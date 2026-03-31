@@ -154,7 +154,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('default_credit_days', '5'),
     ('default_surcharge_percent', '10'),
     ('ticket_footer_text', 'Gracias por su compra!'),
-    ('last_active_page', 'products');
+    ('last_active_page', 'products'),
+    ('sales_rows_per_page', '15');
 
 -- Trigger to keep updated_at in products updated
 CREATE TRIGGER IF NOT EXISTS trg_products_updated_at

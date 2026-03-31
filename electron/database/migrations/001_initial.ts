@@ -153,7 +153,8 @@ export function runMigrations(): void {
         ('default_credit_days', '5'),
         ('default_surcharge_percent', '10'),
         ('ticket_footer_text', 'Gracias por su compra!'),
-        ('last_active_page', 'products');
+        ('last_active_page', 'products'),
+        ('sales_rows_per_page', '15');
   `);
 
   // Trigger for updated_at on products (CREATE TRIGGER IF NOT EXISTS not supported in all SQLite versions)

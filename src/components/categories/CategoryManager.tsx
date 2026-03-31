@@ -11,7 +11,6 @@ interface CategoryManagerProps {
 
 export function CategoryManager({ showHeader = true }: CategoryManagerProps) {
   const {
-    categories,
     rootCategories,
     getChildren,
     loading,

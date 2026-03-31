@@ -16,6 +16,7 @@ import styles from './SalesPage.module.css';
 
 type ViewMode = 'list' | 'detail';
 type SaleTypeFilter = 'all' | 'cash' | 'credit';
+type TimeRangeFilter = '7d' | '30d' | '2m' | '3m' | 'all';
 
 interface TicketStoreSettings {
   storeName: string;
@@ -28,6 +29,29 @@ const SALE_TYPE_LABEL: Record<'cash' | 'credit', string> = {
   credit: 'Credito',
 };
 
+const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
+
+function getRangeStartDate(range: TimeRangeFilter): Date | null {
+  if (range === 'all') {
+    return null;
+  }
+
+  const start = new Date();
+
+  if (range === '7d') {
+    start.setDate(start.getDate() - 6);
+  } else if (range === '30d') {
+    start.setDate(start.getDate() - 29);
+  } else if (range === '2m') {
+    start.setMonth(start.getMonth() - 2);
+  } else if (range === '3m') {
+    start.setMonth(start.getMonth() - 3);
+  }
+
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
 export function SalesPage() {
   const { getAllSales, getSaleDetailById } = useSales();
 
@@ -39,6 +63,9 @@ export function SalesPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTypeFilter, setSaleTypeFilter] = useState<SaleTypeFilter>('all');
+  const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>('30d');
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showTicket, setShowTicket] = useState(false);
 
   const [storeSettings, setStoreSettings] = useState<TicketStoreSettings>({
@@ -57,7 +84,7 @@ export function SalesPage() {
   const loadSales = useCallback(async () => {
     setLoadingSales(true);
     try {
-      const data = await getAllSales(300, 0);
+      const data = await getAllSales(5000, 0);
       setSales(data);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error al cargar ventas';
@@ -74,11 +101,17 @@ export function SalesPage() {
   useEffect(() => {
     async function loadStoreSettings() {
       try {
-        const [storeName, storeAddress, footerText] = await Promise.all([
+        const [storeName, storeAddress, footerText, persistedRows] = await Promise.all([
           window.electronAPI.settings.get('store_name'),
           window.electronAPI.settings.get('store_address'),
           window.electronAPI.settings.get('ticket_footer_text'),
+          window.electronAPI.settings.get('sales_rows_per_page'),
         ]);
+
+        const parsedRows = Number(persistedRows);
+        if (Number.isInteger(parsedRows) && ROWS_OPTIONS.includes(parsedRows as (typeof ROWS_OPTIONS)[number])) {
+          setRowsPerPage(parsedRows);
+        }
 
         setStoreSettings({
           storeName: storeName ?? 'Mi Papeleria',
@@ -95,8 +128,16 @@ export function SalesPage() {
 
   const filteredSales = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const rangeStart = getRangeStartDate(timeRangeFilter);
 
     return sales.filter((sale) => {
+      if (rangeStart) {
+        const saleDate = new Date(sale.created_at);
+        if (saleDate < rangeStart) {
+          return false;
+        }
+      }
+
       if (saleTypeFilter !== 'all' && sale.sale_type !== saleTypeFilter) {
         return false;
       }
@@ -109,7 +150,37 @@ export function SalesPage() {
         || sale.customer_name?.toLowerCase().includes(query)
         || sale.total.toFixed(2).includes(query);
     });
-  }, [sales, saleTypeFilter, searchQuery]);
+  }, [sales, saleTypeFilter, searchQuery, timeRangeFilter]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredSales.length / rowsPerPage)),
+    [filteredSales.length, rowsPerPage],
+  );
+
+  const paginatedSales = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredSales.slice(start, start + rowsPerPage);
+  }, [filteredSales, currentPage, rowsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, saleTypeFilter, timeRangeFilter, rowsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  async function handleRowsPerPageChange(value: number) {
+    setRowsPerPage(value);
+    try {
+      await window.electronAPI.settings.set('sales_rows_per_page', String(value));
+    } catch (error) {
+      console.error('SalesPage.handleRowsPerPageChange:', error);
+      showNotification('error', 'No se pudo guardar la configuracion de filas');
+    }
+  }
 
   const summary = useMemo(() => {
     const totalSales = filteredSales.length;
@@ -425,12 +496,36 @@ export function SalesPage() {
 
         <select
           className={styles['toolbar__filter']}
+          value={timeRangeFilter}
+          onChange={(event) => setTimeRangeFilter(event.target.value as TimeRangeFilter)}
+        >
+          <option value="30d">Ultimos 30 dias</option>
+          <option value="7d">Ultimos 7 dias</option>
+          <option value="2m">Ultimos 2 meses</option>
+          <option value="3m">Ultimos 3 meses</option>
+          <option value="all">Todo</option>
+        </select>
+
+        <select
+          className={styles['toolbar__filter']}
           value={saleTypeFilter}
           onChange={(event) => setSaleTypeFilter(event.target.value as SaleTypeFilter)}
         >
           <option value="all">Todos los tipos</option>
           <option value="cash">Solo contado</option>
           <option value="credit">Solo credito</option>
+        </select>
+
+        <select
+          className={styles['toolbar__filter']}
+          value={rowsPerPage}
+          onChange={(event) => void handleRowsPerPageChange(Number(event.target.value))}
+        >
+          {ROWS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option} filas
+            </option>
+          ))}
         </select>
       </section>
 
@@ -458,7 +553,7 @@ export function SalesPage() {
                 <td colSpan={7} className={styles['table__empty']}>No hay ventas con los filtros actuales</td>
               </tr>
             ) : (
-              filteredSales.map((sale) => (
+              paginatedSales.map((sale) => (
                 <tr key={sale.id} className={styles['table__row--clickable']} onClick={() => void openSaleDetail(sale.id)}>
                   <td className={styles['table__strong']}>#{sale.id}</td>
                   <td>{formatDateTime(sale.created_at)}</td>
@@ -487,6 +582,31 @@ export function SalesPage() {
             )}
           </tbody>
         </table>
+      </section>
+
+      <section className={styles.pagination}>
+        <span className={styles['pagination__meta']}>
+          Mostrando {paginatedSales.length} de {filteredSales.length} ventas
+        </span>
+        <div className={styles['pagination__actions']}>
+          <button
+            className={styles['btn-secondary']}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1}
+          >
+            Anterior
+          </button>
+          <span className={styles['pagination__page']}>
+            Pagina {currentPage} de {totalPages}
+          </span>
+          <button
+            className={styles['btn-secondary']}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            Siguiente
+          </button>
+        </div>
       </section>
     </div>
   );
