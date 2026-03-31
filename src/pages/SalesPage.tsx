@@ -172,7 +172,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
     });
   }, [sales, saleTypeFilter, searchQuery, timeRangeFilter, startDateFilter, endDateFilter]);
 
-  const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
   const hasInvalidDateRange = Boolean(
     startDateFilter
       && endDateFilter
@@ -575,7 +574,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
           className={styles['toolbar__filter']}
           value={timeRangeFilter}
           onChange={(event) => handleTimeRangeFilterChange(event.target.value as TimeRangeFilter)}
-          disabled={hasCustomDateFilter}
         >
           <option value="select">Seleccionar</option>
           <option value="30d">Ultimos 30 dias</option>
@@ -591,7 +589,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
             type="date"
             value={startDateFilter}
             onChange={(event) => handleStartDateFilterChange(event.target.value)}
-            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
             aria-label="Fecha inicial"
           />
           <input
@@ -599,7 +596,6 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
             type="date"
             value={endDateFilter}
             onChange={(event) => handleEndDateFilterChange(event.target.value)}
-            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
             aria-label="Fecha final"
           />
         </div>

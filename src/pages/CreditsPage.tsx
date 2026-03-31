@@ -135,7 +135,6 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     return result;
   }, [credits, activeTab, filterCustomerId, timeRangeFilter, startDateFilter, endDateFilter, searchQuery, customerMap]);
 
-  const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
   const hasInvalidDateRange = Boolean(
     startDateFilter
       && endDateFilter
@@ -717,7 +716,6 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
           className={styles['toolbar__filter']}
           value={timeRangeFilter}
           onChange={(event) => handleTimeRangeFilterChange(event.target.value as TimeRangeFilter)}
-          disabled={hasCustomDateFilter}
         >
           <option value="select">Seleccionar</option>
           <option value="30d">Ultimos 30 dias</option>
@@ -733,7 +731,6 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             type="date"
             value={startDateFilter}
             onChange={(event) => handleStartDateFilterChange(event.target.value)}
-            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
             aria-label="Fecha inicial"
           />
           <input
@@ -741,7 +738,6 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             type="date"
             value={endDateFilter}
             onChange={(event) => handleEndDateFilterChange(event.target.value)}
-            disabled={timeRangeFilter !== 'select' && !hasCustomDateFilter}
             aria-label="Fecha final"
           />
         </div>
