@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
-import type { CashRegisterPeriod, CashMovement } from '../types';
+import type { CashRegisterPeriod, CashMovement, SaleListItem } from '../types';
 import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
   const [periods, setPeriods] = useState<CashRegisterPeriod[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [sales, setSales] = useState<SaleListItem[]>([]);
   const [salesSummary, setSalesSummary] = useState<CashRegisterSalesSummary>({
     sale_count: 0,
     total_cash_sales: 0,
@@ -69,6 +70,18 @@ export function useCashRegister() {
     }
   }, []);
 
+  const fetchSales = useCallback(async (cashRegisterId: number, limit = 50, offset = 0) => {
+    try {
+      const data = await window.electronAPI.cashRegister.getSales(cashRegisterId, limit, offset);
+      setSales(data);
+      return data as SaleListItem[];
+    } catch (err) {
+      console.error('useCashRegister.fetchSales:', err);
+      setSales([]);
+      return [] as SaleListItem[];
+    }
+  }, []);
+
   const openPeriod = useCallback(async (data: {
     period_name: string;
     start_date: string;
@@ -89,6 +102,8 @@ export function useCashRegister() {
     try {
       const period = await window.electronAPI.cashRegister.close(id, closingCash, endDate);
       setCurrentPeriod(null);
+      setMovements([]);
+      setSales([]);
       return period;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cerrar periodo';
@@ -118,12 +133,14 @@ export function useCashRegister() {
     currentPeriod,
     periods,
     movements,
+    sales,
     salesSummary,
     loading,
     error,
     fetchCurrentPeriod,
     fetchAllPeriods,
     fetchMovements,
+    fetchSales,
     fetchSalesSummary,
     openPeriod,
     closePeriod,

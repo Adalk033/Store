@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Plus, Lock, DollarSign } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { CashRegisterPeriod, CashMovement } from '../types';
+import type { CashRegisterPeriod, CashMovement, SaleListItem } from '../types';
 import styles from './CashRegisterPage.module.css';
 
 type ViewMode = 'current' | 'history' | 'detail';
+const SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25] as const;
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   expense: 'Gasto',
@@ -18,11 +19,13 @@ export function CashRegisterPage() {
     currentPeriod,
     periods,
     movements,
+    sales,
     salesSummary,
     loading,
     fetchCurrentPeriod,
     fetchAllPeriods,
     fetchMovements,
+    fetchSales,
     fetchSalesSummary,
     openPeriod,
     closePeriod,
@@ -58,6 +61,15 @@ export function CashRegisterPage() {
   // Detail view for historical periods
   const [selectedPeriod, setSelectedPeriod] = useState<CashRegisterPeriod | null>(null);
   const [selectedMovements, setSelectedMovements] = useState<CashMovement[]>([]);
+  const [selectedSales, setSelectedSales] = useState<SaleListItem[]>([]);
+
+  const [currentSalesSearch, setCurrentSalesSearch] = useState('');
+  const [currentSalesPage, setCurrentSalesPage] = useState(1);
+  const [currentSalesPageSize, setCurrentSalesPageSize] = useState<number>(5);
+
+  const [detailSalesSearch, setDetailSalesSearch] = useState('');
+  const [detailSalesPage, setDetailSalesPage] = useState(1);
+  const [detailSalesPageSize, setDetailSalesPageSize] = useState<number>(5);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,8 +83,14 @@ export function CashRegisterPage() {
     if (currentPeriod) {
       fetchMovements(currentPeriod.id);
       void fetchSalesSummary(currentPeriod.id);
+      void fetchSales(currentPeriod.id, 1000, 0);
     }
-  }, [currentPeriod, fetchMovements, fetchSalesSummary]);
+  }, [currentPeriod, fetchMovements, fetchSalesSummary, fetchSales]);
+
+  useEffect(() => {
+    setCurrentSalesSearch('');
+    setCurrentSalesPage(1);
+  }, [currentPeriod?.id]);
 
   // Keep sales totals up-to-date while viewing the current open period.
   useEffect(() => {
@@ -82,13 +100,150 @@ export function CashRegisterPage() {
     const intervalId = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         void fetchSalesSummary(currentPeriod.id);
+        void fetchSales(currentPeriod.id, 1000, 0);
       }
     }, 10000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentPeriod, viewMode, fetchSalesSummary]);
+  }, [currentPeriod, viewMode, fetchSalesSummary, fetchSales]);
+
+  function getSaleTypeLabel(type: SaleListItem['sale_type']): string {
+    return type === 'cash' ? 'Efectivo' : 'Credito';
+  }
+
+  function renderSalesTable(params: {
+    title: string;
+    rows: SaleListItem[];
+    meta?: string;
+    searchValue: string;
+    onSearchChange: (value: string) => void;
+    page: number;
+    onPageChange: (value: number) => void;
+    pageSize: number;
+    onPageSizeChange: (value: number) => void;
+  }) {
+    const {
+      title,
+      rows,
+      meta,
+      searchValue,
+      onSearchChange,
+      page,
+      onPageChange,
+      pageSize,
+      onPageSizeChange,
+    } = params;
+
+    const normalizedSearch = searchValue.trim().toLowerCase();
+    const filteredRows = normalizedSearch
+      ? rows.filter(s => {
+        const customer = (s.customer_name || '').toLowerCase();
+        return String(s.id).includes(normalizedSearch)
+          || getSaleTypeLabel(s.sale_type).toLowerCase().includes(normalizedSearch)
+          || customer.includes(normalizedSearch)
+          || String(s.total).includes(normalizedSearch)
+          || formatDateTime(s.created_at).toLowerCase().includes(normalizedSearch);
+      })
+      : rows;
+
+    const totalRows = filteredRows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const startIndex = (safePage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const visibleRows = filteredRows.slice(startIndex, endIndex);
+
+    return (
+      <div className={styles['table-card']}>
+        <div className={styles['table-card__header']}>
+          <div className={styles['table-card__title']}>{title}</div>
+          <div className={styles['table-card__toolbar']}>
+            <input
+              type="text"
+              className={styles['table-card__search']}
+              placeholder="Buscar por folio, cliente, tipo o fecha"
+              value={searchValue}
+              onChange={event => {
+                onSearchChange(event.target.value);
+                onPageChange(1);
+              }}
+            />
+            <select
+              className={styles['table-card__rows-select']}
+              value={String(pageSize)}
+              onChange={event => {
+                onPageSizeChange(Number(event.target.value));
+                onPageChange(1);
+              }}
+            >
+              {SALES_PAGE_SIZE_OPTIONS.map(size => (
+                <option key={size} value={size}>{size} por pagina</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {meta ? <div className={styles['table-card__meta']}>{meta}</div> : null}
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+              <th>Cliente</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className={styles['table__empty']}>
+                  No hay ventas asociadas a este periodo
+                </td>
+              </tr>
+            ) : (
+              visibleRows.map(s => (
+                <tr key={s.id}>
+                  <td><span className={styles['table__strong']}>#{s.id}</span></td>
+                  <td>{getSaleTypeLabel(s.sale_type)}</td>
+                  <td>{s.customer_name || '-'}</td>
+                  <td>{s.item_count}</td>
+                  <td>{formatCurrency(s.total)}</td>
+                  <td>{formatDateTime(s.created_at)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        <div className={styles['table-card__pagination']}>
+          <span className={styles['table-card__pagination-meta']}>
+            {totalRows === 0
+              ? 'Sin resultados'
+              : `Mostrando ${startIndex + 1}-${Math.min(endIndex, totalRows)} de ${totalRows}`}
+          </span>
+          <div className={styles['table-card__pagination-actions']}>
+            <button
+              className={styles['btn-secondary']}
+              onClick={() => onPageChange(safePage - 1)}
+              disabled={safePage <= 1}
+            >
+              Anterior
+            </button>
+            <span className={styles['table-card__pagination-page']}>Pagina {safePage} de {totalPages}</span>
+            <button
+              className={styles['btn-secondary']}
+              onClick={() => onPageChange(safePage + 1)}
+              disabled={safePage >= totalPages}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -215,12 +370,19 @@ export function CashRegisterPage() {
   const handleViewPeriodDetail = useCallback(async (period: CashRegisterPeriod) => {
     setSelectedPeriod(period);
     setViewMode('detail');
+    setDetailSalesSearch('');
+    setDetailSalesPage(1);
     try {
-      const data = await window.electronAPI.cashRegister.getMovements(period.id);
-      setSelectedMovements(data);
+      const [movs, periodSales] = await Promise.all([
+        window.electronAPI.cashRegister.getMovements(period.id),
+        window.electronAPI.cashRegister.getSales(period.id, 1000, 0),
+      ]);
+      setSelectedMovements(movs);
+      setSelectedSales(periodSales);
     } catch (err) {
       console.error('Error loading period movements:', err);
       setSelectedMovements([]);
+      setSelectedSales([]);
     }
   }, []);
 
@@ -446,6 +608,20 @@ export function CashRegisterPage() {
         </div>
 
         {/* Close Period Panel */}
+        {renderSalesTable(
+          {
+            title: 'Ventas asociadas al periodo',
+            rows: sales,
+            meta: salesSummary.sale_count > 0 ? `Ventas registradas: ${salesSummary.sale_count}` : undefined,
+            searchValue: currentSalesSearch,
+            onSearchChange: setCurrentSalesSearch,
+            page: currentSalesPage,
+            onPageChange: setCurrentSalesPage,
+            pageSize: currentSalesPageSize,
+            onPageSizeChange: setCurrentSalesPageSize,
+          }
+        )}
+
         <div className={styles['close-panel']}>
           <h3 className={styles['close-panel__title']}>Cerrar Periodo</h3>
           <div className={styles['close-panel__row']}>
@@ -637,6 +813,20 @@ export function CashRegisterPage() {
             </span>
           </div>
         </div>
+
+        {renderSalesTable(
+          {
+            title: 'Ventas del periodo',
+            rows: selectedSales,
+            meta: selectedSales.length > 0 ? `Ventas registradas: ${selectedSales.length}` : undefined,
+            searchValue: detailSalesSearch,
+            onSearchChange: setDetailSalesSearch,
+            page: detailSalesPage,
+            onPageChange: setDetailSalesPage,
+            pageSize: detailSalesPageSize,
+            onPageSizeChange: setDetailSalesPageSize,
+          }
+        )}
 
         {/* Period Movements */}
         <div className={styles['table-card']}>

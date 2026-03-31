@@ -124,6 +124,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
     getSalesSummary: (cashRegisterId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, cashRegisterId),
+    getSales: (cashRegisterId: number, limit?: number, offset?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_SALES, cashRegisterId, limit, offset),
   },
 
   // Reports

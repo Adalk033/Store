@@ -1,5 +1,5 @@
 import { getDatabase } from '../connection';
-import type { CashRegisterPeriod, CashMovement } from '../../../src/types/database';
+import type { CashRegisterPeriod, CashMovement, SaleListItem } from '../../../src/types/database';
 
 export interface CashRegisterSalesSummary {
   sale_count: number;
@@ -118,4 +118,22 @@ export function getSalesSummaryByPeriod(cashRegisterId: number): CashRegisterSal
   ).get(cashRegisterId, cashRegisterId) as CashRegisterSalesSummary | undefined;
 
   return row ?? { sale_count: 0, total_cash_sales: 0, total_credit_sales: 0, total_credit_collected: 0 };
+}
+
+export function getSalesByPeriod(cashRegisterId: number, limit = 200, offset = 0): SaleListItem[] {
+  const db = getDatabase();
+
+  return db.prepare(
+    `SELECT
+      s.*,
+      c.name AS customer_name,
+      COALESCE(SUM(si.quantity), 0) AS item_count
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN sale_items si ON si.sale_id = s.id
+    WHERE s.cash_register_id = ?
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+    LIMIT ? OFFSET ?`
+  ).all(cashRegisterId, limit, offset) as SaleListItem[];
 }
