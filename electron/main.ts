@@ -31,7 +31,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    title: 'MichiPapeleria - Punto de Venta',
+    title: 'store-internal - Punto de Venta',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -130,7 +130,7 @@ function registerIpcHandlers(): void {
   // Database backup
   ipcMain.handle(IPC_CHANNELS.SETTINGS_BACKUP_DB, () => {
     const dbDir = app.isPackaged ? app.getPath('userData') : app.getAppPath();
-    const dbPath = path.join(dbDir, 'michipapeleria.db');
+    const dbPath = path.join(dbDir, 'store-internal.db');
     const backupDir = path.join(dbDir, 'backups');
 
     if (!fs.existsSync(backupDir)) {
@@ -138,7 +138,7 @@ function registerIpcHandlers(): void {
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupName = `michipapeleria-${timestamp}.db`;
+    const backupName = `store-internal-${timestamp}.db`;
     const backupPath = path.join(backupDir, backupName);
 
     fs.copyFileSync(dbPath, backupPath);

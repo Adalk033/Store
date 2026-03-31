@@ -262,7 +262,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       </div>
 
       <div className={styles.version}>
-        MichiPapeleria v0.1.0
+        store-internal v0.1.0
       </div>
     </div>
   );

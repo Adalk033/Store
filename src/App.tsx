@@ -22,7 +22,7 @@ function isPageId(value: string): value is PageId {
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
-  const [storeName, setStoreName] = useState('MichiPapeleria');
+  const [storeName, setStoreName] = useState('store-internal');
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [initialCreditId, setInitialCreditId] = useState<number | null>(null);
 

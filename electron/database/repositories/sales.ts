@@ -19,6 +19,13 @@ interface CreateSaleData {
   // Credit-specific fields (required when sale_type === 'credit')
   credit_days?: number;
   surcharge_percent?: number;
+  // Cash-specific fields (used when sale_type === 'cash')
+  cash_received?: number;
+  cash_change?: number;
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 export function createSale(data: CreateSaleData): Sale {
@@ -29,16 +36,42 @@ export function createSale(data: CreateSaleData): Sale {
     0
   );
 
+  let cashReceived: number | null = null;
+  let cashChange: number | null = null;
+
+  if (data.sale_type === 'cash') {
+    const received = roundMoney(data.cash_received ?? subtotal);
+    const change = roundMoney(data.cash_change ?? received - subtotal);
+
+    if (received < subtotal) {
+      throw new Error('El efectivo recibido no puede ser menor al total de la venta');
+    }
+
+    if (change < 0) {
+      throw new Error('El cambio no puede ser negativo');
+    }
+
+    const expectedChange = roundMoney(received - subtotal);
+    if (Math.abs(expectedChange - change) > 0.01) {
+      throw new Error('Los datos de efectivo y cambio no coinciden con el total');
+    }
+
+    cashReceived = received;
+    cashChange = change;
+  }
+
   const transaction = db.transaction(() => {
     // Insert sale
     const saleResult = db.prepare(`
-      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_register_id)
-      VALUES (?, ?, ?, 0, ?, ?)
+      INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id)
+      VALUES (?, ?, ?, 0, ?, ?, ?, ?)
     `).run(
       data.sale_type,
       data.customer_id ?? null,
       subtotal,
       subtotal,
+      cashReceived,
+      cashChange,
       data.cash_register_id ?? null
     );
 

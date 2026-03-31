@@ -1,5 +1,5 @@
-appId: com.michipapeleria.pos
-productName: MichiPapeleria
+appId: com.store-internal.pos
+productName: store-internal
 directories:
   buildResources: build
   output: release
