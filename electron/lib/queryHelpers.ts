@@ -24,14 +24,12 @@ export function normalizeSearchTerm(term: string): string {
 /**
  * Build a SQLite LIKE pattern for contains matching.
  * The returned value is already wrapped with % wildcards.
- * Escapes any literal % or _ in the search term.
+ * Assumes the caller does not use an ESCAPE clause, so % and _
+ * in the term are treated with SQLite's default LIKE semantics.
  */
 export function buildLikePattern(term: string): string {
   const normalized = normalizeSearchTerm(term);
-  // Escape backslashes first, then SQL LIKE special characters
-  const escapeBackslashes = normalized.replace(/\\/g, '\\\\');
-  const escaped = escapeBackslashes.replace(/[%_]/g, '\\$&');
-  return `%${escaped}%`;
+  return `%${normalized}%`;
 }
 
 /**
