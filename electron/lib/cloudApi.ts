@@ -78,6 +78,9 @@ function normalizeErrorMessage(
   if (responseStatus === 404) {
     return `Recurso no encontrado en API cloud (${url})`;
   }
+  if (responseStatus === 400) {
+    return `Solicitud invalida en API cloud (${url}). Verifica formato del body y tipos esperados por el modelo del API Gateway`;
+  }
   if (responseStatus >= 500) {
     return `Error interno en API cloud (${responseStatus})`; 
   }
@@ -159,6 +162,65 @@ export class CloudApi {
     return this.request<Category[]>('GET', '/v1/categories');
   }
 
+  private toCategoryWritePayload(data: { name?: string; parent_id?: number | null }): { name?: string; parent_id?: number } {
+    const payload: { name?: string; parent_id?: number } = {};
+    if (typeof data.name === 'string') {
+      payload.name = data.name;
+    }
+    if (typeof data.parent_id === 'number' && Number.isInteger(data.parent_id) && data.parent_id > 0) {
+      payload.parent_id = data.parent_id;
+    }
+    return payload;
+  }
+
+  private toProductWritePayload(data: {
+    barcode?: string;
+    name?: string;
+    description?: string | null;
+    category_id?: number | null;
+    cost_price?: number;
+    margin_percent?: number;
+    stock?: number;
+    min_stock?: number;
+    is_active?: number;
+  }): {
+    barcode?: string;
+    name?: string;
+    description?: string;
+    category_id?: number;
+    cost_price?: number;
+    margin_percent?: number;
+    stock?: number;
+    min_stock?: number;
+    is_active?: number;
+  } {
+    const payload: {
+      barcode?: string;
+      name?: string;
+      description?: string;
+      category_id?: number;
+      cost_price?: number;
+      margin_percent?: number;
+      stock?: number;
+      min_stock?: number;
+      is_active?: number;
+    } = {};
+
+    if (typeof data.barcode === 'string') payload.barcode = data.barcode;
+    if (typeof data.name === 'string') payload.name = data.name;
+    if (typeof data.description === 'string' && data.description.trim()) payload.description = data.description;
+    if (typeof data.category_id === 'number' && Number.isInteger(data.category_id) && data.category_id > 0) {
+      payload.category_id = data.category_id;
+    }
+    if (typeof data.cost_price === 'number') payload.cost_price = data.cost_price;
+    if (typeof data.margin_percent === 'number') payload.margin_percent = data.margin_percent;
+    if (typeof data.stock === 'number') payload.stock = data.stock;
+    if (typeof data.min_stock === 'number') payload.min_stock = data.min_stock;
+    if (typeof data.is_active === 'number') payload.is_active = data.is_active;
+
+    return payload;
+  }
+
   // Settings (cloud-managed sections)
   getSettingsSection(section: CloudSettingsSection): Promise<{ section: CloudSettingsSection; values: CloudSectionValues }> {
     return this.request<{ section: CloudSettingsSection; values: CloudSectionValues }>('GET', `/v1/settings/sections/${section}`);
@@ -179,11 +241,11 @@ export class CloudApi {
   }
 
   createCategory(data: { name: string; parent_id?: number | null }): Promise<Category> {
-    return this.request<Category>('POST', '/v1/categories', data);
+    return this.request<Category>('POST', '/v1/categories', this.toCategoryWritePayload(data));
   }
 
   updateCategory(id: number, data: { name?: string; parent_id?: number | null }): Promise<Category | undefined> {
-    return this.request<Category>('PUT', `/v1/categories/${id}`, data);
+    return this.request<Category>('PUT', `/v1/categories/${id}`, this.toCategoryWritePayload(data));
   }
 
   deleteCategory(id: number): Promise<boolean> {
@@ -267,7 +329,7 @@ export class CloudApi {
     stock?: number;
     min_stock?: number;
   }): Promise<Product> {
-    return this.request<Product>('POST', '/v1/products', data);
+    return this.request<Product>('POST', '/v1/products', this.toProductWritePayload(data));
   }
 
   updateProduct(id: number, data: {
@@ -279,7 +341,7 @@ export class CloudApi {
     min_stock?: number;
     is_active?: number;
   }): Promise<Product | undefined> {
-    return this.request<Product>('PUT', `/v1/products/${id}`, data);
+    return this.request<Product>('PUT', `/v1/products/${id}`, this.toProductWritePayload(data));
   }
 
   deleteProduct(id: number): Promise<boolean> {
