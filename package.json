@@ -1,10 +1,14 @@
 {
   "name": "store-internal",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist-electron/main.js",
+  "author": {
+    "name": "Adalk033",
+    "email": "adal_garcia1999@hotmail.com"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

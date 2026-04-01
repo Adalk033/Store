@@ -1,6 +1,34 @@
 import pg from "pg";
 import crypto from "node:crypto";
 const { Pool } = pg;
+
+function getDbSslConfig() {
+  return { rejectUnauthorized: false };
+  //Se tiene que buscar solucion para agregar el tls, 
+  //no se puede quedar asi en produccion, pero por ahora en render no se puede conectar con ssl aunque se configure la base de datos para requerirlo, 
+  // //asi que se deja asi para que funcione en render y se puede configurar para usar ssl en otros entornos
+  if (process.env.DB_SSL_MODE !== "require") {
+    return void 0;
+  }
+
+  const caFromPem = (process.env.DB_SSL_CA_PEM || "").trim();
+  const caFromBase64 = (process.env.DB_SSL_CA_PEM_B64 || "").trim();
+
+  if (caFromPem) {
+    return { rejectUnauthorized: true, ca: caFromPem };
+  }
+
+  if (caFromBase64) {
+    const decodedCa = Buffer.from(caFromBase64, "base64").toString("utf8").trim();
+    if (!decodedCa) {
+      throw new Error("DB_SSL_CA_PEM_B64 is configured but decoded CA is empty");
+    }
+    return { rejectUnauthorized: true, ca: decodedCa };
+  }
+
+  return { rejectUnauthorized: true };
+}
+
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT || "5432"),
@@ -10,7 +38,7 @@ const pool = new Pool({
   max: 5,
   idleTimeoutMillis: 3e4,
   connectionTimeoutMillis: 1e4,
-  ssl: process.env.DB_SSL_MODE === "require" ? { rejectUnauthorized: false } : void 0
+  ssl: getDbSslConfig()
 });
 class HttpError extends Error {
   statusCode;
@@ -207,10 +235,18 @@ function validateSettingValueByKey(key, value) {
 function enforceApiKey(event) {
   const requireKey = (process.env.REQUIRE_API_KEY || "true") === "true";
   if (!requireKey) return;
-  const expected = process.env.EXPECTED_API_KEY;
-  if (!expected) return;
-  const incoming = getHeader(event, "x-api-key");
-  if (!incoming || incoming !== expected) {
+  const expectedKeys = [
+    ...(process.env.EXPECTED_API_KEYS || "").split(",").map((value) => value.trim()).filter(Boolean),
+    ...(process.env.EXPECTED_API_KEY || "").split(",").map((value) => value.trim()).filter(Boolean)
+  ];
+
+  if (expectedKeys.length === 0) {
+    throw new HttpError(500, "misconfiguration", "API key authentication is not configured");
+  }
+
+  const expectedSet = new Set(expectedKeys);
+  const incoming = (getHeader(event, "x-api-key") || "").trim();
+  if (!incoming || !expectedSet.has(incoming)) {
     throw new HttpError(403, "forbidden", "Invalid API key");
   }
 }
@@ -1388,7 +1424,9 @@ const handler = async (event) => {
     }
     console.error("handler_error", {
       request_id: requestId,
-      message: err instanceof Error ? err.message : "unknown_error"
+      name: err instanceof Error ? err.name : "UnknownError",
+      message: err instanceof Error ? err.message : "unknown_error",
+      stack: err instanceof Error ? err.stack : void 0
     });
     return fail(500, "internal_error", "Internal server error", requestId);
   }
