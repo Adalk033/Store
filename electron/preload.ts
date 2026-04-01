@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../src/lib/ipcChannels';
-import type { PaginatedQuery, CursorPaginatedQuery } from '../src/types/database';
+import type { PaginatedQuery, CursorPaginatedQuery, CustomersPaginatedQuery } from '../src/types/database';
 
 // Typed API exposed to the renderer process
 const electronAPI = {
@@ -60,7 +60,7 @@ const electronAPI = {
     update: (id: number, data: { name?: string; phone?: string | null; email?: string | null; notes?: string | null; is_active?: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_UPDATE, id, data),
     delete: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_DELETE, id),
-    getAllPaginated: (query: PaginatedQuery) =>
+    getAllPaginated: (query: CustomersPaginatedQuery) =>
       ipcRenderer.invoke(IPC_CHANNELS.CUSTOMERS_GET_ALL_PAGINATED, query),
   },
 
@@ -186,6 +186,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.REPORTS_PROFIT_PAGINATED, query),
     topProductsPaginated: (query: PaginatedQuery) =>
       ipcRenderer.invoke(IPC_CHANNELS.REPORTS_TOP_PRODUCTS_PAGINATED, query),
+    creditsOverviewPaginated: (query: PaginatedQuery) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW_PAGINATED, query),
   },
 
   // Settings

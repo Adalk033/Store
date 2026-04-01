@@ -207,6 +207,12 @@ export interface PaginatedQuery extends QueryFilters {
   sort?: SortSpec;       // Optional sort override; defaults to created_at DESC, id DESC
 }
 
+export type CustomerCreditStatusFilter = 'all' | 'withDebt' | 'overdue' | 'withoutCredits';
+
+export interface CustomersPaginatedQuery extends PaginatedQuery {
+  creditStatus?: CustomerCreditStatusFilter;
+}
+
 /**
  * Standard paginated response returned from main process to renderer.
  * All paginated list endpoints must return this shape.

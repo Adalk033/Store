@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Customer, CustomerListItem, PaginatedQuery, PaginatedResponse } from '../types';
+import type { Customer, CustomerListItem, CustomersPaginatedQuery, PaginatedResponse } from '../types';
 
 export function useCustomers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -70,7 +70,7 @@ export function useCustomers() {
   // --- Paginated methods (Phase 3) ---
 
   const fetchCustomersPaginated = useCallback(async (
-    query: PaginatedQuery
+    query: CustomersPaginatedQuery
   ): Promise<PaginatedResponse<CustomerListItem> | null> => {
     try {
       setLoading(true);

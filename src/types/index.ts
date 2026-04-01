@@ -22,6 +22,8 @@ export type {
   SortSpec,
   QueryFilters,
   PaginatedQuery,
+  CustomerCreditStatusFilter,
+  CustomersPaginatedQuery,
   PaginatedResponse,
   FeatureFlagModule,
   CursorToken,

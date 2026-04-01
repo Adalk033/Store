@@ -29,33 +29,6 @@ const CREDIT_STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
 };
 
-function normalizeText(value: unknown): string {
-  return String(value ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
-}
-
-function filterByQuery<T>(rows: T[], query: string, getValues: (row: T) => Array<unknown>): T[] {
-  const q = normalizeText(query);
-  if (!q) return rows;
-
-  return rows.filter(row => {
-    const values = getValues(row);
-    return values.some(v => normalizeText(v).includes(q));
-  });
-}
-
-function paginateRows<T>(rows: T[], page: number, rowsPerPage: number): { pageRows: T[]; totalPages: number } {
-  const safeRowsPerPage = rowsPerPage > 0 ? rowsPerPage : 5;
-  const totalPages = Math.max(1, Math.ceil(rows.length / safeRowsPerPage));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const startIndex = (safePage - 1) * safeRowsPerPage;
-  const endIndex = startIndex + safeRowsPerPage;
-  return { pageRows: rows.slice(startIndex, endIndex), totalPages };
-}
-
 function usePersistedRowsPerPage(tableId: string, defaultValue: number): [number, (value: number) => void] {
   const storageKey = `reports.table.rowsPerPage.${tableId}`;
   const [rowsPerPage, setRowsPerPage] = useState<number>(defaultValue);
@@ -135,6 +108,7 @@ export function ReportsPage() {
     getInventoryReportPaginated,
     getProfitReportPaginated,
     getTopProductsPaginated,
+    getCreditsOverviewPaginated,
   } = useReports();
 
   const [activeTab, setActiveTab] = useState<ReportTab>('sales');
@@ -178,12 +152,14 @@ export function ReportsPage() {
   const [creditsSummarySearch, setCreditsSummarySearch] = useState('');
   const [creditsSummaryPage, setCreditsSummaryPage] = useState(1);
   const [creditsSummaryRowsPerPage, setCreditsSummaryRowsPerPage] = usePersistedRowsPerPage('credits.summaryByStatus', 5);
+  const [creditsSummaryPaginatedData, setCreditsSummaryPaginatedData] = useState<PaginatedResponse<CreditsOverviewRow> | null>(null);
 
   // Debounce refs for paginated table searches
   const salesTopSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productsDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profitDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inventoryDetailSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const creditsSummarySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -274,24 +250,18 @@ export function ReportsPage() {
     }
   }, [getInventoryReportPaginated]);
 
-  // Credits summary uses client-side filtering (small aggregated dataset)
-  const creditsSummaryFiltered = useMemo(() => {
-    return filterByQuery(creditsData, creditsSummarySearch, r => [
-      r.status,
-      CREDIT_STATUS_LABELS[r.status] || r.status,
-      r.count,
-      r.total_due,
-      r.total_paid,
-      r.total_remaining,
-    ]);
-  }, [creditsData, creditsSummarySearch]);
-  const creditsSummaryPagination = useMemo(() => {
-    return paginateRows(creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage);
-  }, [creditsSummaryFiltered, creditsSummaryPage, creditsSummaryRowsPerPage]);
-
-  useEffect(() => {
-    if (creditsSummaryPage > creditsSummaryPagination.totalPages) setCreditsSummaryPage(1);
-  }, [creditsSummaryPage, creditsSummaryPagination.totalPages]);
+  const loadCreditsSummaryTable = useCallback(async (page: number, search: string, pageSize: number) => {
+    try {
+      const data = await getCreditsOverviewPaginated({
+        page,
+        pageSize,
+        search: search.trim() || undefined,
+      });
+      setCreditsSummaryPaginatedData(data);
+    } catch (err) {
+      console.error('ReportsPage.loadCreditsSummaryTable:', err);
+    }
+  }, [getCreditsOverviewPaginated]);
 
   // Paginated table effects: load table data on page/pageSize change
   useEffect(() => {
@@ -309,6 +279,10 @@ export function ReportsPage() {
   useEffect(() => {
     if (activeTab === 'inventory') loadInventoryDetailTable(inventoryDetailPage, inventoryDetailSearch, inventoryDetailRowsPerPage);
   }, [activeTab, inventoryDetailPage, inventoryDetailRowsPerPage, loadInventoryDetailTable]);
+
+  useEffect(() => {
+    if (activeTab === 'credits') loadCreditsSummaryTable(creditsSummaryPage, creditsSummarySearch, creditsSummaryRowsPerPage);
+  }, [activeTab, creditsSummaryPage, creditsSummaryRowsPerPage, loadCreditsSummaryTable]);
 
   // Debounced search effects for paginated tables
   useEffect(() => {
@@ -350,6 +324,16 @@ export function ReportsPage() {
     }, 300);
     return () => { if (inventoryDetailSearchTimer.current) clearTimeout(inventoryDetailSearchTimer.current); };
   }, [inventoryDetailSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'credits') return;
+    if (creditsSummarySearchTimer.current) clearTimeout(creditsSummarySearchTimer.current);
+    creditsSummarySearchTimer.current = setTimeout(() => {
+      setCreditsSummaryPage(1);
+      loadCreditsSummaryTable(1, creditsSummarySearch, creditsSummaryRowsPerPage);
+    }, 300);
+    return () => { if (creditsSummarySearchTimer.current) clearTimeout(creditsSummarySearchTimer.current); };
+  }, [activeTab, creditsSummarySearch, creditsSummaryRowsPerPage, loadCreditsSummaryTable]);
 
   const loadProfitReport = useCallback(async () => {
     try {
@@ -1161,12 +1145,13 @@ export function ReportsPage() {
                     Anterior
                   </button>
                   <span className={styles['pager__text']}>
-                    Pagina {Math.min(creditsSummaryPage, creditsSummaryPagination.totalPages)} de {creditsSummaryPagination.totalPages}
+                    Pagina {creditsSummaryPage} de {Math.max(1, Math.ceil((creditsSummaryPaginatedData?.total ?? 0) / creditsSummaryRowsPerPage))}
+                    {creditsSummaryPaginatedData ? ` (${creditsSummaryPaginatedData.total})` : ''}
                   </span>
                   <button
                     className={styles['pager__btn']}
-                    onClick={() => setCreditsSummaryPage(p => Math.min(creditsSummaryPagination.totalPages, p + 1))}
-                    disabled={creditsSummaryPage >= creditsSummaryPagination.totalPages}
+                    onClick={() => setCreditsSummaryPage(p => p + 1)}
+                    disabled={!creditsSummaryPaginatedData?.hasMore}
                   >
                     Siguiente
                   </button>
@@ -1185,8 +1170,8 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {creditsSummaryPagination.pageRows.length > 0 ? (
-                  creditsSummaryPagination.pageRows.map(d => (
+                {(creditsSummaryPaginatedData?.items ?? []).length > 0 ? (
+                  (creditsSummaryPaginatedData?.items ?? []).map(d => (
                     <tr key={d.status}>
                       <td>
                         <span className={`${styles.badge} ${styles[`badge--${d.status}`]}`}>

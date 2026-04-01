@@ -176,6 +176,27 @@ export function useReports() {
     }
   }, []);
 
+  const getCreditsOverviewPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<CreditsOverviewRow>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await window.electronAPI.reports.creditsOverviewPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar resumen de creditos';
+      setError(message);
+      console.error('useReports.getCreditsOverviewPaginated:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -188,5 +209,6 @@ export function useReports() {
     getInventoryReportPaginated,
     getProfitReportPaginated,
     getTopProductsPaginated,
+    getCreditsOverviewPaginated,
   };
 }

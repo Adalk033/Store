@@ -172,6 +172,7 @@ export function getCreditsOverview(): CreditsOverviewRow[] {
 const INVENTORY_SORT_FIELDS = ['product_name', 'stock', 'cost_price', 'sale_price', 'stock_value_cost', 'stock_value_sale'] as const;
 const PROFIT_SORT_FIELDS = ['product_name', 'total_quantity', 'total_revenue', 'total_cost', 'profit', 'margin'] as const;
 const TOP_PRODUCTS_SORT_FIELDS = ['product_name', 'total_quantity', 'total_revenue'] as const;
+const CREDITS_OVERVIEW_SORT_FIELDS = ['status', 'count', 'total_due', 'total_paid', 'total_remaining'] as const;
 
 interface ReportPaginatedQuery {
   page: number;
@@ -366,6 +367,61 @@ export function getTopProductsPaginated(query: ReportPaginatedQuery): PaginatedR
   const items = db.prepare(`
     SELECT * FROM (${baseQuery}) sub ${searchFilter} ${orderClause} LIMIT ? OFFSET ?
   `).all(...params, ...searchParams, limit, offset) as TopProductRow[];
+
+  return { items, page, pageSize, total, hasMore: offset + items.length < total, sort };
+}
+
+export function getCreditsOverviewPaginated(query: ReportPaginatedQuery): PaginatedResponse<CreditsOverviewRow> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+
+  const defaultSort: SortSpec = { field: 'status', direction: 'ASC' };
+  const sort: SortSpec = (
+    query.sort &&
+    typeof query.sort.field === 'string' &&
+    (CREDITS_OVERVIEW_SORT_FIELDS as readonly string[]).includes(query.sort.field) &&
+    (query.sort.direction === 'ASC' || query.sort.direction === 'DESC')
+  ) ? query.sort : defaultSort;
+
+  const baseQuery = `
+    SELECT
+      status,
+      COUNT(*) AS count,
+      COALESCE(SUM(total_due), 0) AS total_due,
+      COALESCE(SUM(amount_paid), 0) AS total_paid,
+      COALESCE(SUM(total_due - amount_paid), 0) AS total_remaining
+    FROM credits
+    GROUP BY status
+  `;
+
+  const searchConditions: string[] = [];
+  const searchParams: (string | number)[] = [];
+  if (typeof query.search === 'string' && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    searchConditions.push(`(
+      LOWER(status) LIKE ? ESCAPE '\\'
+      OR LOWER(CASE status
+        WHEN 'pending' THEN 'pendiente'
+        WHEN 'overdue' THEN 'vencido'
+        WHEN 'paid' THEN 'pagado'
+        ELSE status
+      END) LIKE ? ESCAPE '\\'
+    )`);
+    searchParams.push(pattern, pattern);
+  }
+  const searchFilter = searchConditions.length > 0 ? `WHERE ${searchConditions.join(' AND ')}` : '';
+
+  const countRow = db.prepare(`
+    SELECT COUNT(*) AS total FROM (${baseQuery}) sub ${searchFilter}
+  `).get(...searchParams) as { total: number };
+
+  const total = countRow.total;
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const orderClause = `ORDER BY ${sort.field} ${sort.direction}, status ASC`;
+
+  const items = db.prepare(`
+    SELECT * FROM (${baseQuery}) sub ${searchFilter} ${orderClause} LIMIT ? OFFSET ?
+  `).all(...searchParams, limit, offset) as CreditsOverviewRow[];
 
   return { items, page, pageSize, total, hasMore: offset + items.length < total, sort };
 }

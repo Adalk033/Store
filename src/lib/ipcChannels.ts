@@ -81,6 +81,7 @@ export const IPC_CHANNELS = {
   REPORTS_INVENTORY_PAGINATED: 'reports:inventoryPaginated',
   REPORTS_PROFIT_PAGINATED: 'reports:profitPaginated',
   REPORTS_TOP_PRODUCTS_PAGINATED: 'reports:topProductsPaginated',
+  REPORTS_CREDITS_OVERVIEW_PAGINATED: 'reports:creditsOverviewPaginated',
 
   // Settings
   SETTINGS_GET: 'settings:get',

@@ -3,7 +3,7 @@ import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText } from 'lu
 import { useCustomers } from '../hooks/useCustomers';
 import { useCredits } from '../hooks/useCredits';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { Credit, CreditPayment, CreditListItem, Customer, CustomerListItem, PaginatedQuery } from '../types';
+import type { Credit, CreditPayment, CreditListItem, Customer, CustomerListItem, CustomersPaginatedQuery } from '../types';
 import styles from './CustomersPage.module.css';
 
 type ViewMode = 'list' | 'profile';
@@ -74,11 +74,12 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
 
   // Load paginated customers
   const loadCustomers = useCallback(async () => {
-    const query: PaginatedQuery = {
+    const query: CustomersPaginatedQuery = {
       page: currentPage,
       pageSize: ROWS_PER_PAGE,
       search: debouncedSearch || undefined,
       status: 'active',
+      creditStatus: customerFilter,
     };
 
     const result = await fetchCustomersPaginated(query);
@@ -86,7 +87,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
       setCustomerItems(result.items);
       setTotalCustomers(result.total);
     }
-  }, [currentPage, debouncedSearch, fetchCustomersPaginated]);
+  }, [currentPage, debouncedSearch, customerFilter, fetchCustomersPaginated]);
 
   useEffect(() => {
     if (viewMode === 'list') {
@@ -102,16 +103,6 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
-
-  // Filter customers by credit status (client-side on already-loaded paginated data)
-  const filteredCustomers = useMemo(() => {
-    return customerItems.filter((customer) => {
-      if (customerFilter === 'withDebt') return customer.total_debt > 0;
-      if (customerFilter === 'overdue') return customer.overdue_credits > 0;
-      if (customerFilter === 'withoutCredits') return customer.total_credits === 0;
-      return true;
-    });
-  }, [customerItems, customerFilter]);
 
   // Load credits for customer profile view
   const loadProfileCredits = useCallback(async (customerId: number, page: number) => {
@@ -618,7 +609,10 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
         <select
           className={styles['toolbar__filter']}
           value={customerFilter}
-          onChange={(event) => setCustomerFilter(event.target.value as CustomerFilter)}
+          onChange={(event) => {
+            setCustomerFilter(event.target.value as CustomerFilter);
+            setCurrentPage(1);
+          }}
         >
           <option value="all">Todos</option>
           <option value="withDebt">Con deuda activa</option>
@@ -643,10 +637,10 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
           <tbody>
             {loadingCustomers ? (
               <tr><td colSpan={7} className={styles['table__empty']}>Cargando clientes...</td></tr>
-            ) : filteredCustomers.length === 0 ? (
+            ) : customerItems.length === 0 ? (
               <tr><td colSpan={7} className={styles['table__empty']}>No hay clientes para mostrar</td></tr>
             ) : (
-              filteredCustomers.map((customer) => {
+              customerItems.map((customer) => {
                 return (
                   <tr key={customer.id} className={styles['table__row--clickable']} onClick={() => openCustomerProfile(customer)}>
                     <td>

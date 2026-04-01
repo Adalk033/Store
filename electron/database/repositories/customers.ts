@@ -8,7 +8,8 @@ import {
 import type {
   Customer,
   CustomerListItem,
-  PaginatedQuery,
+  CustomersPaginatedQuery,
+  CustomerCreditStatusFilter,
   PaginatedResponse,
   SortSpec,
 } from '../../../src/types/database';
@@ -79,9 +80,29 @@ export function deleteCustomer(id: number): boolean {
 
 const DEFAULT_SORT: SortSpec = { field: 'name', direction: 'ASC' };
 const ALLOWED_ACTIVE_STATUSES = ['active', 'inactive'] as const;
+const ALLOWED_CREDIT_STATUSES: CustomerCreditStatusFilter[] = ['all', 'withDebt', 'overdue', 'withoutCredits'];
+
+function isValidCreditStatus(value: unknown): value is CustomerCreditStatusFilter {
+  return typeof value === 'string' && ALLOWED_CREDIT_STATUSES.includes(value as CustomerCreditStatusFilter);
+}
+
+const CREDITS_SUMMARY_JOIN = `
+  LEFT JOIN (
+    SELECT
+      customer_id,
+      COUNT(*) AS total_credits,
+      SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END) AS active_credits,
+      SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) AS overdue_credits,
+      SUM(CASE WHEN status != 'paid' THEN total_due - amount_paid ELSE 0 END) AS total_debt,
+      SUM(amount_paid) AS total_paid,
+      MAX(created_at) AS last_credit_date
+    FROM credits
+    GROUP BY customer_id
+  ) cs ON cs.customer_id = c.id
+`;
 
 export function getAllCustomersPaginated(
-  query: PaginatedQuery
+  query: CustomersPaginatedQuery
 ): PaginatedResponse<CustomerListItem> {
   const db = getDatabase();
   const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
@@ -105,6 +126,18 @@ export function getAllCustomersPaginated(
     params.push(pattern, pattern, pattern);
   }
 
+  if (isValidCreditStatus(query.creditStatus) && query.creditStatus !== 'all') {
+    if (query.creditStatus === 'withDebt') {
+      conditions.push('COALESCE(cs.total_debt, 0) > 0');
+    }
+    if (query.creditStatus === 'overdue') {
+      conditions.push('COALESCE(cs.overdue_credits, 0) > 0');
+    }
+    if (query.creditStatus === 'withoutCredits') {
+      conditions.push('COALESCE(cs.total_credits, 0) = 0');
+    }
+  }
+
   const whereClause = conditions.length > 0
     ? `WHERE ${conditions.join(' AND ')}`
     : '';
@@ -112,6 +145,7 @@ export function getAllCustomersPaginated(
   const countRow = db.prepare(
     `SELECT COUNT(*) AS total
      FROM customers c
+      ${CREDITS_SUMMARY_JOIN}
      ${whereClause}`
   ).get(...params) as { total: number };
 
@@ -127,18 +161,7 @@ export function getAllCustomersPaginated(
       COALESCE(cs.total_paid, 0) AS total_paid,
       cs.last_credit_date
     FROM customers c
-    LEFT JOIN (
-      SELECT
-        customer_id,
-        COUNT(*) AS total_credits,
-        SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END) AS active_credits,
-        SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) AS overdue_credits,
-        SUM(CASE WHEN status != 'paid' THEN total_due - amount_paid ELSE 0 END) AS total_debt,
-        SUM(amount_paid) AS total_paid,
-        MAX(created_at) AS last_credit_date
-      FROM credits
-      GROUP BY customer_id
-    ) cs ON cs.customer_id = c.id
+    ${CREDITS_SUMMARY_JOIN}
     ${whereClause}
     ORDER BY c.${sort.field === 'name' ? 'name' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, c.id DESC
     LIMIT ? OFFSET ?`

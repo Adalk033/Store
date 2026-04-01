@@ -119,11 +119,16 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CUSTOMERS_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      const allowedCreditStatuses = ['all', 'withDebt', 'overdue', 'withoutCredits'] as const;
+      const creditStatus = typeof q.creditStatus === 'string' && allowedCreditStatuses.includes(q.creditStatus as (typeof allowedCreditStatuses)[number])
+        ? q.creditStatus as (typeof allowedCreditStatuses)[number]
+        : undefined;
       return customersRepo.getAllCustomersPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         status: typeof q.status === 'string' ? q.status : undefined,
+        creditStatus,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
       });
     }
@@ -440,6 +445,19 @@ function registerIpcHandlers(): void {
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
         dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW_PAGINATED,
+    (_, query: unknown) => {
+      const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      return reportsRepo.getCreditsOverviewPaginated({
+        page: typeof q.page === 'number' ? q.page : 1,
+        pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+        search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
       });
     }
