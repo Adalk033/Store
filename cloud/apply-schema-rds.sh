@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage:
 #   export PGHOST="your-rds-endpoint"
 #   export PGPORT="5432"
-#   export PGDATABASE="michipapeleria"
+#   export PGDATABASE="your-database-name"
 #   export PGUSER="postgres"
 #   export PGPASSWORD="your_password"
 #   ./cloud/apply-schema-rds.sh
