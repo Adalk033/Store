@@ -28,8 +28,9 @@ export function normalizeSearchTerm(term: string): string {
  */
 export function buildLikePattern(term: string): string {
   const normalized = normalizeSearchTerm(term);
-  // Escape SQL LIKE special characters
-  const escaped = normalized.replace(/[%_]/g, '\\$&');
+  // Escape backslashes first, then SQL LIKE special characters
+  const escapeBackslashes = normalized.replace(/\\/g, '\\\\');
+  const escaped = escapeBackslashes.replace(/[%_]/g, '\\$&');
   return `%${escaped}%`;
 }
 
