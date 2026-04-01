@@ -40,6 +40,7 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
   const [categoryId, setCategoryId] = useState<number | ''>(product?.category_id ?? '');
   const [costPrice, setCostPrice] = useState(product?.cost_price?.toString() ?? '');
   const [marginPercent, setMarginPercent] = useState(product?.margin_percent?.toString() ?? defaultMarginPercent.toString());
+  const [marginTouched, setMarginTouched] = useState(isEditing);
   const [salePrice, setSalePrice] = useState(product?.sale_price?.toString() ?? '');
   const [stock, setStock] = useState(product?.stock?.toString() ?? '0');
   const [minStock, setMinStock] = useState(product && product.min_stock >= 0 ? product.min_stock.toString() : '5');
@@ -83,6 +84,7 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
 
   // Handle margin percent change
   function handleMarginChange(value: string) {
+    setMarginTouched(true);
     setMarginPercent(value);
     // Recalculate sale price based on margin
     const cost = parseFloat(costPrice) || 0;
@@ -95,6 +97,7 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
 
   // Handle sale price change
   function handleSalePriceChange(value: string) {
+    setMarginTouched(true);
     setSalePrice(value);
     // Recalculate margin from sale price, but skip if sale price is empty/NaN
     const cost = parseFloat(costPrice) || 0;
@@ -104,6 +107,13 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
       setMarginPercent(String(Math.round(newMargin * 10) / 10));
     }
   }
+
+  // Keep create form aligned with latest configured default margin from settings.
+  useEffect(() => {
+    if (!isEditing && !marginTouched) {
+      setMarginPercent(defaultMarginPercent.toString());
+    }
+  }, [defaultMarginPercent, isEditing, marginTouched]);
 
   function regenerateBarcode() {
     if (!isEditing) {

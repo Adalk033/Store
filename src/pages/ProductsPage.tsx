@@ -39,6 +39,7 @@ export function ProductsPage() {
   const [canDeletePermanently, setCanDeletePermanently] = useState(false);
   const [checkingPermanentDelete, setCheckingPermanentDelete] = useState(false);
   const [permanentDeleteCheckError, setPermanentDeleteCheckError] = useState<string | null>(null);
+  const [openingNewProduct, setOpeningNewProduct] = useState(false);
 
   // Paginated state
   const [paginatedData, setPaginatedData] = useState<PaginatedResponse<Product> | null>(null);
@@ -177,9 +178,18 @@ export function ProductsPage() {
     return map;
   }, [categories]);
 
-  function handleNewProduct() {
-    setEditingProduct(null);
-    setViewMode('form');
+  async function handleNewProduct() {
+    setOpeningNewProduct(true);
+    try {
+      // Force latest cloud-managed defaults before opening create form.
+      await fetchSettings();
+      setEditingProduct(null);
+      setViewMode('form');
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'No se pudo cargar configuracion');
+    } finally {
+      setOpeningNewProduct(false);
+    }
   }
 
   function handleEditProduct(product: Product) {
@@ -373,9 +383,9 @@ export function ProductsPage() {
             <Layers size={16} strokeWidth={1.5} />
             Categorias
           </button>
-          <button className={styles['btn-primary']} onClick={handleNewProduct}>
+          <button className={styles['btn-primary']} onClick={handleNewProduct} disabled={openingNewProduct}>
             <Plus size={16} strokeWidth={1.5} />
-            Nuevo producto
+            {openingNewProduct ? 'Cargando...' : 'Nuevo producto'}
           </button>
         </div>
       </div>
