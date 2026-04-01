@@ -10,7 +10,7 @@ const pool = new Pool({
   max: 5,
   idleTimeoutMillis: 3e4,
   connectionTimeoutMillis: 1e4,
-  ssl: process.env.DB_SSL_MODE === "require" ? { rejectUnauthorized: false } : void 0
+  ssl: process.env.DB_SSL_MODE === "require" ? { rejectUnauthorized: true } : void 0
 });
 class HttpError extends Error {
   statusCode;
@@ -207,9 +207,11 @@ function validateSettingValueByKey(key, value) {
 function enforceApiKey(event) {
   const requireKey = (process.env.REQUIRE_API_KEY || "true") === "true";
   if (!requireKey) return;
-  const expected = process.env.EXPECTED_API_KEY;
-  if (!expected) return;
-  const incoming = getHeader(event, "x-api-key");
+  const expected = (process.env.EXPECTED_API_KEY || "").trim();
+  if (!expected) {
+    throw new HttpError(500, "misconfiguration", "API key authentication is not configured");
+  }
+  const incoming = (getHeader(event, "x-api-key") || "").trim();
   if (!incoming || incoming !== expected) {
     throw new HttpError(403, "forbidden", "Invalid API key");
   }
