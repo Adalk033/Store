@@ -14,7 +14,7 @@ set -euo pipefail
 #   SCHEMA_FILE="cloud/postgres_schema.sql" ./cloud/apply-schema-rds.sh
 #   SSLMODE="require" ./cloud/apply-schema-rds.sh
 
-SCHEMA_FILE="${SCHEMA_FILE:-cloud/postgres_schema.sql}"
+SCHEMA_FILE="${SCHEMA_FILE:-postgres_schema.sql}"
 SSLMODE="${SSLMODE:-require}"
 
 command -v psql >/dev/null 2>&1 || {
