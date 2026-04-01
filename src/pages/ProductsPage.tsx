@@ -26,7 +26,7 @@ export function ProductsPage() {
     deleteProductPermanently,
   } = useProducts();
   const { categories, fetchCategories } = useCategories();
-  const { settings } = useSettings();
+  const { settings, fetchSettings } = useSettings();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -114,6 +114,11 @@ export function ProductsPage() {
   useEffect(() => {
     loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
   }, [loadPage, currentPage, filterCategory, filterStatus, filterLowStock]);
+
+  // Load persisted settings (including default margin percent for new products)
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   // Debounced search: reset page and reload on search change
   useEffect(() => {
