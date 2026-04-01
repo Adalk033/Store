@@ -293,7 +293,7 @@ export function ReportsPage() {
       loadSalesTopTable(1, salesTopSearch, salesTopRowsPerPage);
     }, 300);
     return () => { if (salesTopSearchTimer.current) clearTimeout(salesTopSearchTimer.current); };
-  }, [salesTopSearch]);
+  }, [activeTab, salesTopSearch, salesTopRowsPerPage, loadSalesTopTable]);
 
   useEffect(() => {
     if (activeTab !== 'products') return;
@@ -303,7 +303,7 @@ export function ReportsPage() {
       loadProductsDetailTable(1, productsDetailSearch, productsDetailRowsPerPage);
     }, 300);
     return () => { if (productsDetailSearchTimer.current) clearTimeout(productsDetailSearchTimer.current); };
-  }, [productsDetailSearch]);
+  }, [activeTab, productsDetailSearch, productsDetailRowsPerPage, loadProductsDetailTable]);
 
   useEffect(() => {
     if (activeTab !== 'profit') return;
@@ -313,7 +313,7 @@ export function ReportsPage() {
       loadProfitDetailTable(1, profitDetailSearch, profitDetailRowsPerPage);
     }, 300);
     return () => { if (profitDetailSearchTimer.current) clearTimeout(profitDetailSearchTimer.current); };
-  }, [profitDetailSearch]);
+  }, [activeTab, profitDetailSearch, profitDetailRowsPerPage, loadProfitDetailTable]);
 
   useEffect(() => {
     if (activeTab !== 'inventory') return;
@@ -323,7 +323,7 @@ export function ReportsPage() {
       loadInventoryDetailTable(1, inventoryDetailSearch, inventoryDetailRowsPerPage);
     }, 300);
     return () => { if (inventoryDetailSearchTimer.current) clearTimeout(inventoryDetailSearchTimer.current); };
-  }, [inventoryDetailSearch]);
+  }, [activeTab, inventoryDetailSearch, inventoryDetailRowsPerPage, loadInventoryDetailTable]);
 
   useEffect(() => {
     if (activeTab !== 'credits') return;
