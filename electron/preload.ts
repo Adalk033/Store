@@ -202,6 +202,16 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, value),
     hasCloudApiKey: () =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY),
+    getAwsRecovery: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY),
+    setAwsRecovery: (config: {
+      aws_enabled: string;
+      aws_env: string;
+      aws_region: string;
+      aws_api_base_url: string;
+      aws_timeout_ms: string;
+      aws_retry_max: string;
+    }) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, config),
     backupDatabase: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_BACKUP_DB),
   },
 

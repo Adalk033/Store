@@ -31,9 +31,135 @@ const RENDERER_DIST = path.join(__dirname, '../dist');
 let mainWindow: BrowserWindow | null = null;
 
 const CLOUD_API_KEY_FILE = 'cloud-api-key.bin';
+const AWS_BOOTSTRAP_FILE = 'aws-bootstrap.json';
+
+type AwsRecoveryConfig = {
+  aws_enabled: string;
+  aws_env: string;
+  aws_region: string;
+  aws_api_base_url: string;
+  aws_timeout_ms: string;
+  aws_retry_max: string;
+};
+
+const DEFAULT_AWS_RECOVERY_CONFIG: AwsRecoveryConfig = {
+  aws_enabled: '1',
+  aws_env: 'prod',
+  aws_region: '',
+  aws_api_base_url: '',
+  aws_timeout_ms: '5000',
+  aws_retry_max: '2',
+};
 
 function getCloudApiKeyPath(): string {
   return path.join(app.getPath('userData'), CLOUD_API_KEY_FILE);
+}
+
+function getAwsBootstrapPath(): string {
+  return path.join(app.getPath('userData'), AWS_BOOTSTRAP_FILE);
+}
+
+function readAwsBootstrapFile(): Partial<AwsRecoveryConfig> {
+  const filePath = getAwsBootstrapPath();
+  if (!fs.existsSync(filePath)) {
+    return {};
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      aws_enabled: typeof parsed.aws_enabled === 'string' ? parsed.aws_enabled : undefined,
+      aws_env: typeof parsed.aws_env === 'string' ? parsed.aws_env : undefined,
+      aws_region: typeof parsed.aws_region === 'string' ? parsed.aws_region : undefined,
+      aws_api_base_url: typeof parsed.aws_api_base_url === 'string' ? parsed.aws_api_base_url : undefined,
+      aws_timeout_ms: typeof parsed.aws_timeout_ms === 'string' ? parsed.aws_timeout_ms : undefined,
+      aws_retry_max: typeof parsed.aws_retry_max === 'string' ? parsed.aws_retry_max : undefined,
+    };
+  } catch (error) {
+    console.error('Failed to read aws bootstrap file:', error);
+    return {};
+  }
+}
+
+function writeAwsBootstrapFile(config: AwsRecoveryConfig): void {
+  const filePath = getAwsBootstrapPath();
+  fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
+}
+
+function toAwsRecoveryConfig(input: Partial<AwsRecoveryConfig>): AwsRecoveryConfig {
+  return {
+    aws_enabled: input.aws_enabled === '0' ? '0' : '1',
+    aws_env: (input.aws_env || DEFAULT_AWS_RECOVERY_CONFIG.aws_env).trim() || 'prod',
+    aws_region: (input.aws_region || '').trim(),
+    aws_api_base_url: (input.aws_api_base_url || '').trim(),
+    aws_timeout_ms: (input.aws_timeout_ms || DEFAULT_AWS_RECOVERY_CONFIG.aws_timeout_ms).trim(),
+    aws_retry_max: (input.aws_retry_max || DEFAULT_AWS_RECOVERY_CONFIG.aws_retry_max).trim(),
+  };
+}
+
+function validateAwsRecoveryConfig(config: AwsRecoveryConfig): AwsRecoveryConfig {
+  const timeout = Number(config.aws_timeout_ms);
+  const retries = Number(config.aws_retry_max);
+
+  if (!Number.isFinite(timeout) || timeout < 1000) {
+    throw new Error('aws_timeout_ms debe ser >= 1000');
+  }
+
+  if (!Number.isFinite(retries) || retries < 0 || retries > 5) {
+    throw new Error('aws_retry_max debe estar entre 0 y 5');
+  }
+
+  if (config.aws_enabled === '1') {
+    if (!config.aws_region) {
+      throw new Error('aws_region es obligatoria cuando AWS esta habilitado');
+    }
+    if (!config.aws_api_base_url) {
+      throw new Error('aws_api_base_url es obligatoria cuando AWS esta habilitado');
+    }
+  }
+
+  return {
+    ...config,
+    aws_timeout_ms: String(Math.floor(timeout)),
+    aws_retry_max: String(Math.floor(retries)),
+  };
+}
+
+function getAwsRecoveryConfig(): AwsRecoveryConfig {
+  const fromFile = readAwsBootstrapFile();
+  const merged: Partial<AwsRecoveryConfig> = { ...DEFAULT_AWS_RECOVERY_CONFIG, ...fromFile };
+
+  try {
+    merged.aws_enabled = settingsRepo.getSetting('aws_enabled') ?? merged.aws_enabled;
+    merged.aws_env = settingsRepo.getSetting('aws_env') ?? merged.aws_env;
+    merged.aws_region = settingsRepo.getSetting('aws_region') ?? merged.aws_region;
+    merged.aws_api_base_url = settingsRepo.getSetting('aws_api_base_url') ?? merged.aws_api_base_url;
+    merged.aws_timeout_ms = settingsRepo.getSetting('aws_timeout_ms') ?? merged.aws_timeout_ms;
+    merged.aws_retry_max = settingsRepo.getSetting('aws_retry_max') ?? merged.aws_retry_max;
+  } catch (error) {
+    console.error('Falling back to aws bootstrap file due to settings DB access error:', error);
+  }
+
+  return toAwsRecoveryConfig(merged);
+}
+
+function saveAwsRecoveryConfig(input: Partial<AwsRecoveryConfig>): AwsRecoveryConfig {
+  const normalized = validateAwsRecoveryConfig(toAwsRecoveryConfig(input));
+
+  try {
+    settingsRepo.setSetting('aws_enabled', normalized.aws_enabled);
+    settingsRepo.setSetting('aws_env', normalized.aws_env);
+    settingsRepo.setSetting('aws_region', normalized.aws_region);
+    settingsRepo.setSetting('aws_api_base_url', normalized.aws_api_base_url);
+    settingsRepo.setSetting('aws_timeout_ms', normalized.aws_timeout_ms);
+    settingsRepo.setSetting('aws_retry_max', normalized.aws_retry_max);
+  } catch (error) {
+    console.error('Failed to persist aws recovery config to settings table, using bootstrap file only:', error);
+  }
+
+  writeAwsBootstrapFile(normalized);
+  return normalized;
 }
 
 function setCloudApiKeySecret(value: string): void {
@@ -75,7 +201,7 @@ function getCloudApiKeySecret(): string {
 }
 
 function isCloudEnabled(): boolean {
-  return settingsRepo.getSetting('aws_enabled') === '1';
+  return getAwsRecoveryConfig().aws_enabled === '1';
 }
 
 function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
@@ -98,10 +224,11 @@ function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
 }
 
 function getCloudApiConfig() {
-  const baseUrl = (settingsRepo.getSetting('aws_api_base_url') || '').trim();
-  const awsEnv = (settingsRepo.getSetting('aws_env') || 'prod').trim();
-  const timeoutMs = Number(settingsRepo.getSetting('aws_timeout_ms') || '5000');
-  const retryMax = Number(settingsRepo.getSetting('aws_retry_max') || '2');
+  const awsConfig = getAwsRecoveryConfig();
+  const baseUrl = awsConfig.aws_api_base_url.trim();
+  const awsEnv = awsConfig.aws_env.trim();
+  const timeoutMs = Number(awsConfig.aws_timeout_ms || '5000');
+  const retryMax = Number(awsConfig.aws_retry_max || '2');
   const apiKey = getCloudApiKeySecret();
 
   if (!baseUrl) {
@@ -1071,6 +1198,13 @@ function registerIpcHandlers(): void {
     return true;
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY, () => hasCloudApiKeySecret());
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY, () => getAwsRecoveryConfig());
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, (_, config: Partial<AwsRecoveryConfig>) => {
+    if (!config || typeof config !== 'object') {
+      throw new Error('Configuracion AWS invalida');
+    }
+    return saveAwsRecoveryConfig(config);
+  });
 
   // Database backup
   ipcMain.handle(IPC_CHANNELS.SETTINGS_BACKUP_DB, () => {
