@@ -43,3 +43,8 @@ release
 *.keystore
 *.env
 .env.*
+
+#Ciertos bash
+.bash_history
+apigw-enforce-method-security.sh
+*.sh

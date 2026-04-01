@@ -1,0 +1,265 @@
+{
+	"swagger": "2.0",
+	"info": {
+		"version": "1.0.0",
+		"title": "MichiPapeleria POS API",
+		"description": "API v1 para POS en AWS API Gateway + Lambda (single handler)."
+	},
+	"schemes": ["https"],
+	"consumes": ["application/json"],
+	"produces": ["application/json"],
+	"securityDefinitions": {
+		"ApiKeyAuth": {
+			"type": "apiKey",
+			"name": "x-api-key",
+			"in": "header"
+		}
+	},
+	"x-amazon-apigateway-api-key-source": "HEADER",
+	"paths": {
+		"/v1/health": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/cash-register/current": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/open": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/OpenCashRegisterRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/close": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CloseCashRegisterRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/periods": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/movements": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddCashMovementRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/{id}/movements": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/{id}/sales": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/{id}/credit-payments": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/{id}/sales-summary": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/categories": {
+			"get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateCategoryRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/categories/{id}": {
+			"put": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateCategoryRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+
+		"/v1/products": {
+			"get": {
+				"parameters": [
+					{ "name": "search", "in": "query", "type": "string" },
+					{ "name": "category_id", "in": "query", "type": "integer" },
+					{ "name": "low_stock", "in": "query", "type": "boolean" }
+				],
+				"responses": { "200": { "description": "OK" } },
+				"x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" }
+			},
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateProductRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/products/low-stock": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/products/barcode/{barcode}": { "get": { "parameters": [{ "name": "barcode", "in": "path", "required": true, "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/products/{id}": {
+			"get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"put": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateProductRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/products/{id}/can-delete-permanently": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/products/{id}/permanent": { "delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/sales": {
+			"get": { "parameters": [{ "name": "type", "in": "query", "type": "string" }, { "name": "date_from", "in": "query", "type": "string" }, { "name": "date_to", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateSaleRequest" } }], "responses": { "201": { "description": "Created" }, "200": { "description": "Idempotent replay" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/sales/summary": { "get": { "parameters": [{ "name": "search", "in": "query", "type": "string" }, { "name": "type", "in": "query", "type": "string" }, { "name": "date_from", "in": "query", "type": "string" }, { "name": "date_to", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/sales/{id}": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/sales/{id}/detail": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/credits": { "get": { "parameters": [{ "name": "status", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/credits/summary": { "get": { "parameters": [{ "name": "search", "in": "query", "type": "string" }, { "name": "status", "in": "query", "type": "string" }, { "name": "date_from", "in": "query", "type": "string" }, { "name": "date_to", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/credits/recalculate-overdue": { "post": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/credits/{id}": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/credits/{id}/payments": {
+			"get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddCreditPaymentRequest" } }], "responses": { "201": { "description": "Created" }, "200": { "description": "Idempotent replay" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/customers": {
+			"get": { "parameters": [{ "name": "search", "in": "query", "type": "string" }, { "name": "status", "in": "query", "type": "string" }, { "name": "credit_status", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateCustomerRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/customers/{id}": {
+			"get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"put": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateCustomerRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/customers/{id}/credits": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/inventory/movements": {
+			"get": { "parameters": [{ "name": "type", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddInventoryMovementRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/products/{id}/inventory-movements": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+
+		"/v1/reports/sales-by-date": { "get": { "parameters": [{ "name": "start_date", "in": "query", "required": true, "type": "string" }, { "name": "end_date", "in": "query", "required": true, "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/reports/top-products": { "get": { "parameters": [{ "name": "start_date", "in": "query", "required": true, "type": "string" }, { "name": "end_date", "in": "query", "required": true, "type": "string" }, { "name": "limit", "in": "query", "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/reports/profit": { "get": { "parameters": [{ "name": "start_date", "in": "query", "required": true, "type": "string" }, { "name": "end_date", "in": "query", "required": true, "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/reports/inventory": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/reports/inventory-summary": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/reports/credits-overview": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/settings/sections/{section}": {
+			"get": {
+				"parameters": [{ "name": "section", "in": "path", "required": true, "type": "string", "enum": ["store", "products", "credits"] }],
+				"responses": { "200": { "description": "OK" } },
+				"x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" }
+			},
+			"put": {
+				"parameters": [
+					{ "name": "section", "in": "path", "required": true, "type": "string", "enum": ["store", "products", "credits"] },
+					{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateSettingsSectionRequest" } }
+				],
+				"responses": { "200": { "description": "OK" } },
+				"x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" }
+			}
+		}
+	},
+	"definitions": {
+		"OpenCashRegisterRequest": {
+			"type": "object",
+			"required": ["period_name", "start_date", "opening_cash"],
+			"properties": {
+				"period_name": { "type": "string" },
+				"start_date": { "type": "string" },
+				"opening_cash": { "type": "number" }
+			}
+		},
+		"CloseCashRegisterRequest": {
+			"type": "object",
+			"required": ["id", "closing_cash", "end_date"],
+			"properties": {
+				"id": { "type": "integer" },
+				"closing_cash": { "type": "number" },
+				"end_date": { "type": "string" }
+			}
+		},
+		"AddCashMovementRequest": {
+			"type": "object",
+			"required": ["cash_register_id", "type", "amount"],
+			"properties": {
+				"cash_register_id": { "type": "integer" },
+				"type": { "type": "string", "enum": ["expense", "withdrawal", "deposit"] },
+				"amount": { "type": "number" },
+				"description": { "type": "string" },
+				"idempotency_key": { "type": "string" }
+			}
+		},
+		"CreateCategoryRequest": {
+			"type": "object",
+			"required": ["name"],
+			"properties": {
+				"name": { "type": "string" },
+				"parent_id": { "type": "integer" }
+			}
+		},
+		"UpdateCategoryRequest": {
+			"type": "object",
+			"properties": {
+				"name": { "type": "string" },
+				"parent_id": { "type": "integer" }
+			}
+		},
+		"CreateCustomerRequest": {
+			"type": "object",
+			"required": ["name"],
+			"properties": {
+				"name": { "type": "string" },
+				"phone": { "type": "string" },
+				"email": { "type": "string" },
+				"notes": { "type": "string" }
+			}
+		},
+		"UpdateCustomerRequest": {
+			"type": "object",
+			"properties": {
+				"name": { "type": "string" },
+				"phone": { "type": "string" },
+				"email": { "type": "string" },
+				"notes": { "type": "string" },
+				"is_active": { "type": "integer" }
+			}
+		},
+		"CreateProductRequest": {
+			"type": "object",
+			"required": ["barcode", "name", "cost_price", "margin_percent"],
+			"properties": {
+				"barcode": { "type": "string" },
+				"name": { "type": "string" },
+				"description": { "type": "string" },
+				"category_id": { "type": "integer" },
+				"cost_price": { "type": "number" },
+				"margin_percent": { "type": "number" },
+				"stock": { "type": "integer" },
+				"min_stock": { "type": "integer" }
+			}
+		},
+		"UpdateProductRequest": {
+			"type": "object",
+			"properties": {
+				"name": { "type": "string" },
+				"description": { "type": "string" },
+				"category_id": { "type": "integer" },
+				"cost_price": { "type": "number" },
+				"margin_percent": { "type": "number" },
+				"min_stock": { "type": "integer" },
+				"is_active": { "type": "integer" }
+			}
+		},
+		"CreateSaleRequest": {
+			"type": "object",
+			"required": ["sale_type", "items"],
+			"properties": {
+				"sale_type": { "type": "string", "enum": ["cash", "credit"] },
+				"customer_id": { "type": "integer" },
+				"items": { "type": "array", "items": { "$ref": "#/definitions/SaleItemRequest" } },
+				"credit_days": { "type": "integer" },
+				"surcharge_percent": { "type": "number" },
+				"initial_payment": { "type": "number" },
+				"cash_received": { "type": "number" },
+				"cash_change": { "type": "number" },
+				"idempotency_key": { "type": "string" }
+			}
+		},
+		"SaleItemRequest": {
+			"type": "object",
+			"required": ["product_id", "quantity", "unit_price"],
+			"properties": {
+				"product_id": { "type": "integer" },
+				"quantity": { "type": "number" },
+				"unit_price": { "type": "number" }
+			}
+		},
+		"AddCreditPaymentRequest": {
+			"type": "object",
+			"required": ["amount"],
+			"properties": {
+				"amount": { "type": "number" },
+				"idempotency_key": { "type": "string" }
+			}
+		},
+		"AddInventoryMovementRequest": {
+			"type": "object",
+			"required": ["product_id", "type", "quantity"],
+			"properties": {
+				"product_id": { "type": "integer" },
+				"type": { "type": "string", "enum": ["in", "out", "adjustment"] },
+				"quantity": { "type": "number" },
+				"reference_id": { "type": "integer" },
+				"notes": { "type": "string" },
+				"cost_price": { "type": "number" },
+				"margin_percent": { "type": "number" }
+			}
+		},
+		"UpdateSettingsSectionRequest": {
+			"type": "object",
+			"required": ["values"],
+			"properties": {
+				"values": {
+					"type": "object",
+					"additionalProperties": { "type": "string" }
+				}
+			}
+		}
+	}
+}
