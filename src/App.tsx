@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
 
 const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings', 'help'];
+const PAGE_TRANSITION_MS = 280;
 
 function isPageId(value: string): value is PageId {
   return PAGE_IDS.includes(value as PageId);
@@ -23,18 +24,25 @@ function isPageId(value: string): value is PageId {
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
+  const [isNavigating, setIsNavigating] = useState(false);
   const [storeName, setStoreName] = useState('store-internal');
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [initialCreditId, setInitialCreditId] = useState<number | null>(null);
 
+  function navigateToPage(page: PageId) {
+    if (page === currentPage) return;
+    setIsNavigating(true);
+    setCurrentPage(page);
+  }
+
   function openCustomerProfileFromSales(customerId: number) {
     setInitialCustomerId(customerId);
-    setCurrentPage('customers');
+    navigateToPage('customers');
   }
 
   function openCreditDetailFromCustomers(creditId: number) {
     setInitialCreditId(creditId);
-    setCurrentPage('credits');
+    navigateToPage('credits');
   }
 
   useEffect(() => {
@@ -85,6 +93,16 @@ export function App() {
 
     void refreshStoreName();
   }, [currentPage, dbStatus]);
+
+  useEffect(() => {
+    if (!isNavigating) return;
+
+    const timer = window.setTimeout(() => {
+      setIsNavigating(false);
+    }, PAGE_TRANSITION_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [currentPage, isNavigating]);
 
   if (dbStatus === 'loading') {
     return (
@@ -155,7 +173,7 @@ export function App() {
   }
 
   return (
-    <MainLayout currentPage={currentPage} onNavigate={setCurrentPage} storeName={storeName}>
+    <MainLayout currentPage={currentPage} onNavigate={navigateToPage} storeName={storeName} isNavigating={isNavigating}>
       {renderPage()}
     </MainLayout>
   );
