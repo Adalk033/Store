@@ -46,6 +46,22 @@ export function ProductsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [loading, setLoading] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestFiltersRef = useRef<{
+    category: number | '';
+    status: 'all' | 'active' | 'inactive';
+    lowStock: boolean;
+  }>({
+    category: '',
+    status: 'active',
+    lowStock: false,
+  });
+  const loadPageRef = useRef<((
+    page: number,
+    search: string,
+    category: number | '',
+    status: string,
+    lowStock: boolean,
+  ) => Promise<void>) | null>(null);
 
   // Fetch paginated data from server
   const loadPage = useCallback(async (page: number, search: string, category: number | '', status: string, lowStock: boolean) => {
@@ -82,6 +98,18 @@ export function ProductsPage() {
     loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
   }, [loadPage, currentPage, searchQuery, filterCategory, filterStatus, filterLowStock]);
 
+  useEffect(() => {
+    latestFiltersRef.current = {
+      category: filterCategory,
+      status: filterStatus,
+      lowStock: filterLowStock,
+    };
+  }, [filterCategory, filterStatus, filterLowStock]);
+
+  useEffect(() => {
+    loadPageRef.current = loadPage;
+  }, [loadPage]);
+
   // Load data when filters or page change
   useEffect(() => {
     loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
@@ -91,8 +119,10 @@ export function ProductsPage() {
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
+      const { category, status, lowStock } = latestFiltersRef.current;
+      if (!loadPageRef.current) return;
       setCurrentPage(1);
-      loadPage(1, searchQuery, filterCategory, filterStatus, filterLowStock);
+      loadPageRef.current(1, searchQuery, category, status, lowStock);
     }, 300);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
