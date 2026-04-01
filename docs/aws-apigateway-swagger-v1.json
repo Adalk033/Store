@@ -76,6 +76,15 @@
 			"get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
 			"post": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddCreditPaymentRequest" } }], "responses": { "201": { "description": "Created" }, "200": { "description": "Idempotent replay" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
 		},
+		"/v1/customers": {
+			"get": { "parameters": [{ "name": "search", "in": "query", "type": "string" }, { "name": "status", "in": "query", "type": "string" }, { "name": "credit_status", "in": "query", "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateCustomerRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
+		"/v1/customers/{id}": {
+			"get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"put": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateCustomerRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
 		"/v1/customers/{id}/credits": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 
 		"/v1/inventory/movements": {
@@ -134,6 +143,26 @@
 			"properties": {
 				"name": { "type": "string" },
 				"parent_id": { "type": "integer" }
+			}
+		},
+		"CreateCustomerRequest": {
+			"type": "object",
+			"required": ["name"],
+			"properties": {
+				"name": { "type": "string" },
+				"phone": { "type": "string" },
+				"email": { "type": "string" },
+				"notes": { "type": "string" }
+			}
+		},
+		"UpdateCustomerRequest": {
+			"type": "object",
+			"properties": {
+				"name": { "type": "string" },
+				"phone": { "type": "string" },
+				"email": { "type": "string" },
+				"notes": { "type": "string" },
+				"is_active": { "type": "integer" }
 			}
 		},
 		"CreateProductRequest": {

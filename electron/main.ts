@@ -280,11 +280,36 @@ function registerIpcHandlers(): void {
   );
 
   // Customers
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_ALL, () => customersRepo.getAllCustomers());
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_BY_ID, (_, id: number) => customersRepo.getCustomerById(id));
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_CREATE, (_, data) => customersRepo.createCustomer(data));
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, id: number, data) => customersRepo.updateCustomer(id, data));
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_DELETE, (_, id: number) => customersRepo.deleteCustomer(id));
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_ALL, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCustomers({ status: 'active' });
+    }
+    return customersRepo.getAllCustomers();
+  });
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_BY_ID, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCustomerById(id);
+    }
+    return customersRepo.getCustomerById(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_CREATE, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.createCustomer(data);
+    }
+    return customersRepo.createCustomer(data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, id: number, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.updateCustomer(id, data);
+    }
+    return customersRepo.updateCustomer(id, data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_DELETE, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.deleteCustomer(id);
+    }
+    return customersRepo.deleteCustomer(id);
+  });
 
   // Customers - Paginated endpoint (Phase 3)
   ipcMain.handle(
@@ -295,6 +320,18 @@ function registerIpcHandlers(): void {
       const creditStatus = typeof q.creditStatus === 'string' && allowedCreditStatuses.includes(q.creditStatus as (typeof allowedCreditStatuses)[number])
         ? q.creditStatus as (typeof allowedCreditStatuses)[number]
         : undefined;
+
+      if (isCloudEnabled()) {
+        return cloudApi.getCustomersPaginated({
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          status: typeof q.status === 'string' ? q.status : undefined,
+          creditStatus,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return customersRepo.getAllCustomersPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,

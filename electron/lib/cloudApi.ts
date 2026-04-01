@@ -3,6 +3,9 @@ import type {
   CashMovement,
   CashRegisterPeriod,
   Category,
+  Customer,
+  CustomerListItem,
+  CustomersPaginatedQuery,
   Credit,
   CreditListItem,
   CreditPayment,
@@ -161,6 +164,56 @@ export class CloudApi {
 
   deleteCategory(id: number): Promise<boolean> {
     return this.request<{ deleted: boolean }>('DELETE', `/v1/categories/${id}`).then((r) => r.deleted);
+  }
+
+  // Customers
+  getCustomers(query?: { search?: string; status?: string; credit_status?: string }): Promise<CustomerListItem[]> {
+    return this.request<CustomerListItem[]>('GET', '/v1/customers', undefined, query);
+  }
+
+  getCustomerById(id: number): Promise<Customer | undefined> {
+    return this.request<Customer>('GET', `/v1/customers/${id}`);
+  }
+
+  createCustomer(data: {
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    notes?: string | null;
+  }): Promise<Customer> {
+    return this.request<Customer>('POST', '/v1/customers', data);
+  }
+
+  updateCustomer(id: number, data: {
+    name?: string;
+    phone?: string | null;
+    email?: string | null;
+    notes?: string | null;
+    is_active?: number;
+  }): Promise<Customer | undefined> {
+    return this.request<Customer>('PUT', `/v1/customers/${id}`, data);
+  }
+
+  deleteCustomer(id: number): Promise<boolean> {
+    return this.request<{ deleted: boolean }>('DELETE', `/v1/customers/${id}`).then((r) => r.deleted);
+  }
+
+  async getCustomersPaginated(query: CustomersPaginatedQuery): Promise<PaginatedResponse<CustomerListItem>> {
+    const all = await this.getCustomers({
+      search: query.search,
+      status: query.status,
+      credit_status: query.creditStatus,
+    });
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(all, query.page, query.pageSize);
+    return {
+      items: slice,
+      page,
+      pageSize,
+      total,
+      hasMore,
+      sort: query.sort ?? { field: 'name', direction: 'ASC' },
+    };
   }
 
   // Products

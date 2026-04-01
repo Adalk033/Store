@@ -340,6 +340,122 @@ const handler = async (event) => {
       );
       return ok(200, r.rows[0], requestId);
     }
+    if (method === "GET" && path === "/v1/customers") {
+      const q = event.queryStringParameters || {};
+      const search = (q.search || "").trim().toLowerCase();
+      const status = q.status;
+      const creditStatus = q.credit_status;
+      const where = [];
+      const params = [];
+      let idx = 1;
+      if (status === "active") {
+        where.push(`c.is_active = $${idx++}`);
+        params.push(1);
+      } else if (status === "inactive") {
+        where.push(`c.is_active = $${idx++}`);
+        params.push(0);
+      } else {
+        where.push("c.is_active = 1");
+      }
+      if (search) {
+        where.push(`(LOWER(c.name) LIKE $${idx} OR LOWER(COALESCE(c.phone, '')) LIKE $${idx + 1} OR LOWER(COALESCE(c.email, '')) LIKE $${idx + 2})`);
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        idx += 3;
+      }
+      if (creditStatus === "withDebt") {
+        where.push("COALESCE(cs.total_debt, 0) > 0");
+      } else if (creditStatus === "overdue") {
+        where.push("COALESCE(cs.overdue_credits, 0) > 0");
+      } else if (creditStatus === "withoutCredits") {
+        where.push("COALESCE(cs.total_credits, 0) = 0");
+      }
+      const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+      const r = await pool.query(
+        `SELECT
+          c.*,
+          COALESCE(cs.total_credits, 0) AS total_credits,
+          COALESCE(cs.active_credits, 0) AS active_credits,
+          COALESCE(cs.overdue_credits, 0) AS overdue_credits,
+          COALESCE(cs.total_debt, 0) AS total_debt,
+          COALESCE(cs.total_paid, 0) AS total_paid,
+          cs.last_credit_date
+         FROM customers c
+         LEFT JOIN (
+           SELECT
+             customer_id,
+             COUNT(*) AS total_credits,
+             SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END) AS active_credits,
+             SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) AS overdue_credits,
+             SUM(CASE WHEN status != 'paid' THEN total_due - amount_paid ELSE 0 END) AS total_debt,
+             SUM(amount_paid) AS total_paid,
+             MAX(created_at) AS last_credit_date
+           FROM credits
+           GROUP BY customer_id
+         ) cs ON cs.customer_id = c.id
+         ${whereSql}
+         ORDER BY c.name ASC, c.id DESC`,
+        params
+      );
+      return ok(200, r.rows, requestId);
+    }
+    if (method === "GET" && /^\/v1\/customers\/\d+$/.test(path)) {
+      const id = getPathId(path, /^\/v1\/customers\/(\d+)$/, "id");
+      const r = await pool.query("SELECT * FROM customers WHERE id = $1 LIMIT 1", [id]);
+      return ok(200, r.rows[0] || null, requestId);
+    }
+    if (method === "POST" && path === "/v1/customers") {
+      const body = parseBody(event);
+      const name = requireString(body.name, "name", 150);
+      const r = await pool.query(
+        "INSERT INTO customers (name, phone, email, notes) VALUES ($1, $2, $3, $4) RETURNING *",
+        [name, body.phone ?? null, body.email ?? null, body.notes ?? null]
+      );
+      return ok(201, r.rows[0], requestId);
+    }
+    if (method === "PUT" && /^\/v1\/customers\/\d+$/.test(path)) {
+      const id = getPathId(path, /^\/v1\/customers\/(\d+)$/, "id");
+      const body = parseBody(event);
+      const setParts = [];
+      const values = [];
+      let idx = 1;
+      if (body.name !== void 0) {
+        setParts.push(`name = $${idx++}`);
+        values.push(requireString(body.name, "name", 150));
+      }
+      if (body.phone !== void 0) {
+        setParts.push(`phone = $${idx++}`);
+        values.push(body.phone ?? null);
+      }
+      if (body.email !== void 0) {
+        setParts.push(`email = $${idx++}`);
+        values.push(body.email ?? null);
+      }
+      if (body.notes !== void 0) {
+        setParts.push(`notes = $${idx++}`);
+        values.push(body.notes ?? null);
+      }
+      if (body.is_active !== void 0) {
+        setParts.push(`is_active = $${idx++}`);
+        values.push(Number(body.is_active) ? 1 : 0);
+      }
+      if (setParts.length === 0) {
+        throw new HttpError(400, "bad_request", "No fields to update");
+      }
+      values.push(id);
+      const r = await pool.query(
+        `UPDATE customers SET ${setParts.join(", ")} WHERE id = $${idx} RETURNING *`,
+        values
+      );
+      if (r.rowCount === 0) {
+        throw new HttpError(404, "not_found", "Customer not found");
+      }
+      return ok(200, r.rows[0], requestId);
+    }
+    if (method === "DELETE" && /^\/v1\/customers\/\d+$/.test(path)) {
+      const id = getPathId(path, /^\/v1\/customers\/(\d+)$/, "id");
+      const r = await pool.query("UPDATE customers SET is_active = 0 WHERE id = $1", [id]);
+      return ok(200, { deleted: r.rowCount > 0 }, requestId);
+    }
     if (method === "GET" && path === "/v1/categories") {
       const r = await pool.query("SELECT * FROM categories ORDER BY name ASC");
       return ok(200, r.rows, requestId);
