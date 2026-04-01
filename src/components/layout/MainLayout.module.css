@@ -12,6 +12,12 @@
   background-color: var(--color-bg);
 }
 
+.layout__status-area {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--spacing-md);
+}
+
 .layout__loader-overlay {
   position: absolute;
   inset: 0;
