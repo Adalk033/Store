@@ -39,7 +39,9 @@ type ApiEnvelope<T> = {
 };
 
 function toUrl(baseUrl: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
-  const url = new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const normalizedPath = path.replace(/^\/+/, '');
+  const url = new URL(normalizedPath, normalizedBase);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && `${value}`.trim() !== '') {
@@ -50,20 +52,28 @@ function toUrl(baseUrl: string, path: string, params?: Record<string, string | n
   return url.toString();
 }
 
-function normalizeErrorMessage(responseStatus: number, envelope?: ApiEnvelope<unknown>): string {
+function normalizeErrorMessage(
+  responseStatus: number,
+  url: string,
+  envelope?: ApiEnvelope<unknown>,
+  rawText?: string
+): string {
   if (envelope?.error?.message) {
     return envelope.error.message;
   }
+  if (responseStatus === 403 && rawText?.toLowerCase().includes('missing authentication token')) {
+    return `Ruta no encontrada en API cloud (${url}). Verifica que aws_api_base_url incluya el stage, por ejemplo /prod`;
+  }
   if (responseStatus === 401 || responseStatus === 403) {
-    return 'No autorizado para consumir API cloud';
+    return `No autorizado para consumir API cloud (${responseStatus}) en ${url}`;
   }
   if (responseStatus === 404) {
-    return 'Recurso no encontrado en API cloud';
+    return `Recurso no encontrado en API cloud (${url})`;
   }
   if (responseStatus >= 500) {
-    return 'Error interno en API cloud';
+    return `Error interno en API cloud (${responseStatus})`; 
   }
-  return `Error HTTP ${responseStatus} en API cloud`;
+  return `Error HTTP ${responseStatus} en API cloud (${url})`;
 }
 
 function paginateArray<T>(items: T[], page: number, pageSize: number): { slice: T[]; page: number; pageSize: number; total: number; hasMore: boolean } {
@@ -118,7 +128,7 @@ export class CloudApi {
         const envelope = text ? (JSON.parse(text) as ApiEnvelope<T>) : undefined;
 
         if (!response.ok || !envelope?.ok) {
-          throw new Error(normalizeErrorMessage(response.status, envelope));
+          throw new Error(normalizeErrorMessage(response.status, url, envelope, text));
         }
 
         return envelope.data as T;

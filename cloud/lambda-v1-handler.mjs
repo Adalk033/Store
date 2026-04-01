@@ -24,7 +24,35 @@ class HttpError extends Error {
   }
 }
 function getRequestId(event) {
-  return event.headers["x-request-id"] || event.requestContext.requestId || crypto.randomUUID();
+  const requestContext = event.requestContext;
+  return getHeader(event, "x-request-id") || requestContext?.requestId || crypto.randomUUID();
+}
+function getHeader(event, name) {
+  const headers = event.headers || {};
+  const direct = headers[name];
+  if (direct) return direct;
+  const lower = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lower) {
+      return value;
+    }
+  }
+  return void 0;
+}
+function getHttpMethod(event) {
+  const requestContext = event.requestContext;
+  const method = requestContext?.http?.method || requestContext?.httpMethod;
+  if (!method) {
+    throw new HttpError(400, "bad_request", "HTTP method is missing in requestContext");
+  }
+  return method.toUpperCase();
+}
+function getRequestPath(event) {
+  const path = event.rawPath || event.path;
+  if (!path) {
+    throw new HttpError(400, "bad_request", "Request path is missing");
+  }
+  return normalizePath(path);
 }
 function json(statusCode, body) {
   return {
@@ -93,7 +121,7 @@ function enforceApiKey(event) {
   if (!requireKey) return;
   const expected = process.env.EXPECTED_API_KEY;
   if (!expected) return;
-  const incoming = event.headers["x-api-key"];
+  const incoming = getHeader(event, "x-api-key");
   if (!incoming || incoming !== expected) {
     throw new HttpError(403, "forbidden", "Invalid API key");
   }
@@ -121,9 +149,9 @@ async function getOpenCashRegisterId(client) {
 }
 const handler = async (event) => {
   const requestId = getRequestId(event);
-  const method = event.requestContext.http.method.toUpperCase();
-  const path = normalizePath(event.rawPath);
   try {
+    const method = getHttpMethod(event);
+    const path = getRequestPath(event);
     enforceApiKey(event);
     if (method === "GET" && path === "/v1/health") {
       const now = await pool.query("SELECT NOW() AS now");

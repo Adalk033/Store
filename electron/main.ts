@@ -78,8 +78,28 @@ function isCloudEnabled(): boolean {
   return settingsRepo.getSetting('aws_enabled') === '1';
 }
 
+function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
+  const parsed = new URL(rawBaseUrl);
+  const stage = awsEnv.trim().replace(/^\/+|\/+$/g, '');
+  let pathname = parsed.pathname.replace(/\/+$/, '');
+
+  // Prevent duplicated '/v1' when users paste a full endpoint URL.
+  if (pathname.toLowerCase().endsWith('/v1')) {
+    pathname = pathname.slice(0, -3);
+  }
+
+  // For API Gateway execute-api host, auto-inject stage when URL has no path.
+  if (parsed.hostname.includes('execute-api.') && stage && (!pathname || pathname === '/')) {
+    pathname = `/${stage}`;
+  }
+
+  parsed.pathname = pathname || '/';
+  return parsed.toString().replace(/\/+$/, '');
+}
+
 function getCloudApiConfig() {
   const baseUrl = (settingsRepo.getSetting('aws_api_base_url') || '').trim();
+  const awsEnv = (settingsRepo.getSetting('aws_env') || 'prod').trim();
   const timeoutMs = Number(settingsRepo.getSetting('aws_timeout_ms') || '5000');
   const retryMax = Number(settingsRepo.getSetting('aws_retry_max') || '2');
   const apiKey = getCloudApiKeySecret();
@@ -91,8 +111,10 @@ function getCloudApiConfig() {
     throw new Error('Falta configurar API key cloud en Configuracion');
   }
 
+  const normalizedBaseUrl = normalizeCloudBaseUrl(baseUrl, awsEnv);
+
   return {
-    baseUrl,
+    baseUrl: normalizedBaseUrl,
     apiKey,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 5000,
     retryMax: Number.isFinite(retryMax) && retryMax >= 0 ? retryMax : 2,

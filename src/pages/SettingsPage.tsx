@@ -73,6 +73,24 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  async function handleDeleteStoredApiKey() {
+    const confirmed = window.confirm('Se eliminara la API key cloud guardada en este equipo. Deseas continuar?');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await setCloudApiKey('');
+      const exists = await hasCloudApiKey();
+      setHasStoredCloudApiKey(exists);
+      setCloudApiKeyInput('');
+      setCloudApiKeyDirty(false);
+      showNotification('success', 'API key cloud eliminada correctamente');
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Error al eliminar API key cloud');
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -269,6 +287,17 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
               ? 'Actualmente existe una API key guardada de forma cifrada local.'
               : 'No hay API key guardada.'}
           </span>
+          {hasStoredCloudApiKey && (
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles['btn-danger']}
+                onClick={handleDeleteStoredApiKey}
+              >
+                Eliminar API key guardada
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
