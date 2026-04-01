@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Product } from '../types';
+import type { Product, PaginatedResponse } from '../types';
 
 function getCreateProductErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -152,6 +152,42 @@ export function useProducts() {
     p => p.min_stock >= 0 && p.stock <= p.min_stock && p.is_active === 1
   );
 
+  const fetchProductsPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    status?: string;
+    categoryId?: number;
+    lowStock?: boolean;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<Product>> => {
+    try {
+      const data = await window.electronAPI.products.getAllPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar productos paginados';
+      console.error('useProducts.fetchProductsPaginated:', err);
+      throw new Error(message);
+    }
+  }, []);
+
+  const searchProductsRemote = useCallback(async (query: string, limit = 20): Promise<Product[]> => {
+    try {
+      if (!query.trim()) return [];
+      const data = await window.electronAPI.products.getAllPaginated({
+        page: 1,
+        pageSize: limit,
+        search: query,
+        status: 'active',
+      });
+      return data.items;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al buscar productos';
+      console.error('useProducts.searchProductsRemote:', err);
+      throw new Error(message);
+    }
+  }, []);
+
   return {
     products,
     lowStockProducts,
@@ -159,6 +195,8 @@ export function useProducts() {
     error,
     fetchProducts,
     searchProducts,
+    fetchProductsPaginated,
+    searchProductsRemote,
     createProduct,
     updateProduct,
     deleteProduct,

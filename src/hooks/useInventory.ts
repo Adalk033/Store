@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { InventoryMovement } from '../types';
+import type { InventoryMovement, InventoryMovementListItem, PaginatedQuery, PaginatedResponse } from '../types';
 
 export function useInventory() {
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -36,6 +36,41 @@ export function useInventory() {
     }
   }, []);
 
+  const fetchMovementsPaginated = useCallback(async (
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<InventoryMovementListItem>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.inventory.getAllPaginated(query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar movimientos';
+      setError(message);
+      console.error('useInventory.fetchMovementsPaginated:', err);
+      return { items: [], page: 1, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchByProductPaginated = useCallback(async (
+    productId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<InventoryMovementListItem>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.inventory.getByProductPaginated(productId, query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar movimientos del producto';
+      setError(message);
+      console.error('useInventory.fetchByProductPaginated:', err);
+      return { items: [], page: 1, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const addMovement = useCallback(async (data: {
     product_id: number;
     type: 'in' | 'out' | 'adjustment';
@@ -62,6 +97,8 @@ export function useInventory() {
     error,
     fetchMovements,
     fetchByProduct,
+    fetchMovementsPaginated,
+    fetchByProductPaginated,
     addMovement,
   };
 }

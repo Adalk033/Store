@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Credit, CreditPayment } from '../types';
+import type { Credit, CreditPayment, CreditListItem, CreditsSummary, PaginatedQuery, PaginatedResponse } from '../types';
 
 export function useCredits() {
   const [credits, setCredits] = useState<Credit[]>([]);
@@ -76,6 +76,69 @@ export function useCredits() {
     }
   }, []);
 
+  // --- Paginated methods (Phase 3) ---
+
+  const fetchCreditsPaginated = useCallback(async (
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CreditListItem> | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.credits.getAllPaginated(query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar creditos';
+      setError(message);
+      console.error('useCredits.fetchCreditsPaginated:', err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchCreditsByCustomerPaginated = useCallback(async (
+    customerId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CreditListItem> | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.credits.getByCustomerPaginated(customerId, query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar creditos del cliente';
+      setError(message);
+      console.error('useCredits.fetchCreditsByCustomerPaginated:', err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchPaymentsPaginated = useCallback(async (
+    creditId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CreditPayment> | null> => {
+    try {
+      return await window.electronAPI.credits.getPaymentsPaginated(creditId, query);
+    } catch (err) {
+      console.error('useCredits.fetchPaymentsPaginated:', err);
+      return null;
+    }
+  }, []);
+
+  const fetchSummary = useCallback(async (query: {
+    search?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<CreditsSummary | null> => {
+    try {
+      return await window.electronAPI.credits.getSummary(query);
+    } catch (err) {
+      console.error('useCredits.fetchSummary:', err);
+      return null;
+    }
+  }, []);
+
   return {
     credits,
     loading,
@@ -86,5 +149,9 @@ export function useCredits() {
     addPayment,
     getPayments,
     checkOverdue,
+    fetchCreditsPaginated,
+    fetchCreditsByCustomerPaginated,
+    fetchPaymentsPaginated,
+    fetchSummary,
   };
 }

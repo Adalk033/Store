@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText } from 'lucide-react';
 import { useCustomers } from '../hooks/useCustomers';
 import { useCredits } from '../hooks/useCredits';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { Credit, CreditPayment, Customer } from '../types';
+import type { Credit, CreditPayment, CreditListItem, Customer, CustomerListItem, CustomersPaginatedQuery } from '../types';
 import styles from './CustomersPage.module.css';
 
 type ViewMode = 'list' | 'profile';
@@ -15,14 +15,7 @@ const STATUS_LABELS: Record<Credit['status'], string> = {
   paid: 'Pagado',
 };
 
-interface CustomerCreditSummary {
-  totalCredits: number;
-  activeCredits: number;
-  overdueCredits: number;
-  totalDebt: number;
-  totalPaid: number;
-  lastCreditDate: string | null;
-}
+const ROWS_PER_PAGE = 25;
 
 interface CustomersPageProps {
   initialCustomerId?: number | null;
@@ -32,17 +25,15 @@ interface CustomersPageProps {
 
 export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onViewCreditDetail }: CustomersPageProps) {
   const {
-    customers,
     loading: loadingCustomers,
     error: customersError,
     updateCustomer,
+    fetchCustomersPaginated,
   } = useCustomers();
   const {
-    credits,
     loading: loadingCredits,
     error: creditsError,
-    fetchCredits,
-    fetchCreditsByCustomer,
+    fetchCreditsByCustomerPaginated,
     getPayments,
   } = useCredits();
 
@@ -51,6 +42,16 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
   const [selectedCredit, setSelectedCredit] = useState<Credit | null>(null);
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>([]);
 
+  // Paginated list state
+  const [customerItems, setCustomerItems] = useState<CustomerListItem[]>([]);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Profile credits state
+  const [profileCredits, setProfileCredits] = useState<CreditListItem[]>([]);
+  const [profileCreditsTotal, setProfileCreditsTotal] = useState(0);
+  const [profileCreditsPage, setProfileCreditsPage] = useState(1);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState<CustomerFilter>('all');
   const [contactForm, setContactForm] = useState({ phone: '', email: '', notes: '' });
@@ -58,76 +59,70 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
   const [savingContact, setSavingContact] = useState(false);
   const [contactFeedback, setContactFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Debounced search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   useEffect(() => {
-    fetchCredits();
-  }, [fetchCredits]);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 400);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
 
-  const creditSummaryByCustomer = useMemo(() => {
-    const summaryMap = new Map<number, CustomerCreditSummary>();
+  // Load paginated customers
+  const loadCustomers = useCallback(async () => {
+    const query: CustomersPaginatedQuery = {
+      page: currentPage,
+      pageSize: ROWS_PER_PAGE,
+      search: debouncedSearch || undefined,
+      status: 'active',
+      creditStatus: customerFilter,
+    };
 
-    credits.forEach((credit) => {
-      const current = summaryMap.get(credit.customer_id) ?? {
-        totalCredits: 0,
-        activeCredits: 0,
-        overdueCredits: 0,
-        totalDebt: 0,
-        totalPaid: 0,
-        lastCreditDate: null,
-      };
+    const result = await fetchCustomersPaginated(query);
+    if (result) {
+      setCustomerItems(result.items);
+      setTotalCustomers(result.total);
+    }
+  }, [currentPage, debouncedSearch, customerFilter, fetchCustomersPaginated]);
 
-      current.totalCredits += 1;
-      if (credit.status !== 'paid') {
-        current.activeCredits += 1;
-      }
-      if (credit.status === 'overdue') {
-        current.overdueCredits += 1;
-      }
-      current.totalDebt += credit.total_due - credit.amount_paid;
-      current.totalPaid += credit.amount_paid;
+  useEffect(() => {
+    if (viewMode === 'list') {
+      void loadCustomers();
+    }
+  }, [loadCustomers, viewMode]);
 
-      if (!current.lastCreditDate || new Date(credit.created_at) > new Date(current.lastCreditDate)) {
-        current.lastCreditDate = credit.created_at;
-      }
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalCustomers / ROWS_PER_PAGE)),
+    [totalCustomers],
+  );
 
-      summaryMap.set(credit.customer_id, current);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  // Load credits for customer profile view
+  const loadProfileCredits = useCallback(async (customerId: number, page: number) => {
+    const result = await fetchCreditsByCustomerPaginated(customerId, {
+      page,
+      pageSize: ROWS_PER_PAGE,
     });
+    if (result) {
+      setProfileCredits(result.items);
+      setProfileCreditsTotal(result.total);
+    }
+  }, [fetchCreditsByCustomerPaginated]);
 
-    return summaryMap;
-  }, [credits]);
+  const profileTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(profileCreditsTotal / ROWS_PER_PAGE)),
+    [profileCreditsTotal],
+  );
 
-  const filteredCustomers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    return customers
-      .filter((customer) => {
-        if (!query) return true;
-
-        return customer.name.toLowerCase().includes(query)
-          || customer.phone?.toLowerCase().includes(query)
-          || customer.email?.toLowerCase().includes(query);
-      })
-      .filter((customer) => {
-        const summary = creditSummaryByCustomer.get(customer.id);
-
-        if (customerFilter === 'withDebt') {
-          return (summary?.totalDebt ?? 0) > 0;
-        }
-
-        if (customerFilter === 'overdue') {
-          return (summary?.overdueCredits ?? 0) > 0;
-        }
-
-        if (customerFilter === 'withoutCredits') {
-          return (summary?.totalCredits ?? 0) === 0;
-        }
-
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [customers, searchQuery, customerFilter, creditSummaryByCustomer]);
-
-  const openCustomerProfile = useCallback(async (customer: Customer) => {
-    setSelectedCustomer(customer);
+  const openCustomerProfile = useCallback(async (customer: Customer | CustomerListItem) => {
+    setSelectedCustomer(customer as Customer);
     setSelectedCredit(null);
     setCreditPayments([]);
     setContactForm({
@@ -137,16 +132,17 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     });
     setIsEditingContact(false);
     setContactFeedback(null);
+    setProfileCreditsPage(1);
     setViewMode('profile');
-    await fetchCreditsByCustomer(customer.id);
-  }, [fetchCreditsByCustomer]);
+    await loadProfileCredits(customer.id, 1);
+  }, [loadProfileCredits]);
 
   useEffect(() => {
     if (!initialCustomerId || loadingCustomers || viewMode !== 'list') {
       return;
     }
 
-    const targetCustomer = customers.find(customer => customer.id === initialCustomerId);
+    const targetCustomer = customerItems.find(customer => customer.id === initialCustomerId);
 
     if (!targetCustomer) {
       onInitialCustomerHandled?.();
@@ -157,7 +153,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
       onInitialCustomerHandled?.();
     });
   }, [
-    customers,
+    customerItems,
     initialCustomerId,
     loadingCustomers,
     onInitialCustomerHandled,
@@ -176,9 +172,12 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     setSelectedCustomer(null);
     setSelectedCredit(null);
     setCreditPayments([]);
+    setProfileCredits([]);
+    setProfileCreditsTotal(0);
+    setProfileCreditsPage(1);
     setIsEditingContact(false);
     setContactFeedback(null);
-    await fetchCredits();
+    await loadCustomers();
   }
 
   function startEditingContact() {
@@ -253,14 +252,18 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
   }
 
   if (viewMode === 'profile' && selectedCustomer) {
-    const customerCredits = credits;
-    const totalDebt = customerCredits
-      .filter(c => c.status !== 'paid')
-      .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
-    const totalPaid = customerCredits.reduce((sum, c) => sum + c.amount_paid, 0);
-    const activeCount = customerCredits.filter(c => c.status !== 'paid').length;
-    const overdueCount = customerCredits.filter(c => c.status === 'overdue').length;
-    const totalFinanced = customerCredits.reduce((sum, c) => sum + c.total_due, 0);
+    // Use stats from CustomerListItem if available, otherwise compute from loaded credits
+    const selectedAsListItem = customerItems.find(c => c.id === selectedCustomer.id);
+    const totalDebt = selectedAsListItem?.total_debt
+      ?? profileCredits.filter(c => c.status !== 'paid').reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
+    const totalPaid = selectedAsListItem?.total_paid
+      ?? profileCredits.reduce((sum, c) => sum + c.amount_paid, 0);
+    const activeCount = selectedAsListItem?.active_credits
+      ?? profileCredits.filter(c => c.status !== 'paid').length;
+    const overdueCount = selectedAsListItem?.overdue_credits
+      ?? profileCredits.filter(c => c.status === 'overdue').length;
+    const totalFinanced = profileCredits.reduce((sum, c) => sum + c.total_due, 0);
+    const totalCreditsCount = selectedAsListItem?.total_credits ?? profileCreditsTotal;
 
     return (
       <div className={styles.page}>
@@ -421,7 +424,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
             </div>
             <div className={styles['summary-card']}>
               <span className={styles['summary-card__label']}>Historial de creditos</span>
-              <span className={styles['summary-card__value']}>{customerCredits.length}</span>
+              <span className={styles['summary-card__value']}>{totalCreditsCount}</span>
             </div>
           </div>
         </section>
@@ -446,10 +449,10 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
             <tbody>
               {loadingCredits ? (
                 <tr><td colSpan={10} className={styles['table__empty']}>Cargando creditos...</td></tr>
-              ) : customerCredits.length === 0 ? (
+              ) : profileCredits.length === 0 ? (
                 <tr><td colSpan={10} className={styles['table__empty']}>Este cliente no tiene creditos</td></tr>
               ) : (
-                customerCredits.map(credit => {
+                profileCredits.map(credit => {
                   const remaining = credit.total_due - credit.amount_paid;
                   const percent = getProgressPercent(credit);
 
@@ -505,6 +508,41 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
               )}
             </tbody>
           </table>
+
+          {profileCreditsTotal > ROWS_PER_PAGE && (
+            <div className={styles.pagination}>
+              <span className={styles['pagination__meta']}>
+                {profileCreditsTotal} creditos en total
+              </span>
+              <div className={styles['pagination__actions']}>
+                <button
+                  className={styles['btn-secondary']}
+                  disabled={profileCreditsPage <= 1}
+                  onClick={() => {
+                    const newPage = profileCreditsPage - 1;
+                    setProfileCreditsPage(newPage);
+                    void loadProfileCredits(selectedCustomer.id, newPage);
+                  }}
+                >
+                  Anterior
+                </button>
+                <span className={styles['pagination__page']}>
+                  Pagina {profileCreditsPage} de {profileTotalPages}
+                </span>
+                <button
+                  className={styles['btn-secondary']}
+                  disabled={profileCreditsPage >= profileTotalPages}
+                  onClick={() => {
+                    const newPage = profileCreditsPage + 1;
+                    setProfileCreditsPage(newPage);
+                    void loadProfileCredits(selectedCustomer.id, newPage);
+                  }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {selectedCredit && (
@@ -571,7 +609,10 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
         <select
           className={styles['toolbar__filter']}
           value={customerFilter}
-          onChange={(event) => setCustomerFilter(event.target.value as CustomerFilter)}
+          onChange={(event) => {
+            setCustomerFilter(event.target.value as CustomerFilter);
+            setCurrentPage(1);
+          }}
         >
           <option value="all">Todos</option>
           <option value="withDebt">Con deuda activa</option>
@@ -594,25 +635,20 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
             </tr>
           </thead>
           <tbody>
-            {loadingCustomers || loadingCredits ? (
+            {loadingCustomers ? (
               <tr><td colSpan={7} className={styles['table__empty']}>Cargando clientes...</td></tr>
-            ) : filteredCustomers.length === 0 ? (
+            ) : customerItems.length === 0 ? (
               <tr><td colSpan={7} className={styles['table__empty']}>No hay clientes para mostrar</td></tr>
             ) : (
-              filteredCustomers.map((customer) => {
-                const summary = creditSummaryByCustomer.get(customer.id);
-                const debt = summary?.totalDebt ?? 0;
-                const active = summary?.activeCredits ?? 0;
-                const historyCount = summary?.totalCredits ?? 0;
-
+              customerItems.map((customer) => {
                 return (
                   <tr key={customer.id} className={styles['table__row--clickable']} onClick={() => openCustomerProfile(customer)}>
                     <td>
                       <div className={styles['customer-cell']}>
                         <span className={styles['customer-cell__name']}>{customer.name}</span>
-                        {summary && summary.overdueCredits > 0 && (
+                        {customer.overdue_credits > 0 && (
                           <span className={`${styles.badge} ${styles['badge--overdue']}`}>
-                            {summary.overdueCredits} vencido(s)
+                            {customer.overdue_credits} vencido(s)
                           </span>
                         )}
                       </div>
@@ -623,12 +659,12 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                         <span>{customer.email ?? 'Sin correo'}</span>
                       </div>
                     </td>
-                    <td>{historyCount}</td>
-                    <td>{active}</td>
-                    <td className={debt > 0 ? styles['text--error'] : styles['text--success']}>
-                      {formatCurrency(debt)}
+                    <td>{customer.total_credits}</td>
+                    <td>{customer.active_credits}</td>
+                    <td className={customer.total_debt > 0 ? styles['text--error'] : styles['text--success']}>
+                      {formatCurrency(customer.total_debt)}
                     </td>
-                    <td>{summary?.lastCreditDate ? formatDate(summary.lastCreditDate) : 'Sin creditos'}</td>
+                    <td>{customer.last_credit_date ? formatDate(customer.last_credit_date) : 'Sin creditos'}</td>
                     <td>
                       <button
                         className={styles['btn-secondary']}
@@ -646,6 +682,33 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
             )}
           </tbody>
         </table>
+
+        {totalCustomers > ROWS_PER_PAGE && (
+          <div className={styles.pagination}>
+            <span className={styles['pagination__meta']}>
+              {totalCustomers} clientes en total
+            </span>
+            <div className={styles['pagination__actions']}>
+              <button
+                className={styles['btn-secondary']}
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+              >
+                Anterior
+              </button>
+              <span className={styles['pagination__page']}>
+                Pagina {currentPage} de {totalPages}
+              </span>
+              <button
+                className={styles['btn-secondary']}
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

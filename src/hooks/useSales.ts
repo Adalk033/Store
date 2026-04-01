@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Sale, SaleDetail, SaleListItem } from '../types';
+import type { Sale, SaleDetail, SaleListItem, PaginatedQuery, PaginatedResponse } from '../types';
 
 export interface CartItem {
   product_id: number;
@@ -8,6 +8,13 @@ export interface CartItem {
   unit_price: number;
   quantity: number;
   stock: number;
+}
+
+export interface SalesSummary {
+  totalSales: number;
+  totalRevenue: number;
+  cashRevenue: number;
+  creditRevenue: number;
 }
 
 export function useSales() {
@@ -59,6 +66,23 @@ export function useSales() {
     }
   }, []);
 
+  const getAllSalesPaginated = useCallback(async (
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<SaleListItem>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.sales.getAllPaginated(query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar ventas';
+      setError(message);
+      console.error('useSales.getAllSalesPaginated:', err);
+      return { items: [], page: 1, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const getSaleDetailById = useCallback(async (id: number): Promise<SaleDetail | undefined> => {
     try {
       return await window.electronAPI.sales.getDetail(id);
@@ -74,6 +98,7 @@ export function useSales() {
     createSale,
     getSaleById,
     getAllSales,
+    getAllSalesPaginated,
     getSaleDetailById,
   };
 }

@@ -1,22 +1,24 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
 import { useSettings } from '../hooks/useSettings';
 import { formatCurrency } from '../lib/formatters';
 import { ProductForm } from '../components/products/ProductForm';
 import { CategoryManager } from '../components/categories/CategoryManager';
-import type { Product } from '../types';
+import type { Product, PaginatedResponse } from '../types';
 import styles from './ProductsPage.module.css';
 
 type ViewMode = 'list' | 'form' | 'categories';
 
+const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
+
 export function ProductsPage() {
   const {
-    products,
     lowStockProducts,
-    loading,
+    loading: productsLoading,
     error,
+    fetchProductsPaginated,
     createProduct,
     updateProduct,
     deleteProduct,
@@ -38,6 +40,126 @@ export function ProductsPage() {
   const [checkingPermanentDelete, setCheckingPermanentDelete] = useState(false);
   const [permanentDeleteCheckError, setPermanentDeleteCheckError] = useState<string | null>(null);
 
+  // Paginated state
+  const [paginatedData, setPaginatedData] = useState<PaginatedResponse<Product> | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [loading, setLoading] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestFiltersRef = useRef<{
+    category: number | '';
+    status: 'all' | 'active' | 'inactive';
+    lowStock: boolean;
+  }>({
+    category: '',
+    status: 'active',
+    lowStock: false,
+  });
+  const loadPageRef = useRef<((
+    page: number,
+    search: string,
+    category: number | '',
+    status: string,
+    lowStock: boolean,
+  ) => Promise<void>) | null>(null);
+
+  // Fetch paginated data from server
+  const loadPage = useCallback(async (page: number, search: string, category: number | '', status: string, lowStock: boolean) => {
+    try {
+      setLoading(true);
+      const query: {
+        page: number;
+        pageSize: number;
+        search?: string;
+        status?: string;
+        categoryId?: number;
+        lowStock?: boolean;
+      } = {
+        page,
+        pageSize: rowsPerPage,
+      };
+
+      if (search.trim()) query.search = search;
+      if (status !== 'all') query.status = status;
+      if (category !== '') query.categoryId = category;
+      if (lowStock) query.lowStock = true;
+
+      const result = await fetchProductsPaginated(query);
+      setPaginatedData(result);
+    } catch (err) {
+      console.error('ProductsPage.loadPage:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchProductsPaginated, rowsPerPage]);
+
+  // Reload current page
+  const reloadCurrentPage = useCallback(() => {
+    loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
+  }, [loadPage, currentPage, searchQuery, filterCategory, filterStatus, filterLowStock]);
+
+  useEffect(() => {
+    latestFiltersRef.current = {
+      category: filterCategory,
+      status: filterStatus,
+      lowStock: filterLowStock,
+    };
+  }, [filterCategory, filterStatus, filterLowStock]);
+
+  useEffect(() => {
+    loadPageRef.current = loadPage;
+  }, [loadPage]);
+
+  // Load data when filters or page change
+  useEffect(() => {
+    loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
+  }, [loadPage, currentPage, filterCategory, filterStatus, filterLowStock]);
+
+  // Debounced search: reset page and reload on search change
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      const { category, status, lowStock } = latestFiltersRef.current;
+      if (!loadPageRef.current) return;
+      setCurrentPage(1);
+      loadPageRef.current(1, searchQuery, category, status, lowStock);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
+  // Load persisted rows per page
+  useEffect(() => {
+    async function loadPersistedRows() {
+      try {
+        const persisted = await window.electronAPI.settings.get('products_rows_per_page');
+        const parsed = Number(persisted);
+        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
+          setRowsPerPage(parsed);
+        }
+      } catch (err) {
+        console.error('ProductsPage.loadPersistedRows:', err);
+      }
+    }
+    void loadPersistedRows();
+  }, []);
+
+  async function handleRowsPerPageChange(value: number) {
+    setRowsPerPage(value);
+    setCurrentPage(1);
+    try {
+      await window.electronAPI.settings.set('products_rows_per_page', String(value));
+    } catch (err) {
+      console.error('ProductsPage.handleRowsPerPageChange:', err);
+    }
+  }
+
+  const displayedProducts = paginatedData?.items ?? [];
+  const totalProducts = paginatedData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalProducts / rowsPerPage));
+  const isLoading = loading || productsLoading;
+
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
@@ -49,33 +171,6 @@ export function ProductsPage() {
     categories.forEach(c => map.set(c.id, c.name));
     return map;
   }, [categories]);
-
-  // Filtered products
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      // Status filter
-      if (filterStatus === 'active' && p.is_active !== 1) return false;
-      if (filterStatus === 'inactive' && p.is_active !== 0) return false;
-
-      // Category filter
-      if (filterCategory !== '' && p.category_id !== filterCategory) return false;
-
-      // Low stock filter
-      if (filterLowStock && p.min_stock >= 0 && p.stock > p.min_stock) return false;
-      if (filterLowStock && p.min_stock < 0) return false;
-
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          p.name.toLowerCase().includes(q) ||
-          p.barcode.toLowerCase().includes(q) ||
-          (p.description?.toLowerCase().includes(q) ?? false)
-        );
-      }
-      return true;
-    });
-  }, [products, searchQuery, filterCategory, filterStatus, filterLowStock]);
 
   function handleNewProduct() {
     setEditingProduct(null);
@@ -96,6 +191,7 @@ export function ProductsPage() {
     try {
       await deleteProduct(deleteCandidate.id);
       showNotification('success', `"${deleteCandidate.name}" fue desactivado`);
+      reloadCurrentPage();
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al eliminar');
     } finally {
@@ -108,6 +204,7 @@ export function ProductsPage() {
     try {
       await deleteProductPermanently(deleteCandidate.id);
       showNotification('success', `"${deleteCandidate.name}" fue eliminado permanentemente`);
+      reloadCurrentPage();
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al eliminar permanentemente');
     } finally {
@@ -169,6 +266,7 @@ export function ProductsPage() {
       }
       setViewMode('list');
       setEditingProduct(null);
+      reloadCurrentPage();
     } catch (err) {
       showNotification('error', err instanceof Error ? err.message : 'Error al guardar');
     }
@@ -294,7 +392,7 @@ export function ProductsPage() {
         <select
           className={styles['toolbar__filter']}
           value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value ? Number(e.target.value) : '')}
+          onChange={e => { setFilterCategory(e.target.value ? Number(e.target.value) : ''); setCurrentPage(1); }}
         >
           <option value="">Todas las categorias</option>
           {categories.map(c => (
@@ -304,7 +402,7 @@ export function ProductsPage() {
         <select
           className={styles['toolbar__filter']}
           value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+          onChange={e => { setFilterStatus(e.target.value as 'all' | 'active' | 'inactive'); setCurrentPage(1); }}
         >
           <option value="active">Activos</option>
           <option value="inactive">Inactivos</option>
@@ -313,10 +411,21 @@ export function ProductsPage() {
         <select
           className={styles['toolbar__filter']}
           value={filterLowStock ? 'low' : 'all'}
-          onChange={e => setFilterLowStock(e.target.value === 'low')}
+          onChange={e => { setFilterLowStock(e.target.value === 'low'); setCurrentPage(1); }}
         >
           <option value="all">Todos los productos</option>
           <option value="low">Solo stock bajo</option>
+        </select>
+        <select
+          className={styles['toolbar__filter']}
+          value={rowsPerPage}
+          onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
+        >
+          {ROWS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option} filas
+            </option>
+          ))}
         </select>
       </div>
 
@@ -336,18 +445,18 @@ export function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               <tr>
                 <td colSpan={8} className={styles['table__empty']}>Cargando productos...</td>
               </tr>
-            ) : filteredProducts.length === 0 ? (
+            ) : displayedProducts.length === 0 ? (
               <tr>
                 <td colSpan={8} className={styles['table__empty']}>
                   {searchQuery || filterCategory !== '' ? 'No se encontraron productos con esos filtros' : 'No hay productos registrados'}
                 </td>
               </tr>
             ) : (
-              filteredProducts.map(product => (
+              displayedProducts.map(product => (
                 <tr key={product.id} className={product.is_active === 0 ? styles['table__inactive'] : undefined}>
                   <td>
                     <div className={styles['table__name']}>{product.name}</div>
@@ -397,6 +506,35 @@ export function ProductsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      <section className={styles.pagination}>
+        <span className={styles['pagination__info']}>
+          Mostrando {displayedProducts.length} de {totalProducts} productos
+        </span>
+        <div className={styles['pagination__actions']}>
+          <button
+            className={styles['pagination__btn']}
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage <= 1}
+          >
+            <ChevronLeft size={16} strokeWidth={1.5} />
+            Anterior
+          </button>
+          <span className={styles['pagination__page']}>
+            Pagina {currentPage} de {totalPages}
+          </span>
+          <button
+            className={styles['pagination__btn']}
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            Siguiente
+            <ChevronRight size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+      </section>
+
       {deleteCandidate && (
         <div className={styles['modal-overlay']} role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
           <div className={styles.modal}>

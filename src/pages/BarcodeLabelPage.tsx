@@ -53,32 +53,42 @@ function BarcodeLabel({ product, showPrice }: { product: Product; showPrice: boo
 }
 
 export function BarcodeLabelPage() {
-  const { products, fetchProducts } = useProducts();
+  const { searchProductsRemote } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [labelItems, setLabelItems] = useState<LabelItem[]>([]);
   const [showPrice, setShowPrice] = useState(true);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchProductsRemote(searchQuery, 20);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('BarcodeLabelPage.remoteSearch:', err);
+        setSearchResults([]);
+      }
+    }, 200);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery, searchProductsRemote]);
+
+  const filteredProducts = searchResults;
 
   function showNotif(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
   }
-
-  const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return products.filter(
-      p =>
-        p.is_active === 1 &&
-        (p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q))
-    );
-  }, [products, searchQuery]);
 
   const addProduct = useCallback((product: Product) => {
     setLabelItems(prev => {
@@ -136,14 +146,20 @@ export function BarcodeLabelPage() {
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' && searchQuery.trim()) {
-      const exactMatch = products.find(
-        p => p.barcode === searchQuery.trim() && p.is_active === 1
-      );
-      if (exactMatch) {
-        addProduct(exactMatch);
-      } else if (filteredProducts.length === 1) {
-        addProduct(filteredProducts[0]);
-      }
+      // Try exact barcode match via server
+      window.electronAPI.products.getByBarcode(searchQuery.trim())
+        .then((exactMatch: Product | undefined) => {
+          if (exactMatch && exactMatch.is_active === 1) {
+            addProduct(exactMatch);
+          } else if (filteredProducts.length === 1) {
+            addProduct(filteredProducts[0]);
+          }
+        })
+        .catch(() => {
+          if (filteredProducts.length === 1) {
+            addProduct(filteredProducts[0]);
+          }
+        });
     }
   }
 

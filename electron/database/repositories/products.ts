@@ -1,5 +1,100 @@
 import { getDatabase } from '../connection';
-import type { Product } from '../../../src/types/database';
+import type { Product, PaginatedResponse, SortSpec } from '../../../src/types/database';
+import { buildLikePattern, sanitizePagination, calcLimitOffset, isValidStatus } from '../../lib/queryHelpers';
+import { incrementVersion } from '../../lib/dataVersions';
+
+const ALLOWED_SORT_FIELDS = ['name', 'cost_price', 'sale_price', 'stock', 'created_at', 'updated_at'] as const;
+const ALLOWED_STATUS = ['active', 'inactive'] as const;
+const DEFAULT_SORT: SortSpec = { field: 'name', direction: 'ASC' };
+
+interface ProductPaginatedQuery {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: string;
+  categoryId?: number;
+  lowStock?: boolean;
+  sort?: SortSpec;
+}
+
+export function getAllProductsPaginated(query: ProductPaginatedQuery): PaginatedResponse<Product> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+
+  const sort: SortSpec = (
+    query.sort &&
+    typeof query.sort.field === 'string' &&
+    (ALLOWED_SORT_FIELDS as readonly string[]).includes(query.sort.field) &&
+    (query.sort.direction === 'ASC' || query.sort.direction === 'DESC')
+  ) ? query.sort : DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  // Status filter (active/inactive maps to is_active 1/0)
+  if (isValidStatus(query.status, ALLOWED_STATUS)) {
+    conditions.push('p.is_active = ?');
+    params.push(query.status === 'active' ? 1 : 0);
+  }
+
+  // Category filter
+  if (typeof query.categoryId === 'number' && Number.isInteger(query.categoryId) && query.categoryId >= 1) {
+    conditions.push('p.category_id = ?');
+    params.push(query.categoryId);
+  }
+
+  // Low stock filter
+  if (query.lowStock === true) {
+    conditions.push('p.min_stock >= 0 AND p.stock <= p.min_stock AND p.is_active = 1');
+  }
+
+  // Text search (name, barcode, description, category name)
+  if (typeof query.search === 'string' && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push(`(
+      p.name LIKE ? ESCAPE '\\'
+      OR p.barcode LIKE ? ESCAPE '\\'
+      OR COALESCE(p.description, '') LIKE ? ESCAPE '\\'
+      OR COALESCE(c.name, '') LIKE ? ESCAPE '\\'
+    )`);
+    params.push(pattern, pattern, pattern, pattern);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // Sort column mapping (prefix with table alias)
+  const sortColumn = sort.field === 'name' ? 'p.name' : `p.${sort.field}`;
+  const orderClause = `ORDER BY ${sortColumn} ${sort.direction}, p.id DESC`;
+
+  // Count total
+  const countRow = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    ${whereClause}
+  `).get(...params) as { total: number };
+
+  const total = countRow.total;
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+
+  const items = db.prepare(`
+    SELECT p.*, c.name AS category_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    ${whereClause}
+    ${orderClause}
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as Product[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
 
 export function getAllProducts(): Product[] {
   const db = getDatabase();
@@ -86,7 +181,9 @@ export function createProduct(data: CreateProductData): Product {
     data.stock ?? 0,
     data.min_stock ?? 5
   );
-  return getProductById(Number(result.lastInsertRowid))!;
+  const product = getProductById(Number(result.lastInsertRowid))!;
+  incrementVersion('products');
+  return product;
 }
 
 interface UpdateProductData {
@@ -116,6 +213,7 @@ export function updateProduct(id: number, data: UpdateProductData): Product | un
 
   values.push(id);
   db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  incrementVersion('products');
   return getProductById(id);
 }
 
@@ -123,6 +221,7 @@ export function deleteProduct(id: number): boolean {
   const db = getDatabase();
   // Soft delete: mark as inactive
   const result = db.prepare('UPDATE products SET is_active = 0 WHERE id = ?').run(id);
+  if (result.changes > 0) incrementVersion('products');
   return result.changes > 0;
 }
 
@@ -145,5 +244,6 @@ export function deleteProductPermanently(id: number): boolean {
   }
 
   const result = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  if (result.changes > 0) incrementVersion('products');
   return result.changes > 0;
 }

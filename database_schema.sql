@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS cash_register_periods (
     total_expenses          REAL DEFAULT 0,
     closing_cash            REAL,
     status                  TEXT CHECK(status IN ('open','closed')) DEFAULT 'open',
+    version                 INTEGER NOT NULL DEFAULT 1,
     created_at              TEXT DEFAULT (datetime('now','localtime'))
 );
 
@@ -74,11 +75,13 @@ CREATE TABLE IF NOT EXISTS sales (
     cash_received     REAL,
     cash_change       REAL,
     cash_register_id  INTEGER REFERENCES cash_register_periods(id),
+    idempotency_key   TEXT,
     created_at        TEXT DEFAULT (datetime('now','localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_sales_type ON sales(sale_type);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency ON sales(idempotency_key);
 
 -- 6. Sale items
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -114,11 +117,15 @@ CREATE INDEX IF NOT EXISTS idx_credits_customer ON credits(customer_id);
 
 -- 8. Credit payments
 CREATE TABLE IF NOT EXISTS credit_payments (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    credit_id   INTEGER NOT NULL REFERENCES credits(id),
-    amount      REAL NOT NULL,
-    created_at  TEXT DEFAULT (datetime('now','localtime'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    credit_id         INTEGER NOT NULL REFERENCES credits(id),
+    amount            REAL NOT NULL,
+    cash_register_id  INTEGER REFERENCES cash_register_periods(id),
+    idempotency_key   TEXT,
+    created_at        TEXT DEFAULT (datetime('now','localtime'))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_payments_idempotency ON credit_payments(idempotency_key);
 
 -- 9. Inventory movements
 CREATE TABLE IF NOT EXISTS inventory_movements (
@@ -140,8 +147,11 @@ CREATE TABLE IF NOT EXISTS cash_movements (
     type              TEXT NOT NULL CHECK(type IN ('expense','withdrawal','deposit')),
     amount            REAL NOT NULL,
     description       TEXT,
+    idempotency_key   TEXT,
     created_at        TEXT DEFAULT (datetime('now','localtime'))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_movements_idempotency ON cash_movements(idempotency_key);
 
 -- 11. Settings
 CREATE TABLE IF NOT EXISTS settings (
@@ -158,7 +168,14 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('default_margin_percent', '50'),
     ('ticket_footer_text', 'Gracias por su compra!'),
     ('last_active_page', 'products'),
-    ('sales_rows_per_page', '15');
+    ('sales_rows_per_page', '15'),
+    ('feature_paginated_cash', '0'),
+    ('feature_paginated_sales', '1'),
+    ('feature_paginated_inventory', '1'),
+    ('feature_paginated_credits', '1'),
+    ('feature_paginated_customers', '1'),
+    ('feature_paginated_products', '1'),
+    ('feature_paginated_reports', '1');
 
 -- Trigger to keep updated_at in products updated
 CREATE TRIGGER IF NOT EXISTS trg_products_updated_at
@@ -168,5 +185,28 @@ BEGIN
     SET updated_at = datetime('now','localtime')
     WHERE id = NEW.id;
 END;
+
+-- 12. Data versions (Phase 5 - cache invalidation)
+CREATE TABLE IF NOT EXISTS data_versions (
+    module      TEXT PRIMARY KEY,
+    version     INTEGER NOT NULL DEFAULT 0,
+    updated_at  TEXT DEFAULT (datetime('now','localtime'))
+);
+
+INSERT OR IGNORE INTO data_versions (module, version) VALUES
+    ('cash', 0),
+    ('sales', 0),
+    ('inventory', 0),
+    ('credits', 0),
+    ('customers', 0),
+    ('products', 0);
+
+-- Scalability indices
+CREATE INDEX IF NOT EXISTS idx_sales_cash_register_date ON sales(cash_register_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_credit_payments_cash_register_date ON credit_payments(cash_register_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_cash_register_date ON cash_movements(cash_register_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_credits_customer_status_due ON credits(customer_id, status, due_date DESC);
+CREATE INDEX IF NOT EXISTS idx_customers_active_name ON customers(is_active, name);
+CREATE INDEX IF NOT EXISTS idx_products_active_name ON products(is_active, name);
 
 COMMIT;

@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ArrowLeft, DollarSign, RefreshCw, Search, User } from 'lucide-react';
 import { useCredits } from '../hooks/useCredits';
 import { useCustomers } from '../hooks/useCustomers';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { Credit, CreditPayment, Customer } from '../types';
+import type { Credit, CreditPayment, CreditListItem, CreditsSummary, Customer, PaginatedQuery } from '../types';
 import styles from './CreditsPage.module.css';
 
 type ViewMode = 'list' | 'detail' | 'customer';
@@ -16,25 +16,23 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Pagado',
 };
 
-function getRangeStartDate(range: TimeRangeFilter): Date | null {
-  if (range === 'all' || range === 'select') {
-    return null;
-  }
+const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
+function formatDateYMD(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getRangeDateFrom(range: TimeRangeFilter): string | undefined {
+  if (range === 'all' || range === 'select') return undefined;
   const start = new Date();
-
-  if (range === '7d') {
-    start.setDate(start.getDate() - 6);
-  } else if (range === '30d') {
-    start.setDate(start.getDate() - 29);
-  } else if (range === '2m') {
-    start.setMonth(start.getMonth() - 2);
-  } else if (range === '3m') {
-    start.setMonth(start.getMonth() - 3);
-  }
-
-  start.setHours(0, 0, 0, 0);
-  return start;
+  if (range === '7d') start.setDate(start.getDate() - 6);
+  else if (range === '30d') start.setDate(start.getDate() - 29);
+  else if (range === '2m') start.setMonth(start.getMonth() - 2);
+  else if (range === '3m') start.setMonth(start.getMonth() - 3);
+  return formatDateYMD(start);
 }
 
 interface CreditsPageProps {
@@ -43,17 +41,27 @@ interface CreditsPageProps {
 }
 
 export function CreditsPage({ initialCreditId, onInitialCreditHandled }: CreditsPageProps) {
-  const { credits, loading, error, fetchCredits, fetchCreditsByCustomer, addPayment, getPayments, getCreditById, checkOverdue } = useCredits();
+  const {
+    loading, error,
+    addPayment, getPayments, getCreditById, checkOverdue,
+    fetchCreditsPaginated, fetchCreditsByCustomerPaginated, fetchSummary,
+  } = useCredits();
   const { customers } = useCustomers();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterCustomerId, setFilterCustomerId] = useState<number | ''>('');
   const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>('all');
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Paginated list state
+  const [creditItems, setCreditItems] = useState<CreditListItem[]>([]);
+  const [totalCredits, setTotalCredits] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [summary, setSummary] = useState<CreditsSummary>({ countActive: 0, totalPending: 0, totalOverdue: 0, totalCollected: 0 });
 
   // Detail view state
   const [selectedCredit, setSelectedCredit] = useState<Credit | null>(null);
@@ -61,15 +69,53 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
   // Customer view state
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerCredits, setCustomerCredits] = useState<CreditListItem[]>([]);
+  const [customerCreditsTotal, setCustomerCreditsTotal] = useState(0);
+  const [customerPage, setCustomerPage] = useState(1);
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Debounced search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   useEffect(() => {
-    fetchCredits();
-  }, [fetchCredits]);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 400);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
+
+  // Load persisted rows per page
+  useEffect(() => {
+    async function loadPersistedRows() {
+      try {
+        const persisted = await window.electronAPI.settings.get('credits_rows_per_page');
+        const parsed = Number(persisted);
+        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
+          setRowsPerPage(parsed);
+        }
+      } catch (err) {
+        console.error('CreditsPage.loadPersistedRows:', err);
+      }
+    }
+    void loadPersistedRows();
+  }, []);
+
+  async function handleRowsPerPageChange(value: number) {
+    setRowsPerPage(value);
+    setCurrentPage(1);
+    try {
+      await window.electronAPI.settings.set('credits_rows_per_page', String(value));
+    } catch (err) {
+      console.error('CreditsPage.handleRowsPerPageChange:', err);
+    }
+  }
 
   function showNotification(type: 'success' | 'error', message: string) {
     setNotification({ type, message });
@@ -83,67 +129,66 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     return map;
   }, [customers]);
 
-  // Filter credits based on tab, customer, and search
-  const filteredCredits = useMemo(() => {
-    const hasCustomDateFilter = Boolean(startDateFilter || endDateFilter);
-    const presetRangeStart = getRangeStartDate(timeRangeFilter);
-    const customStartDate = startDateFilter ? new Date(`${startDateFilter}T00:00:00`) : null;
-    const customEndDate = endDateFilter ? new Date(`${endDateFilter}T23:59:59.999`) : null;
-
-    if (customStartDate && customEndDate && customStartDate > customEndDate) {
-      return [];
+  // Effective date filters
+  const effectiveDates = useMemo(() => {
+    if (startDateFilter || endDateFilter) {
+      return { dateFrom: startDateFilter || undefined, dateTo: endDateFilter || undefined };
     }
+    return { dateFrom: getRangeDateFrom(timeRangeFilter), dateTo: undefined };
+  }, [startDateFilter, endDateFilter, timeRangeFilter]);
 
-    let result = credits;
+  // Load paginated credits
+  const loadCredits = useCallback(async () => {
+    const query: PaginatedQuery = {
+      page: currentPage,
+      pageSize: rowsPerPage,
+      search: debouncedSearch || undefined,
+      status: activeTab !== 'all' ? activeTab : undefined,
+      dateFrom: effectiveDates.dateFrom,
+      dateTo: effectiveDates.dateTo,
+    };
 
-    if (activeTab !== 'all') {
-      result = result.filter(c => c.status === activeTab);
+    const [result, summaryResult] = await Promise.all([
+      fetchCreditsPaginated(query),
+      fetchSummary({
+        search: query.search,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+      }),
+    ]);
+
+    if (result) {
+      setCreditItems(result.items);
+      setTotalCredits(result.total);
     }
-
-    if (filterCustomerId !== '') {
-      result = result.filter(c => c.customer_id === filterCustomerId);
+    if (summaryResult) {
+      setSummary(summaryResult);
     }
+  }, [currentPage, rowsPerPage, debouncedSearch, activeTab, effectiveDates, fetchCreditsPaginated, fetchSummary]);
 
-    if (hasCustomDateFilter) {
-      result = result.filter(c => {
-        const creditDate = new Date(c.created_at);
-
-        if (customStartDate && creditDate < customStartDate) {
-          return false;
-        }
-
-        if (customEndDate && creditDate > customEndDate) {
-          return false;
-        }
-
-        return true;
-      });
-    } else if (presetRangeStart) {
-      result = result.filter(c => new Date(c.created_at) >= presetRangeStart);
+  useEffect(() => {
+    if (viewMode === 'list') {
+      void loadCredits();
     }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(c => {
-        const customer = customerMap.get(c.customer_id);
-        return customer?.name.toLowerCase().includes(query)
-          || c.id.toString().includes(query)
-          || c.sale_id.toString().includes(query);
-      });
-    }
-
-    return result;
-  }, [credits, activeTab, filterCustomerId, timeRangeFilter, startDateFilter, endDateFilter, searchQuery, customerMap]);
+  }, [loadCredits, viewMode]);
 
   const hasInvalidDateRange = Boolean(
-    startDateFilter
-      && endDateFilter
+    startDateFilter && endDateFilter
       && new Date(`${startDateFilter}T00:00:00`) > new Date(`${endDateFilter}T23:59:59.999`),
   );
 
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalCredits / rowsPerPage)),
+    [totalCredits, rowsPerPage],
+  );
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   function handleTimeRangeFilterChange(nextFilter: TimeRangeFilter) {
     setTimeRangeFilter(nextFilter);
-
+    setCurrentPage(1);
     if (nextFilter !== 'select') {
       setStartDateFilter('');
       setEndDateFilter('');
@@ -152,40 +197,25 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
   function handleStartDateFilterChange(value: string) {
     setStartDateFilter(value);
-
-    if (value || endDateFilter) {
-      setTimeRangeFilter('select');
-    }
+    setCurrentPage(1);
+    if (value || endDateFilter) setTimeRangeFilter('select');
   }
 
   function handleEndDateFilterChange(value: string) {
     setEndDateFilter(value);
-
-    if (value || startDateFilter) {
-      setTimeRangeFilter('select');
-    }
+    setCurrentPage(1);
+    if (value || startDateFilter) setTimeRangeFilter('select');
   }
 
-  // Summary stats
-  const summary = useMemo(() => {
-    const totalPending = credits
-      .filter(c => c.status === 'pending')
-      .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
-    const totalOverdue = credits
-      .filter(c => c.status === 'overdue')
-      .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
-    const totalCollected = credits
-      .filter(c => c.status === 'paid')
-      .reduce((sum, c) => sum + c.total_due, 0);
-    const countActive = credits.filter(c => c.status !== 'paid').length;
-
-    return { totalPending, totalOverdue, totalCollected, countActive };
-  }, [credits]);
+  function handleTabChange(tab: TabFilter) {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  }
 
   async function handleCheckOverdue() {
     try {
       const count = await checkOverdue();
-      await fetchCredits();
+      await loadCredits();
       if (count > 0) {
         showNotification('success', `Se aplicaron recargos a ${count} credito(s) vencido(s)`);
       } else {
@@ -196,6 +226,23 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     }
   }
 
+  // Handle initialCreditId prop
+  useEffect(() => {
+    if (typeof initialCreditId !== 'number' || viewMode !== 'list') return;
+    let cancelled = false;
+    async function openInitialCreditDetail() {
+      try {
+        const targetCredit = await getCreditById(initialCreditId!);
+        if (!targetCredit || cancelled) return;
+        await openDetail(targetCredit);
+      } finally {
+        if (!cancelled) onInitialCreditHandled?.();
+      }
+    }
+    void openInitialCreditDetail();
+    return () => { cancelled = true; };
+  }, [initialCreditId, viewMode]);
+
   const openDetail = useCallback(async (credit: Credit) => {
     setSelectedCredit(credit);
     setPaymentAmount('');
@@ -205,53 +252,30 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     setViewMode('detail');
   }, [getPayments]);
 
-  useEffect(() => {
-    if (typeof initialCreditId !== 'number' || viewMode !== 'list') {
-      return;
-    }
-
-    const creditId = initialCreditId;
-
-    let cancelled = false;
-
-    async function openInitialCreditDetail() {
-      try {
-        let targetCredit = credits.find(credit => credit.id === creditId);
-
-        if (!targetCredit) {
-          targetCredit = await getCreditById(creditId);
-        }
-
-        if (!targetCredit || cancelled) {
-          return;
-        }
-
-        await openDetail(targetCredit);
-      } finally {
-        if (!cancelled) {
-          onInitialCreditHandled?.();
-        }
-      }
-    }
-
-    void openInitialCreditDetail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [credits, getCreditById, initialCreditId, onInitialCreditHandled, openDetail, viewMode]);
-
-  function openCustomerView(customer: Customer) {
+  async function openCustomerView(customer: Customer) {
     setSelectedCustomer(customer);
+    setCustomerPage(1);
     setViewMode('customer');
-    fetchCreditsByCustomer(customer.id);
+    const result = await fetchCreditsByCustomerPaginated(customer.id, { page: 1, pageSize: rowsPerPage });
+    if (result) {
+      setCustomerCredits(result.items);
+      setCustomerCreditsTotal(result.total);
+    }
+  }
+
+  async function loadCustomerCreditsPage(customerId: number, page: number) {
+    const result = await fetchCreditsByCustomerPaginated(customerId, { page, pageSize: rowsPerPage });
+    if (result) {
+      setCustomerCredits(result.items);
+      setCustomerCreditsTotal(result.total);
+      setCustomerPage(page);
+    }
   }
 
   function backToList() {
     setViewMode('list');
     setSelectedCredit(null);
     setSelectedCustomer(null);
-    fetchCredits();
   }
 
   async function handlePayment(e: React.FormEvent) {
@@ -497,12 +521,12 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   // CUSTOMER ACCOUNT VIEW
   // =====================================================
   if (viewMode === 'customer' && selectedCustomer) {
-    const customerCredits = credits;
     const totalDebt = customerCredits
       .filter(c => c.status !== 'paid')
       .reduce((sum, c) => sum + (c.total_due - c.amount_paid), 0);
     const totalPaid = customerCredits.reduce((sum, c) => sum + c.amount_paid, 0);
     const activeCount = customerCredits.filter(c => c.status !== 'paid').length;
+    const customerTotalPages = Math.max(1, Math.ceil(customerCreditsTotal / rowsPerPage));
 
     return (
       <div className={styles.page}>
@@ -611,6 +635,25 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             </tbody>
           </table>
         </div>
+
+        {customerCreditsTotal > rowsPerPage && (
+          <div className={styles.pagination}>
+            <span className={styles['pagination__meta']}>
+              {customerCreditsTotal} credito(s) del cliente
+            </span>
+            <div className={styles['pagination__actions']}>
+              <button className={styles['btn-secondary']} disabled={customerPage <= 1} onClick={() => loadCustomerCreditsPage(selectedCustomer.id, customerPage - 1)}>
+                Anterior
+              </button>
+              <span className={styles['pagination__page']}>
+                Pagina {customerPage} de {customerTotalPages}
+              </span>
+              <button className={styles['btn-secondary']} disabled={customerPage >= customerTotalPages} onClick={() => loadCustomerCreditsPage(selectedCustomer.id, customerPage + 1)}>
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -618,13 +661,6 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   // =====================================================
   // LIST VIEW (Default)
   // =====================================================
-
-  // Unique customers that have credits for the customer filter
-  const creditCustomerIds = [...new Set(credits.map(c => c.customer_id))];
-  const creditCustomers = creditCustomerIds
-    .map(id => customerMap.get(id))
-    .filter((c): c is Customer => c !== undefined)
-    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className={styles.page}>
@@ -676,14 +712,9 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
           <button
             key={tab}
             className={`${styles['tabs__item']} ${activeTab === tab ? styles['tabs__item--active'] : ''}`}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
           >
             {tab === 'all' ? 'Todos' : STATUS_LABELS[tab]}
-            {tab !== 'all' && (
-              <span style={{ marginLeft: 4, opacity: 0.7 }}>
-                ({credits.filter(c => c.status === tab).length})
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -744,12 +775,13 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
         <select
           className={styles['toolbar__filter']}
-          value={filterCustomerId}
-          onChange={e => setFilterCustomerId(e.target.value ? Number(e.target.value) : '')}
+          value={rowsPerPage}
+          onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
         >
-          <option value="">Todos los clientes</option>
-          {creditCustomers.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+          {ROWS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option} filas
+            </option>
           ))}
         </select>
       </div>
@@ -779,11 +811,10 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
           <tbody>
             {loading ? (
               <tr><td colSpan={9} className={styles['table__empty']}>Cargando...</td></tr>
-            ) : filteredCredits.length === 0 ? (
+            ) : creditItems.length === 0 ? (
               <tr><td colSpan={9} className={styles['table__empty']}>No hay creditos{activeTab !== 'all' ? ` con estado "${STATUS_LABELS[activeTab]}"` : ''}</td></tr>
             ) : (
-              filteredCredits.map(credit => {
-                const customer = customerMap.get(credit.customer_id);
+              creditItems.map(credit => {
                 const remaining = credit.total_due - credit.amount_paid;
                 const percent = getPaymentPercent(credit);
 
@@ -809,10 +840,11 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
                         }}
                         onClick={e => {
                           e.stopPropagation();
+                          const customer = customerMap.get(credit.customer_id);
                           if (customer) openCustomerView(customer);
                         }}
                       >
-                        {customer?.name ?? 'Desconocido'}
+                        {credit.customer_name ?? 'Desconocido'}
                       </button>
                     </td>
                     <td style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
@@ -843,6 +875,24 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination */}
+      <div className={styles.pagination}>
+        <span className={styles['pagination__meta']}>
+          Mostrando {creditItems.length} de {totalCredits} credito(s)
+        </span>
+        <div className={styles['pagination__actions']}>
+          <button className={styles['btn-secondary']} disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>
+            Anterior
+          </button>
+          <span className={styles['pagination__page']}>
+            Pagina {currentPage} de {totalPages}
+          </span>
+          <button className={styles['btn-secondary']} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+            Siguiente
+          </button>
+        </div>
       </div>
     </div>
   );

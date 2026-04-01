@@ -5,7 +5,25 @@ import {
   getBusinessTodayDate,
   resolveBusinessTimeZone,
 } from '../../lib/time';
-import type { Credit, CreditPayment } from '../../../src/types/database';
+import {
+  sanitizePagination,
+  calcLimitOffset,
+  buildLikePattern,
+  isValidDateFilter,
+  isValidStatus,
+  isValidIdempotencyKey,
+} from '../../lib/queryHelpers';
+import type {
+  Credit,
+  CreditPayment,
+  CreditListItem,
+  CreditsSummary,
+  PaginatedQuery,
+  PaginatedResponse,
+  SortSpec,
+  IdempotentResult,
+} from '../../../src/types/database';
+import { incrementVersion } from '../../lib/dataVersions';
 
 export function getAllCredits(status?: string): Credit[] {
   const db = getDatabase();
@@ -27,10 +45,21 @@ export function getCreditById(id: number): Credit | undefined {
   return db.prepare('SELECT * FROM credits WHERE id = ?').get(id) as Credit | undefined;
 }
 
-export function addCreditPayment(creditId: number, amount: number): Credit {
+export function addCreditPayment(creditId: number, amount: number, idempotencyKeyInput?: string): IdempotentResult<Credit> {
   const db = getDatabase();
   const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
   const nowDateTime = getBusinessNowDateTime(businessTimeZone);
+
+  // Idempotency check: return existing credit state if same key was already processed
+  const idempotencyKey = isValidIdempotencyKey(idempotencyKeyInput) ? idempotencyKeyInput : null;
+  if (idempotencyKey) {
+    const existing = db.prepare(
+      'SELECT credit_id FROM credit_payments WHERE idempotency_key = ?'
+    ).get(idempotencyKey) as { credit_id: number } | undefined;
+    if (existing) {
+      return { data: getCreditById(existing.credit_id)!, created: false };
+    }
+  }
 
   const openPeriod = db
     .prepare("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1")
@@ -43,8 +72,8 @@ export function addCreditPayment(creditId: number, amount: number): Credit {
   const transaction = db.transaction(() => {
     // Insert payment record
     db.prepare(
-      'INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES (?, ?, ?)'
-    ).run(creditId, amount, openPeriod.id);
+      'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key) VALUES (?, ?, ?, ?)'
+    ).run(creditId, amount, openPeriod.id, idempotencyKey);
 
     // Update credit amount_paid
     db.prepare(
@@ -63,7 +92,8 @@ export function addCreditPayment(creditId: number, amount: number): Credit {
   });
 
   transaction();
-  return getCreditById(creditId)!;
+  incrementVersion('credits');
+  return { data: getCreditById(creditId)!, created: true };
 }
 
 export function getCreditPayments(creditId: number): CreditPayment[] {
@@ -113,5 +143,234 @@ export function checkOverdueCredits(): number {
     return overdueCredits.length;
   });
 
-  return transaction();
+  const count = transaction();
+  if (count > 0) {
+    incrementVersion('credits');
+    incrementVersion('sales');
+  }
+  return count;
+}
+
+// --- Paginated endpoints (Phase 3) ---
+
+const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
+const ALLOWED_CREDIT_STATUSES = ['pending', 'overdue', 'paid'] as const;
+
+export function getAllCreditsPaginated(
+  query: PaginatedQuery
+): PaginatedResponse<CreditListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(cu.name) LIKE ? OR CAST(cr.id AS TEXT) LIKE ? OR CAST(cr.sale_id AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidStatus(query.status, ALLOWED_CREDIT_STATUSES)) {
+    conditions.push('cr.status = ?');
+    params.push(query.status);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("cr.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("cr.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM credits cr
+     LEFT JOIN customers cu ON cu.id = cr.customer_id
+     ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      cr.*,
+      cu.name AS customer_name
+    FROM credits cr
+    LEFT JOIN customers cu ON cu.id = cr.customer_id
+    ${whereClause}
+    ORDER BY cr.${sort.field === 'due_date' ? 'due_date' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, cr.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CreditListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getCreditsByCustomerPaginated(
+  customerId: number,
+  query: PaginatedQuery
+): PaginatedResponse<CreditListItem> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['cr.customer_id = ?'];
+  const params: unknown[] = [customerId];
+
+  if (isValidStatus(query.status, ALLOWED_CREDIT_STATUSES)) {
+    conditions.push('cr.status = ?');
+    params.push(query.status);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("cr.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("cr.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM credits cr
+     ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT
+      cr.*,
+      cu.name AS customer_name
+    FROM credits cr
+    LEFT JOIN customers cu ON cu.id = cr.customer_id
+    ${whereClause}
+    ORDER BY cr.${sort.field === 'due_date' ? 'due_date' : 'created_at'} ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, cr.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CreditListItem[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getCreditPaymentsPaginated(
+  creditId: number,
+  query: PaginatedQuery
+): PaginatedResponse<CreditPayment> {
+  const db = getDatabase();
+  const { page, pageSize } = sanitizePagination(query.page, query.pageSize);
+  const { limit, offset } = calcLimitOffset(page, pageSize);
+  const sort: SortSpec = query.sort ?? DEFAULT_SORT;
+
+  const conditions: string[] = ['cp.credit_id = ?'];
+  const params: unknown[] = [creditId];
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("cp.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("cp.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+  const countRow = db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM credit_payments cp
+     ${whereClause}`
+  ).get(...params) as { total: number };
+
+  const total = countRow.total;
+
+  const items = db.prepare(
+    `SELECT cp.*
+    FROM credit_payments cp
+    ${whereClause}
+    ORDER BY cp.created_at ${sort.direction === 'ASC' ? 'ASC' : 'DESC'}, cp.id DESC
+    LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as CreditPayment[];
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    hasMore: offset + items.length < total,
+    sort,
+  };
+}
+
+export function getCreditsSummary(query: {
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): CreditsSummary {
+  const db = getDatabase();
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.search && query.search.trim()) {
+    const pattern = buildLikePattern(query.search);
+    conditions.push('(LOWER(cu.name) LIKE ? OR CAST(cr.id AS TEXT) LIKE ? OR CAST(cr.sale_id AS TEXT) LIKE ?)');
+    params.push(pattern, pattern, pattern);
+  }
+
+  if (isValidDateFilter(query.dateFrom)) {
+    conditions.push("cr.created_at >= ? || ' 00:00:00'");
+    params.push(query.dateFrom);
+  }
+
+  if (isValidDateFilter(query.dateTo)) {
+    conditions.push("cr.created_at <= ? || ' 23:59:59'");
+    params.push(query.dateTo);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const row = db.prepare(
+    `SELECT
+      COALESCE(SUM(CASE WHEN cr.status != 'paid' THEN 1 ELSE 0 END), 0) AS countActive,
+      COALESCE(SUM(CASE WHEN cr.status = 'pending' THEN cr.total_due - cr.amount_paid ELSE 0 END), 0) AS totalPending,
+      COALESCE(SUM(CASE WHEN cr.status = 'overdue' THEN cr.total_due - cr.amount_paid ELSE 0 END), 0) AS totalOverdue,
+      COALESCE(SUM(CASE WHEN cr.status = 'paid' THEN cr.total_due ELSE 0 END), 0) AS totalCollected
+    FROM credits cr
+    LEFT JOIN customers cu ON cu.id = cr.customer_id
+    ${whereClause}`
+  ).get(...params) as CreditsSummary;
+
+  return row;
 }

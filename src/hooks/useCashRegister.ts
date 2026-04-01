@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem } from '../types';
+import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse } from '../types';
 import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
@@ -143,6 +143,45 @@ export function useCashRegister() {
     }
   }, []);
 
+  const fetchSalesPaginated = useCallback(async (
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<SaleListItem>> => {
+    try {
+      const data = await window.electronAPI.cashRegister.getSalesPaginated(cashRegisterId, query);
+      return data as PaginatedResponse<SaleListItem>;
+    } catch (err) {
+      console.error('useCashRegister.fetchSalesPaginated:', err);
+      return { items: [], page: query.page, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    }
+  }, []);
+
+  const fetchCreditPaymentsPaginated = useCallback(async (
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CreditPaymentListItem>> => {
+    try {
+      const data = await window.electronAPI.cashRegister.getCreditPaymentsPaginated(cashRegisterId, query);
+      return data as PaginatedResponse<CreditPaymentListItem>;
+    } catch (err) {
+      console.error('useCashRegister.fetchCreditPaymentsPaginated:', err);
+      return { items: [], page: query.page, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    }
+  }, []);
+
+  const fetchMovementsPaginated = useCallback(async (
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CashMovement>> => {
+    try {
+      const data = await window.electronAPI.cashRegister.getMovementsPaginated(cashRegisterId, query);
+      return data as PaginatedResponse<CashMovement>;
+    } catch (err) {
+      console.error('useCashRegister.fetchMovementsPaginated:', err);
+      return { items: [], page: query.page, pageSize: query.pageSize, total: 0, hasMore: false, sort: { field: 'created_at', direction: 'DESC' } };
+    }
+  }, []);
+
   return {
     currentPeriod,
     periods,
@@ -158,6 +197,9 @@ export function useCashRegister() {
     fetchSales,
     fetchCreditPayments,
     fetchSalesSummary,
+    fetchSalesPaginated,
+    fetchCreditPaymentsPaginated,
+    fetchMovementsPaginated,
     openPeriod,
     closePeriod,
     addMovement,

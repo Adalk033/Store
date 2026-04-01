@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Customer } from '../types';
+import type { Customer, CustomerListItem, CustomersPaginatedQuery, PaginatedResponse } from '../types';
 
 export function useCustomers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -67,6 +67,25 @@ export function useCustomers() {
     }
   }, []);
 
+  // --- Paginated methods (Phase 3) ---
+
+  const fetchCustomersPaginated = useCallback(async (
+    query: CustomersPaginatedQuery
+  ): Promise<PaginatedResponse<CustomerListItem> | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.customers.getAllPaginated(query);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar clientes';
+      setError(message);
+      console.error('useCustomers.fetchCustomersPaginated:', err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     customers,
     loading,
@@ -74,5 +93,6 @@ export function useCustomers() {
     fetchCustomers,
     createCustomer,
     updateCustomer,
+    fetchCustomersPaginated,
   };
 }

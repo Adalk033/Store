@@ -7,6 +7,7 @@ import type {
   InventorySummary,
   CreditsOverviewRow,
 } from '../../electron/database/repositories/reports';
+import type { PaginatedResponse } from '../types';
 
 export function useReports() {
   const [loading, setLoading] = useState(false);
@@ -108,6 +109,94 @@ export function useReports() {
     }
   }, []);
 
+  const getInventoryReportPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<InventoryValueRow>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await window.electronAPI.reports.inventoryPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar reporte de inventario';
+      setError(message);
+      console.error('useReports.getInventoryReportPaginated:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const getProfitReportPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<ProfitRow>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await window.electronAPI.reports.profitPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar reporte de utilidades';
+      setError(message);
+      console.error('useReports.getProfitReportPaginated:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const getTopProductsPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<TopProductRow>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await window.electronAPI.reports.topProductsPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar productos mas vendidos';
+      setError(message);
+      console.error('useReports.getTopProductsPaginated:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const getCreditsOverviewPaginated = useCallback(async (query: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    sort?: { field: string; direction: 'ASC' | 'DESC' };
+  }): Promise<PaginatedResponse<CreditsOverviewRow>> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await window.electronAPI.reports.creditsOverviewPaginated(query);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al cargar resumen de creditos';
+      setError(message);
+      console.error('useReports.getCreditsOverviewPaginated:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -117,5 +206,9 @@ export function useReports() {
     getInventoryReport,
     getInventorySummary,
     getCreditsOverview,
+    getInventoryReportPaginated,
+    getProfitReportPaginated,
+    getTopProductsPaginated,
+    getCreditsOverviewPaginated,
   };
 }
