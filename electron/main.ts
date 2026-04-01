@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -16,6 +16,7 @@ import * as inventoryRepo from './database/repositories/inventory';
 import * as cashRegisterRepo from './database/repositories/cashRegister';
 import * as settingsRepo from './database/repositories/settings';
 import * as reportsRepo from './database/repositories/reports';
+import { CloudApi } from './lib/cloudApi';
 
 // Phase 5: Data versioning and metrics
 import * as dataVersions from './lib/dataVersions';
@@ -28,6 +29,77 @@ const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 const RENDERER_DIST = path.join(__dirname, '../dist');
 
 let mainWindow: BrowserWindow | null = null;
+
+const CLOUD_API_KEY_FILE = 'cloud-api-key.bin';
+
+function getCloudApiKeyPath(): string {
+  return path.join(app.getPath('userData'), CLOUD_API_KEY_FILE);
+}
+
+function setCloudApiKeySecret(value: string): void {
+  const trimmed = value.trim();
+  const secretPath = getCloudApiKeyPath();
+
+  if (!trimmed) {
+    if (fs.existsSync(secretPath)) {
+      fs.unlinkSync(secretPath);
+    }
+    return;
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('El cifrado seguro local no esta disponible en este sistema');
+  }
+
+  const encrypted = safeStorage.encryptString(trimmed);
+  fs.writeFileSync(secretPath, encrypted);
+}
+
+function hasCloudApiKeySecret(): boolean {
+  const secretPath = getCloudApiKeyPath();
+  return fs.existsSync(secretPath) && fs.statSync(secretPath).size > 0;
+}
+
+function getCloudApiKeySecret(): string {
+  const secretPath = getCloudApiKeyPath();
+  if (!fs.existsSync(secretPath)) {
+    return '';
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('El cifrado seguro local no esta disponible en este sistema');
+  }
+
+  const encrypted = fs.readFileSync(secretPath);
+  return safeStorage.decryptString(encrypted).trim();
+}
+
+function isCloudEnabled(): boolean {
+  return settingsRepo.getSetting('aws_enabled') === '1';
+}
+
+function getCloudApiConfig() {
+  const baseUrl = (settingsRepo.getSetting('aws_api_base_url') || '').trim();
+  const timeoutMs = Number(settingsRepo.getSetting('aws_timeout_ms') || '5000');
+  const retryMax = Number(settingsRepo.getSetting('aws_retry_max') || '2');
+  const apiKey = getCloudApiKeySecret();
+
+  if (!baseUrl) {
+    throw new Error('Falta configurar AWS API Base URL en Configuracion');
+  }
+  if (!apiKey) {
+    throw new Error('Falta configurar API key cloud en Configuracion');
+  }
+
+  return {
+    baseUrl,
+    apiKey,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 5000,
+    retryMax: Number.isFinite(retryMax) && retryMax >= 0 ? retryMax : 2,
+  };
+}
+
+const cloudApi = new CloudApi(getCloudApiConfig);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -68,26 +140,92 @@ function initDatabase(): void {
 // Register all IPC handlers
 function registerIpcHandlers(): void {
   // Categories
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_ALL, () => categoriesRepo.getAllCategories());
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_BY_ID, (_, id: number) => categoriesRepo.getCategoryById(id));
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_CREATE, (_, data) => categoriesRepo.createCategory(data));
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_UPDATE, (_, id: number, data) => categoriesRepo.updateCategory(id, data));
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_DELETE, (_, id: number) => categoriesRepo.deleteCategory(id));
+  ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_ALL, async () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCategories();
+    }
+    return categoriesRepo.getAllCategories();
+  });
+  ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_BY_ID, async (_, id: number) => {
+    if (isCloudEnabled()) {
+      const categories = await cloudApi.getCategories();
+      return categories.find((c) => c.id === id);
+    }
+    return categoriesRepo.getCategoryById(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.CATEGORIES_CREATE, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.createCategory(data);
+    }
+    return categoriesRepo.createCategory(data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CATEGORIES_UPDATE, (_, id: number, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.updateCategory(id, data);
+    }
+    return categoriesRepo.updateCategory(id, data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CATEGORIES_DELETE, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.deleteCategory(id);
+    }
+    return categoriesRepo.deleteCategory(id);
+  });
 
   // Products
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_ALL, () => productsRepo.getAllProducts());
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_ID, (_, id: number) => productsRepo.getProductById(id));
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_BARCODE, (_, barcode: string) => productsRepo.getProductByBarcode(barcode));
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_SEARCH, (_, query: string) => productsRepo.searchProducts(query));
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_LOW_STOCK, () => productsRepo.getLowStockProducts());
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_CREATE, (_, data) => productsRepo.createProduct(data));
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_UPDATE, (_, id: number, data) => productsRepo.updateProduct(id, data));
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE, (_, id: number) => productsRepo.deleteProduct(id));
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_ALL, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getProducts();
+    }
+    return productsRepo.getAllProducts();
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_ID, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getProductById(id);
+    }
+    return productsRepo.getProductById(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_BARCODE, (_, barcode: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getProductByBarcode(barcode);
+    }
+    return productsRepo.getProductByBarcode(barcode);
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_SEARCH, (_, query: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getProducts({ search: query });
+    }
+    return productsRepo.searchProducts(query);
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_LOW_STOCK, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getLowStockProducts();
+    }
+    return productsRepo.getLowStockProducts();
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_CREATE, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.createProduct(data);
+    }
+    return productsRepo.createProduct(data);
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_UPDATE, (_, id: number, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.updateProduct(id, data);
+    }
+    return productsRepo.updateProduct(id, data);
+  });
+  ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.deleteProduct(id);
+    }
+    return productsRepo.deleteProduct(id);
+  });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, (_, id: number) =>
-    productsRepo.canDeleteProductPermanently(id)
+    isCloudEnabled() ? cloudApi.canDeleteProductPermanently(id) : productsRepo.canDeleteProductPermanently(id)
   );
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, (_, id: number) =>
-    productsRepo.deleteProductPermanently(id)
+    isCloudEnabled() ? cloudApi.deleteProductPermanently(id) : productsRepo.deleteProductPermanently(id)
   );
 
   // Products - Paginated endpoint (Phase 4)
@@ -95,6 +233,18 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.PRODUCTS_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getProductsPaginated({
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          status: typeof q.status === 'string' ? q.status : undefined,
+          categoryId: typeof q.categoryId === 'number' ? q.categoryId : undefined,
+          lowStock: typeof q.lowStock === 'boolean' ? q.lowStock : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return productsRepo.getAllProductsPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -136,18 +286,52 @@ function registerIpcHandlers(): void {
 
   // Sales
   ipcMain.handle(IPC_CHANNELS.SALES_CREATE, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.createSale(data);
+    }
     const result = salesRepo.createSale(data);
     return result.data;
   });
-  ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, (_, limit?: number, offset?: number) => salesRepo.getAllSales(limit, offset));
-  ipcMain.handle(IPC_CHANNELS.SALES_GET_BY_ID, (_, id: number) => salesRepo.getSaleById(id));
-  ipcMain.handle(IPC_CHANNELS.SALES_GET_DETAIL, (_, id: number) => salesRepo.getSaleDetailById(id));
+  ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, async (_, limit?: number, offset?: number) => {
+    if (isCloudEnabled()) {
+      const items = await cloudApi.getSales();
+      if (typeof limit === 'number' && typeof offset === 'number') {
+        return items.slice(offset, offset + limit);
+      }
+      return items;
+    }
+    return salesRepo.getAllSales(limit, offset);
+  });
+  ipcMain.handle(IPC_CHANNELS.SALES_GET_BY_ID, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getSaleById(id);
+    }
+    return salesRepo.getSaleById(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.SALES_GET_DETAIL, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getSaleDetailById(id);
+    }
+    return salesRepo.getSaleDetailById(id);
+  });
 
   // Sales - Paginated endpoints (Phase 2)
   ipcMain.handle(
     IPC_CHANNELS.SALES_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getSalesPaginated({
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          type: typeof q.type === 'string' ? q.type : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return salesRepo.getAllSalesPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -164,6 +348,15 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.SALES_GET_SUMMARY,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getSalesSummary({
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          type: typeof q.type === 'string' ? q.type : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        });
+      }
+
       return salesRepo.getSalesSummary({
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         type: typeof q.type === 'string' ? q.type : undefined,
@@ -191,21 +384,61 @@ function registerIpcHandlers(): void {
   );
 
   // Credits
-  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => creditsRepo.getAllCredits(status));
-  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_ID, (_, id: number) => creditsRepo.getCreditById(id));
-  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, (_, customerId: number) => creditsRepo.getCreditsByCustomer(customerId));
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCredits(status);
+    }
+    return creditsRepo.getAllCredits(status);
+  });
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_ID, (_, id: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCreditById(id);
+    }
+    return creditsRepo.getCreditById(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, (_, customerId: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCreditsByCustomer(customerId);
+    }
+    return creditsRepo.getCreditsByCustomer(customerId);
+  });
   ipcMain.handle(IPC_CHANNELS.CREDITS_ADD_PAYMENT, (_, creditId: number, amount: number, idempotencyKey?: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.addCreditPayment(creditId, amount, idempotencyKey);
+    }
     const result = creditsRepo.addCreditPayment(creditId, amount, idempotencyKey);
     return result.data;
   });
-  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => creditsRepo.getCreditPayments(creditId));
-  ipcMain.handle(IPC_CHANNELS.CREDITS_CHECK_OVERDUE, () => creditsRepo.checkOverdueCredits());
+  ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCreditPayments(creditId);
+    }
+    return creditsRepo.getCreditPayments(creditId);
+  });
+  ipcMain.handle(IPC_CHANNELS.CREDITS_CHECK_OVERDUE, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.checkOverdueCredits();
+    }
+    return creditsRepo.checkOverdueCredits();
+  });
 
   // Credits - Paginated endpoints (Phase 3)
   ipcMain.handle(
     IPC_CHANNELS.CREDITS_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getCreditsPaginated({
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          status: typeof q.status === 'string' ? q.status : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return creditsRepo.getAllCreditsPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -225,6 +458,17 @@ function registerIpcHandlers(): void {
         throw new Error('ID de cliente invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getCreditsByCustomerPaginated(customerId, {
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          status: typeof q.status === 'string' ? q.status : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return creditsRepo.getCreditsByCustomerPaginated(customerId, {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -243,6 +487,16 @@ function registerIpcHandlers(): void {
         throw new Error('ID de credito invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getCreditPaymentsPaginated(creditId, {
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return creditsRepo.getCreditPaymentsPaginated(creditId, {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
@@ -257,6 +511,15 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CREDITS_GET_SUMMARY,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getCreditsSummary({
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          status: typeof q.status === 'string' ? q.status : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+        });
+      }
+
       return creditsRepo.getCreditsSummary({
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         status: typeof q.status === 'string' ? q.status : undefined,
@@ -267,15 +530,46 @@ function registerIpcHandlers(): void {
   );
 
   // Inventory
-  ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => inventoryRepo.addInventoryMovement(data));
-  ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, (_, productId: number) => inventoryRepo.getMovementsByProduct(productId));
-  ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_ALL, (_, limit?: number, offset?: number) => inventoryRepo.getAllMovements(limit, offset));
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.addInventoryMovement(data);
+    }
+    return inventoryRepo.addInventoryMovement(data);
+  });
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, (_, productId: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getInventoryMovementsByProduct(productId);
+    }
+    return inventoryRepo.getMovementsByProduct(productId);
+  });
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_ALL, async (_, limit?: number, offset?: number) => {
+    if (isCloudEnabled()) {
+      const items = await cloudApi.getInventoryMovements();
+      if (typeof limit === 'number' && typeof offset === 'number') {
+        return items.slice(offset, offset + limit);
+      }
+      return items;
+    }
+    return inventoryRepo.getAllMovements(limit, offset);
+  });
 
   // Inventory - Paginated endpoints (Phase 2)
   ipcMain.handle(
     IPC_CHANNELS.INVENTORY_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getInventoryMovementsPaginated({
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
+          type: typeof q.type === 'string' ? q.type : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return inventoryRepo.getAllMovementsPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -295,6 +589,17 @@ function registerIpcHandlers(): void {
         throw new Error('ID de producto invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getInventoryMovementsByProductPaginated(productId, {
+          page: typeof q.page === 'number' ? q.page : 1,
+          pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+          type: typeof q.type === 'string' ? q.type : undefined,
+          dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
+          dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
+          sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+        });
+      }
+
       return inventoryRepo.getMovementsByProductPaginated(productId, {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -307,24 +612,75 @@ function registerIpcHandlers(): void {
   );
 
   // Cash Register
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => cashRegisterRepo.openPeriod(data));
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number, endDate: string, expectedVersion?: number) => cashRegisterRepo.closePeriod(id, closingCash, endDate, expectedVersion));
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => cashRegisterRepo.getCurrentPeriod());
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => cashRegisterRepo.getAllPeriods());
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.openCashRegister(data);
+    }
+    return cashRegisterRepo.openPeriod(data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number, endDate: string, expectedVersion?: number) => {
+    if (isCloudEnabled()) {
+      void expectedVersion;
+      return cloudApi.closeCashRegister({ id, closing_cash: closingCash, end_date: endDate });
+    }
+    return cashRegisterRepo.closePeriod(id, closingCash, endDate, expectedVersion);
+  });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCurrentCashRegister();
+    }
+    return cashRegisterRepo.getCurrentPeriod();
+  });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCashRegisterPeriods();
+    }
+    return cashRegisterRepo.getAllPeriods();
+  });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, (_, data) => {
+    if (isCloudEnabled()) {
+      return cloudApi.addCashMovement(data);
+    }
     const result = cashRegisterRepo.addCashMovement(data);
     return result.data;
   });
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => cashRegisterRepo.getMovementsByPeriod(cashRegisterId));
-  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, (_, cashRegisterId: number) => cashRegisterRepo.getSalesSummaryByPeriod(cashRegisterId));
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCashMovements(cashRegisterId);
+    }
+    return cashRegisterRepo.getMovementsByPeriod(cashRegisterId);
+  });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, (_, cashRegisterId: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCashRegisterSalesSummary(cashRegisterId);
+    }
+    return cashRegisterRepo.getSalesSummaryByPeriod(cashRegisterId);
+  });
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_SALES,
-    (_, cashRegisterId: number, limit?: number, offset?: number) => cashRegisterRepo.getSalesByPeriod(cashRegisterId, limit, offset)
+    async (_, cashRegisterId: number, limit?: number, offset?: number) => {
+      if (isCloudEnabled()) {
+        const items = await cloudApi.getCashRegisterSales(cashRegisterId);
+        if (typeof limit === 'number' && typeof offset === 'number') {
+          return items.slice(offset, offset + limit);
+        }
+        return items;
+      }
+      return cashRegisterRepo.getSalesByPeriod(cashRegisterId, limit, offset);
+    }
   );
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS,
-    (_, cashRegisterId: number, limit?: number, offset?: number) =>
-      cashRegisterRepo.getCreditPaymentsByPeriod(cashRegisterId, limit, offset)
+    async (_, cashRegisterId: number, limit?: number, offset?: number) => {
+      if (isCloudEnabled()) {
+        const items = await cloudApi.getCashRegisterCreditPayments(cashRegisterId);
+        if (typeof limit === 'number' && typeof offset === 'number') {
+          return items.slice(offset, offset + limit);
+        }
+        return items;
+      }
+      return cashRegisterRepo.getCreditPaymentsByPeriod(cashRegisterId, limit, offset);
+    }
   );
 
   // Cash Register - Paginated endpoints (Phase 1)
@@ -399,18 +755,59 @@ function registerIpcHandlers(): void {
   );
 
   // Reports
-  ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => reportsRepo.getSalesByDateRange(startDate, endDate));
-  ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => reportsRepo.getTopProducts(startDate, endDate, limit));
-  ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, (_, startDate: string, endDate: string) => reportsRepo.getProfitReport(startDate, endDate));
-  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY, () => reportsRepo.getInventoryReport());
-  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY, () => reportsRepo.getInventorySummary());
-  ipcMain.handle(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW, () => reportsRepo.getCreditsOverview());
+  ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getSalesByDate(startDate, endDate);
+    }
+    return reportsRepo.getSalesByDateRange(startDate, endDate);
+  });
+  ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getTopProducts(startDate, endDate, limit);
+    }
+    return reportsRepo.getTopProducts(startDate, endDate, limit);
+  });
+  ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, (_, startDate: string, endDate: string) => {
+    if (isCloudEnabled()) {
+      return cloudApi.getProfitReport(startDate, endDate);
+    }
+    return reportsRepo.getProfitReport(startDate, endDate);
+  });
+  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getInventoryReport();
+    }
+    return reportsRepo.getInventoryReport();
+  });
+  ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getInventorySummary();
+    }
+    return reportsRepo.getInventorySummary();
+  });
+  ipcMain.handle(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW, () => {
+    if (isCloudEnabled()) {
+      return cloudApi.getCreditsOverview();
+    }
+    return reportsRepo.getCreditsOverview();
+  });
 
   // Reports - Paginated endpoints (Phase 4)
   ipcMain.handle(
     IPC_CHANNELS.REPORTS_INVENTORY_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getReportPaginated(
+          cloudApi.getInventoryReport(),
+          {
+            page: typeof q.page === 'number' ? q.page : 1,
+            pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+            sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+          }
+        );
+      }
+
       return reportsRepo.getInventoryReportPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -424,6 +821,20 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_PROFIT_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getReportPaginated(
+          cloudApi.getProfitReport(
+            typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
+            typeof q.dateTo === 'string' ? q.dateTo : '9999-12-31'
+          ),
+          {
+            page: typeof q.page === 'number' ? q.page : 1,
+            pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+            sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+          }
+        );
+      }
+
       return reportsRepo.getProfitReportPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -439,6 +850,20 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_TOP_PRODUCTS_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getReportPaginated(
+          cloudApi.getTopProducts(
+            typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
+            typeof q.dateTo === 'string' ? q.dateTo : '9999-12-31'
+          ),
+          {
+            page: typeof q.page === 'number' ? q.page : 1,
+            pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
+            sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+          }
+        );
+      }
+
       return reportsRepo.getTopProductsPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -454,6 +879,17 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+      if (isCloudEnabled()) {
+        return cloudApi.getReportPaginated(
+          cloudApi.getCreditsOverview(),
+          {
+            page: typeof q.page === 'number' ? q.page : 1,
+            pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
+            sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
+          }
+        );
+      }
+
       return reportsRepo.getCreditsOverviewPaginated({
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
@@ -467,6 +903,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_, key: string) => settingsRepo.getSetting(key));
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, () => settingsRepo.getAllSettings());
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, key: string, value: string) => settingsRepo.setSetting(key, value));
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, (_, value: string) => {
+    if (typeof value !== 'string') {
+      throw new Error('La API key debe ser texto');
+    }
+    setCloudApiKeySecret(value);
+    return true;
+  });
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY, () => hasCloudApiKeySecret());
 
   // Database backup
   ipcMain.handle(IPC_CHANNELS.SETTINGS_BACKUP_DB, () => {

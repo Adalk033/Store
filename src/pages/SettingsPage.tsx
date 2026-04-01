@@ -8,7 +8,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
-  const { settings, loading, fetchSettings, saveMultiple } = useSettings();
+  const { settings, loading, fetchSettings, saveMultiple, setCloudApiKey, hasCloudApiKey } = useSettings();
 
   const [form, setForm] = useState({
     store_name: '',
@@ -19,7 +19,16 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     default_surcharge_percent: '10',
     default_margin_percent: '50',
     business_timezone: 'America/Mexico_City',
+    aws_enabled: '1',
+    aws_env: 'prod',
+    aws_region: '',
+    aws_api_base_url: '',
+    aws_timeout_ms: '5000',
+    aws_retry_max: '2',
   });
+  const [cloudApiKey, setCloudApiKeyInput] = useState('');
+  const [cloudApiKeyDirty, setCloudApiKeyDirty] = useState(false);
+  const [hasStoredCloudApiKey, setHasStoredCloudApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -27,6 +36,13 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    void (async () => {
+      const exists = await hasCloudApiKey();
+      setHasStoredCloudApiKey(exists);
+    })();
+  }, [hasCloudApiKey]);
 
   // Sync form with loaded settings
   useEffect(() => {
@@ -39,6 +55,12 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       default_surcharge_percent: settings.default_surcharge_percent || '10',
       default_margin_percent: settings.default_margin_percent || '50',
       business_timezone: settings.business_timezone || 'America/Mexico_City',
+      aws_enabled: settings.aws_enabled || '0',
+      aws_env: settings.aws_env || 'prod',
+      aws_region: settings.aws_region || '',
+      aws_api_base_url: settings.aws_api_base_url || '',
+      aws_timeout_ms: settings.aws_timeout_ms || '5000',
+      aws_retry_max: settings.aws_retry_max || '2',
     });
   }, [settings]);
 
@@ -74,9 +96,37 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
         showNotification('error', 'La zona horaria no puede estar vacia');
         return;
       }
+      if (form.aws_enabled === '1') {
+        if (!form.aws_api_base_url.trim()) {
+          showNotification('error', 'La URL base de API es obligatoria cuando AWS esta habilitado');
+          return;
+        }
+        if (!form.aws_region.trim()) {
+          showNotification('error', 'La region AWS es obligatoria cuando AWS esta habilitado');
+          return;
+        }
+
+        const timeout = Number(form.aws_timeout_ms);
+        const retries = Number(form.aws_retry_max);
+        if (isNaN(timeout) || timeout < 1000) {
+          showNotification('error', 'El timeout AWS debe ser de al menos 1000 ms');
+          return;
+        }
+        if (isNaN(retries) || retries < 0 || retries > 5) {
+          showNotification('error', 'Los reintentos AWS deben estar entre 0 y 5');
+          return;
+        }
+      }
 
       const entries = Object.entries(form).map(([key, value]) => ({ key, value }));
       await saveMultiple(entries);
+      if (cloudApiKeyDirty) {
+        await setCloudApiKey(cloudApiKey);
+        const exists = await hasCloudApiKey();
+        setHasStoredCloudApiKey(exists);
+        setCloudApiKeyInput('');
+        setCloudApiKeyDirty(false);
+      }
       onStoreNameChange?.(form.store_name.trim() || 'Tienda');
       showNotification('success', 'Configuracion guardada correctamente');
     } catch (err) {
@@ -121,6 +171,105 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
           <Save size={16} strokeWidth={1.5} />
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
+      </div>
+
+      {/* AWS cloud connection */}
+      <div className={styles.section}>
+        <h2 className={styles['section__title']}>Conexion AWS</h2>
+        <p className={styles['section__description']}>
+          Configura la API cloud (Lambda + API Gateway). La API key se guarda cifrada localmente.
+        </p>
+
+        <div className={styles.field}>
+          <label className={styles['field__label']}>Habilitar modo AWS</label>
+          <select
+            className={styles['field__input']}
+            value={form.aws_enabled}
+            onChange={e => handleChange('aws_enabled', e.target.value)}
+          >
+            <option value="0">No</option>
+            <option value="1">Si</option>
+          </select>
+        </div>
+
+        <div className={styles['field-row']}>
+          <div className={styles.field}>
+            <label className={styles['field__label']}>Entorno</label>
+            <select
+              className={styles['field__input']}
+              value={form.aws_env}
+              onChange={e => handleChange('aws_env', e.target.value)}
+            >
+              <option value="prod">prod</option>
+            </select>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles['field__label']}>Region AWS</label>
+            <input
+              className={styles['field__input']}
+              type="text"
+              value={form.aws_region}
+              onChange={e => handleChange('aws_region', e.target.value)}
+              placeholder="us-east-1"
+            />
+          </div>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles['field__label']}>API Base URL</label>
+          <input
+            className={styles['field__input']}
+            type="text"
+            value={form.aws_api_base_url}
+            onChange={e => handleChange('aws_api_base_url', e.target.value)}
+            placeholder="https://xxxx.execute-api.us-east-1.amazonaws.com"
+          />
+        </div>
+
+        <div className={styles['field-row']}>
+          <div className={styles.field}>
+            <label className={styles['field__label']}>Timeout (ms)</label>
+            <input
+              className={styles['field__input']}
+              type="number"
+              min={1000}
+              value={form.aws_timeout_ms}
+              onChange={e => handleChange('aws_timeout_ms', e.target.value)}
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles['field__label']}>Reintentos maximos</label>
+            <input
+              className={styles['field__input']}
+              type="number"
+              min={0}
+              max={5}
+              value={form.aws_retry_max}
+              onChange={e => handleChange('aws_retry_max', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles['field__label']}>API Key</label>
+          <input
+            className={styles['field__input']}
+            type="password"
+            value={cloudApiKey}
+            onChange={e => {
+              setCloudApiKeyInput(e.target.value);
+              setCloudApiKeyDirty(true);
+            }}
+            placeholder={hasStoredCloudApiKey ? 'API key guardada (escribe para reemplazar o deja vacio para eliminar)' : 'Pega tu API key'}
+          />
+          <span className={styles['field__hint']}>
+            {hasStoredCloudApiKey
+              ? 'Actualmente existe una API key guardada de forma cifrada local.'
+              : 'No hay API key guardada.'}
+          </span>
+        </div>
       </div>
 
       {/* Store info */}

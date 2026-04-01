@@ -155,6 +155,12 @@ export function runMigrations(): void {
         ('default_credit_days', '5'),
         ('default_surcharge_percent', '10'),
         ('default_margin_percent', '50'),
+        ('aws_enabled', '1'),
+        ('aws_env', 'prod'),
+        ('aws_region', ''),
+        ('aws_api_base_url', ''),
+        ('aws_timeout_ms', '5000'),
+        ('aws_retry_max', '2'),
         ('business_timezone', 'America/Mexico_City'),
         ('ticket_footer_text', 'Gracias por su compra!'),
         ('last_active_page', 'products'),
@@ -238,6 +244,14 @@ export function runMigrations(): void {
   db.exec(`
     UPDATE settings SET value = '1' WHERE key = 'feature_paginated_products' AND value = '0';
     UPDATE settings SET value = '1' WHERE key = 'feature_paginated_reports' AND value = '0';
+    UPDATE settings SET value = '1' WHERE key = 'aws_enabled' AND value = '0';
+    INSERT OR IGNORE INTO settings (key, value) VALUES
+      ('aws_enabled', '1'),
+      ('aws_env', 'prod'),
+      ('aws_region', ''),
+      ('aws_api_base_url', ''),
+      ('aws_timeout_ms', '5000'),
+      ('aws_retry_max', '2');
   `);
 
   // --- Phase 5: Hardening cloud ---

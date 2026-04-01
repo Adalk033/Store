@@ -10,6 +10,12 @@ export interface SettingsMap {
   default_surcharge_percent: string;
   default_margin_percent: string;
   business_timezone: string;
+  aws_enabled: string;
+  aws_env: string;
+  aws_region: string;
+  aws_api_base_url: string;
+  aws_timeout_ms: string;
+  aws_retry_max: string;
   last_active_page: string;
   [key: string]: string;
 }
@@ -23,6 +29,12 @@ const DEFAULT_SETTINGS: SettingsMap = {
   default_surcharge_percent: '10',
   default_margin_percent: '50',
   business_timezone: 'America/Mexico_City',
+  aws_enabled: '1',
+  aws_env: 'prod',
+  aws_region: '',
+  aws_api_base_url: '',
+  aws_timeout_ms: '5000',
+  aws_retry_max: '2',
   last_active_page: 'products',
 };
 
@@ -84,6 +96,30 @@ export function useSettings() {
     }
   }, []);
 
+  const setCloudApiKey = useCallback(async (value: string) => {
+    try {
+      setError(null);
+      await window.electronAPI.settings.setCloudApiKey(value);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al guardar API key segura';
+      setError(message);
+      console.error('useSettings.setCloudApiKey:', err);
+      throw err;
+    }
+  }, []);
+
+  const hasCloudApiKey = useCallback(async (): Promise<boolean> => {
+    try {
+      setError(null);
+      return await window.electronAPI.settings.hasCloudApiKey();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al consultar API key';
+      setError(message);
+      console.error('useSettings.hasCloudApiKey:', err);
+      return false;
+    }
+  }, []);
+
   return {
     settings,
     loading,
@@ -91,5 +127,7 @@ export function useSettings() {
     fetchSettings,
     saveSetting,
     saveMultiple,
+    setCloudApiKey,
+    hasCloudApiKey,
   };
 }
