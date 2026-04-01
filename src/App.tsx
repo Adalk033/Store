@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
+import { ConnectionStatusLegend, type ConnectionStatusItem } from './components/layout/ConnectionStatusLegend';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import type { PageId } from './components/layout/Sidebar';
 import styles from './App.module.css';
@@ -42,6 +43,8 @@ function isPageId(value: string): value is PageId {
 
 export function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
+  const [cloudStatus, setCloudStatus] = useState<'loading' | 'ready' | 'missing-key' | 'disabled' | 'error'>('loading');
+  const [startupMode, setStartupMode] = useState<'loading' | 'local' | 'cloud' | 'recovery'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
   const [isNavigating, setIsNavigating] = useState(false);
   const [storeName, setStoreName] = useState('store-internal');
@@ -54,6 +57,23 @@ export function App() {
   const [awsRecoverySaving, setAwsRecoverySaving] = useState(false);
   const [awsRecoveryMessage, setAwsRecoveryMessage] = useState<string | null>(null);
   const [awsRecoveryError, setAwsRecoveryError] = useState<string | null>(null);
+
+  const connectionItems: ConnectionStatusItem[] = [
+    dbStatus === 'loading'
+      ? { label: 'Local', value: 'Conectando...', tone: 'info' }
+      : dbStatus === 'connected'
+        ? { label: 'Local', value: 'Conectado', tone: 'success' }
+        : { label: 'Local', value: 'Sin conexion', tone: 'error' },
+    cloudStatus === 'loading'
+      ? { label: 'Cloud', value: 'Verificando...', tone: 'info' }
+      : cloudStatus === 'ready'
+        ? { label: 'Cloud', value: 'Listo', tone: 'success' }
+        : cloudStatus === 'missing-key'
+          ? { label: 'Cloud', value: 'Sin API key', tone: 'warning' }
+          : cloudStatus === 'disabled'
+            ? { label: 'Cloud', value: 'Deshabilitado', tone: 'neutral' }
+            : { label: 'Cloud', value: 'No disponible', tone: 'error' },
+  ];
 
   function navigateToPage(page: PageId) {
     if (page === currentPage) return;
@@ -74,18 +94,63 @@ export function App() {
   useEffect(() => {
     async function checkConnection() {
       try {
-        const configuredStoreName = await window.electronAPI.settings.get('store_name');
+        const [configuredStoreNameResult, lastActivePageResult, hasApiKeyResult, awsRecoveryConfigResult] =
+          await Promise.allSettled([
+          window.electronAPI.settings.get('store_name'),
+          window.electronAPI.settings.get('last_active_page'),
+          window.electronAPI.settings.hasCloudApiKey(),
+          window.electronAPI.settings.getAwsRecovery(),
+        ] as const);
+
+        const awsRecoveryConfig =
+          awsRecoveryConfigResult.status === 'fulfilled'
+            ? (awsRecoveryConfigResult.value as AwsRecoveryForm)
+            : DEFAULT_AWS_RECOVERY_FORM;
+        const hasApiKey = hasApiKeyResult.status === 'fulfilled' ? Boolean(hasApiKeyResult.value) : false;
+        const configuredStoreName =
+          configuredStoreNameResult.status === 'fulfilled'
+            ? (configuredStoreNameResult.value as string | null | undefined)
+            : undefined;
+        const lastActivePage =
+          lastActivePageResult.status === 'fulfilled'
+            ? (lastActivePageResult.value as string | null | undefined)
+            : undefined;
+        const localSettingsAvailable =
+          configuredStoreNameResult.status === 'fulfilled' && lastActivePageResult.status === 'fulfilled';
+        const cloudReady = awsRecoveryConfig.aws_enabled === '1' && hasApiKey;
+
         if (configuredStoreName?.trim()) {
           setStoreName(configuredStoreName.trim());
         }
-        const lastActivePage = await window.electronAPI.settings.get('last_active_page');
+
         if (lastActivePage && isPageId(lastActivePage)) {
           setCurrentPage(lastActivePage);
         }
-        setDbStatus('connected');
+
+        if (awsRecoveryConfig.aws_enabled === '1') {
+          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
+        } else {
+          setCloudStatus('disabled');
+        }
+
+        if (localSettingsAvailable) {
+          setDbStatus('connected');
+          setStartupMode('local');
+          return;
+        }
+
+        if (cloudReady) {
+          setDbStatus('error');
+          setStartupMode('cloud');
+          return;
+        }
+
+        throw new Error('No se pudo inicializar la configuracion local ni la cloud');
       } catch (error) {
         console.error('Error connecting to database:', error);
+        setCloudStatus('error');
         setDbStatus('error');
+        setStartupMode('recovery');
       }
     }
     checkConnection();
@@ -106,7 +171,7 @@ export function App() {
   }, [currentPage, dbStatus]);
 
   useEffect(() => {
-    if (dbStatus !== 'error') {
+    if (dbStatus !== 'error' || startupMode !== 'recovery') {
       return;
     }
 
@@ -128,6 +193,11 @@ export function App() {
           aws_retry_max: config.aws_retry_max || '2',
         });
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
+        if (config.aws_enabled === '1') {
+          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
+        } else {
+          setCloudStatus('disabled');
+        }
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo cargar configuracion AWS de recuperacion');
       } finally {
@@ -136,7 +206,7 @@ export function App() {
     }
 
     void loadAwsRecovery();
-  }, [dbStatus]);
+  }, [dbStatus, startupMode]);
 
   useEffect(() => {
     if (dbStatus !== 'connected') return;
@@ -166,12 +236,15 @@ export function App() {
   if (dbStatus === 'loading') {
     return (
       <div className={styles['centered-state--compact']}>
-        <p>Conectando a la base de datos...</p>
+        <div className={styles['centered-state__stack']}>
+          <ConnectionStatusLegend items={connectionItems} />
+          <p>Conectando a la base de datos...</p>
+        </div>
       </div>
     );
   }
 
-  if (dbStatus === 'error') {
+  if (dbStatus === 'error' && startupMode === 'recovery') {
     async function handleSaveAwsRecovery() {
       setAwsRecoverySaving(true);
       setAwsRecoveryError(null);
@@ -187,6 +260,11 @@ export function App() {
 
         const hasApiKey = await window.electronAPI.settings.hasCloudApiKey();
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
+        if (awsRecoveryForm.aws_enabled === '1') {
+          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
+        } else {
+          setCloudStatus('disabled');
+        }
         setAwsRecoveryMessage('Configuracion AWS guardada. Reinicia la app para reintentar la conexion.');
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo guardar la configuracion AWS');
@@ -201,123 +279,126 @@ export function App() {
 
     return (
       <div className={styles['centered-state']}>
-        <div className={styles['recovery-card']}>
-          <h2 className={styles['recovery-title']}>No fue posible iniciar la aplicacion</h2>
-          <p className={styles['recovery-subtitle']}>
-            Se bloqueo el acceso al sistema hasta corregir la conexion AWS. Solo esta habilitada esta seccion de recuperacion.
-          </p>
+        <div className={styles['recovery-stack']}>
+          <ConnectionStatusLegend items={connectionItems} />
+          <div className={styles['recovery-card']}>
+            <h2 className={styles['recovery-title']}>No fue posible iniciar la aplicacion</h2>
+            <p className={styles['recovery-subtitle']}>
+              Se bloqueo el acceso al sistema hasta corregir la conexion AWS. Solo esta habilitada esta seccion de recuperacion.
+            </p>
 
-          {awsRecoveryLoading ? (
-            <p>Cargando configuracion AWS...</p>
-          ) : (
-            <>
-              <div className={styles['recovery-grid']}>
+            {awsRecoveryLoading ? (
+              <p>Cargando configuracion AWS...</p>
+            ) : (
+              <>
+                <div className={styles['recovery-grid']}>
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>Habilitar modo AWS</span>
+                    <select
+                      value={awsRecoveryForm.aws_enabled}
+                      onChange={(e) => handleAwsRecoveryChange('aws_enabled', e.target.value)}
+                      className={styles['recovery-input']}
+                    >
+                      <option value="0">No</option>
+                      <option value="1">Si</option>
+                    </select>
+                  </label>
+
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>Entorno</span>
+                    <select
+                      value={awsRecoveryForm.aws_env}
+                      onChange={(e) => handleAwsRecoveryChange('aws_env', e.target.value)}
+                      className={styles['recovery-input']}
+                    >
+                      <option value="prod">prod</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className={styles['recovery-grid']}>
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>Region AWS</span>
+                    <input
+                      value={awsRecoveryForm.aws_region}
+                      onChange={(e) => handleAwsRecoveryChange('aws_region', e.target.value)}
+                      placeholder="mx-central-1"
+                      className={styles['recovery-input']}
+                    />
+                  </label>
+
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>API Base URL</span>
+                    <input
+                      value={awsRecoveryForm.aws_api_base_url}
+                      onChange={(e) => handleAwsRecoveryChange('aws_api_base_url', e.target.value)}
+                      placeholder="https://xxxx.execute-api.mx-central-1.amazonaws.com"
+                      className={styles['recovery-input']}
+                    />
+                  </label>
+                </div>
+
+                <div className={styles['recovery-grid']}>
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>Timeout (ms)</span>
+                    <input
+                      type="number"
+                      min={1000}
+                      value={awsRecoveryForm.aws_timeout_ms}
+                      onChange={(e) => handleAwsRecoveryChange('aws_timeout_ms', e.target.value)}
+                      className={styles['recovery-input']}
+                    />
+                  </label>
+
+                  <label className={styles['recovery-field']}>
+                    <span className={styles['recovery-label']}>Reintentos maximos</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      value={awsRecoveryForm.aws_retry_max}
+                      onChange={(e) => handleAwsRecoveryChange('aws_retry_max', e.target.value)}
+                      className={styles['recovery-input']}
+                    />
+                  </label>
+                </div>
+
                 <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>Habilitar modo AWS</span>
-                  <select
-                    value={awsRecoveryForm.aws_enabled}
-                    onChange={(e) => handleAwsRecoveryChange('aws_enabled', e.target.value)}
+                  <span className={styles['recovery-label']}>API Key Cloud</span>
+                  <input
+                    type="password"
+                    value={awsRecoveryApiKey}
+                    onChange={(e) => setAwsRecoveryApiKey(e.target.value)}
+                    placeholder={awsRecoveryHasApiKey ? 'API key guardada (escribe solo si deseas reemplazar)' : 'Ingresa tu API key'}
                     className={styles['recovery-input']}
+                  />
+                </label>
+
+                {awsRecoveryHasApiKey ? (
+                  <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>Existe una API key cloud guardada en este equipo.</p>
+                ) : (
+                  <p className={`${styles['recovery-message']} ${styles['recovery-message--warning']}`}>No hay API key cloud guardada en este equipo.</p>
+                )}
+
+                {awsRecoveryError ? (
+                  <p className={`${styles['recovery-message']} ${styles['recovery-message--error']}`}>{awsRecoveryError}</p>
+                ) : null}
+                {awsRecoveryMessage ? (
+                  <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>{awsRecoveryMessage}</p>
+                ) : null}
+
+                <div className={styles['recovery-actions']}>
+                  <button
+                    onClick={() => void handleSaveAwsRecovery()}
+                    disabled={awsRecoverySaving}
+                    className={styles['recovery-save']}
                   >
-                    <option value="0">No</option>
-                    <option value="1">Si</option>
-                  </select>
-                </label>
-
-                <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>Entorno</span>
-                  <select
-                    value={awsRecoveryForm.aws_env}
-                    onChange={(e) => handleAwsRecoveryChange('aws_env', e.target.value)}
-                    className={styles['recovery-input']}
-                  >
-                    <option value="prod">prod</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className={styles['recovery-grid']}>
-                <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>Region AWS</span>
-                  <input
-                    value={awsRecoveryForm.aws_region}
-                    onChange={(e) => handleAwsRecoveryChange('aws_region', e.target.value)}
-                    placeholder="mx-central-1"
-                    className={styles['recovery-input']}
-                  />
-                </label>
-
-                <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>API Base URL</span>
-                  <input
-                    value={awsRecoveryForm.aws_api_base_url}
-                    onChange={(e) => handleAwsRecoveryChange('aws_api_base_url', e.target.value)}
-                    placeholder="https://xxxx.execute-api.mx-central-1.amazonaws.com"
-                    className={styles['recovery-input']}
-                  />
-                </label>
-              </div>
-
-              <div className={styles['recovery-grid']}>
-                <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>Timeout (ms)</span>
-                  <input
-                    type="number"
-                    min={1000}
-                    value={awsRecoveryForm.aws_timeout_ms}
-                    onChange={(e) => handleAwsRecoveryChange('aws_timeout_ms', e.target.value)}
-                    className={styles['recovery-input']}
-                  />
-                </label>
-
-                <label className={styles['recovery-field']}>
-                  <span className={styles['recovery-label']}>Reintentos maximos</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={5}
-                    value={awsRecoveryForm.aws_retry_max}
-                    onChange={(e) => handleAwsRecoveryChange('aws_retry_max', e.target.value)}
-                    className={styles['recovery-input']}
-                  />
-                </label>
-              </div>
-
-              <label className={styles['recovery-field']}>
-                <span className={styles['recovery-label']}>API Key Cloud</span>
-                <input
-                  type="password"
-                  value={awsRecoveryApiKey}
-                  onChange={(e) => setAwsRecoveryApiKey(e.target.value)}
-                  placeholder={awsRecoveryHasApiKey ? 'API key guardada (escribe solo si deseas reemplazar)' : 'Ingresa tu API key'}
-                  className={styles['recovery-input']}
-                />
-              </label>
-
-              {awsRecoveryHasApiKey ? (
-                <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>Existe una API key cloud guardada en este equipo.</p>
-              ) : (
-                <p className={`${styles['recovery-message']} ${styles['recovery-message--warning']}`}>No hay API key cloud guardada en este equipo.</p>
-              )}
-
-              {awsRecoveryError ? (
-                <p className={`${styles['recovery-message']} ${styles['recovery-message--error']}`}>{awsRecoveryError}</p>
-              ) : null}
-              {awsRecoveryMessage ? (
-                <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>{awsRecoveryMessage}</p>
-              ) : null}
-
-              <div className={styles['recovery-actions']}>
-                <button
-                  onClick={() => void handleSaveAwsRecovery()}
-                  disabled={awsRecoverySaving}
-                  className={styles['recovery-save']}
-                >
-                  {awsRecoverySaving ? 'Guardando...' : 'Guardar configuracion AWS'}
-                </button>
-              </div>
-            </>
-          )}
+                    {awsRecoverySaving ? 'Guardando...' : 'Guardar configuracion AWS'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -376,7 +457,13 @@ export function App() {
   }
 
   return (
-    <MainLayout currentPage={currentPage} onNavigate={navigateToPage} storeName={storeName} isNavigating={isNavigating}>
+    <MainLayout
+      currentPage={currentPage}
+      onNavigate={navigateToPage}
+      storeName={storeName}
+      connectionItems={connectionItems}
+      isNavigating={isNavigating}
+    >
       {renderPage()}
     </MainLayout>
   );

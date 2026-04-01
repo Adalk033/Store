@@ -14,6 +14,22 @@
   justify-content: center;
 }
 
+.centered-state__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.recovery-stack {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
 .recovery-card {
   width: 100%;
   max-width: 760px;
