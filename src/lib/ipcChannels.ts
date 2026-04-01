@@ -87,6 +87,7 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_GET_ALL: 'settings:getAll',
   SETTINGS_SET: 'settings:set',
+  SETTINGS_SET_SECTION: 'settings:setSection',
   SETTINGS_SET_CLOUD_API_KEY: 'settings:setCloudApiKey',
   SETTINGS_HAS_CLOUD_API_KEY: 'settings:hasCloudApiKey',
   SETTINGS_BACKUP_DB: 'settings:backupDatabase',

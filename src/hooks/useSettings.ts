@@ -20,6 +20,8 @@ export interface SettingsMap {
   [key: string]: string;
 }
 
+export type SettingsSection = 'store' | 'products' | 'credits';
+
 const DEFAULT_SETTINGS: SettingsMap = {
   store_name: '',
   store_address: '',
@@ -96,6 +98,25 @@ export function useSettings() {
     }
   }, []);
 
+  const saveSection = useCallback(async (section: SettingsSection, entries: Array<{ key: string; value: string }>) => {
+    try {
+      setError(null);
+      await window.electronAPI.settings.setSection(section, entries);
+      setSettings(prev => {
+        const updated = { ...prev };
+        for (const entry of entries) {
+          updated[entry.key] = entry.value;
+        }
+        return updated;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al guardar configuracion por seccion';
+      setError(message);
+      console.error('useSettings.saveSection:', err);
+      throw err;
+    }
+  }, []);
+
   const setCloudApiKey = useCallback(async (value: string) => {
     try {
       setError(null);
@@ -127,6 +148,7 @@ export function useSettings() {
     fetchSettings,
     saveSetting,
     saveMultiple,
+    saveSection,
     setCloudApiKey,
     hasCloudApiKey,
   };

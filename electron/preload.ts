@@ -196,6 +196,8 @@ const electronAPI = {
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_ALL),
     set: (key: string, value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, key, value),
+    setSection: (section: 'store' | 'products' | 'credits', entries: Array<{ key: string; value: string }>) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_SECTION, section, entries),
     setCloudApiKey: (value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, value),
     hasCloudApiKey: () =>

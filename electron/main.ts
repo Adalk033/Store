@@ -123,6 +123,51 @@ function getCloudApiConfig() {
 
 const cloudApi = new CloudApi(getCloudApiConfig);
 
+type CloudSettingsSection = 'store' | 'products' | 'credits';
+
+const CLOUD_SETTINGS_SECTION_KEYS: Record<CloudSettingsSection, readonly string[]> = {
+  store: ['store_name', 'store_address', 'store_phone', 'ticket_footer_text'],
+  products: ['default_margin_percent'],
+  credits: ['default_credit_days', 'default_surcharge_percent', 'business_timezone'],
+};
+
+function getCloudSettingsSectionByKey(key: string): CloudSettingsSection | null {
+  if (CLOUD_SETTINGS_SECTION_KEYS.store.includes(key)) {
+    return 'store';
+  }
+  if (CLOUD_SETTINGS_SECTION_KEYS.products.includes(key)) {
+    return 'products';
+  }
+  if (CLOUD_SETTINGS_SECTION_KEYS.credits.includes(key)) {
+    return 'credits';
+  }
+  return null;
+}
+
+async function getCloudManagedSettingValue(key: string): Promise<string | undefined> {
+  const section = getCloudSettingsSectionByKey(key);
+  if (!section) {
+    return undefined;
+  }
+  const data = await cloudApi.getSettingsSection(section);
+  return data.values[key];
+}
+
+async function mergeCloudManagedSettings(localRows: Array<{ key: string; value: string }>) {
+  const merged = new Map(localRows.map((row) => [row.key, row.value]));
+
+  for (const section of Object.keys(CLOUD_SETTINGS_SECTION_KEYS) as CloudSettingsSection[]) {
+    const data = await cloudApi.getSettingsSection(section);
+    for (const [key, value] of Object.entries(data.values)) {
+      merged.set(key, value);
+    }
+  }
+
+  return Array.from(merged.entries())
+    .map(([key, value]) => ({ key, value }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -959,9 +1004,65 @@ function registerIpcHandlers(): void {
   );
 
   // Settings
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_, key: string) => settingsRepo.getSetting(key));
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, () => settingsRepo.getAllSettings());
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, key: string, value: string) => settingsRepo.setSetting(key, value));
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (_, key: string) => {
+    if (isCloudEnabled()) {
+      const section = getCloudSettingsSectionByKey(key);
+      if (section) {
+        return getCloudManagedSettingValue(key);
+      }
+    }
+    return settingsRepo.getSetting(key);
+  });
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, async () => {
+    const localRows = settingsRepo.getAllSettings();
+    if (!isCloudEnabled()) {
+      return localRows;
+    }
+    return mergeCloudManagedSettings(localRows);
+  });
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, async (_, key: string, value: string) => {
+    if (isCloudEnabled()) {
+      const section = getCloudSettingsSectionByKey(key);
+      if (section) {
+        await cloudApi.updateSettingsSection(section, { [key]: value });
+        return;
+      }
+    }
+    settingsRepo.setSetting(key, value);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_SET_SECTION,
+    async (_, section: CloudSettingsSection, entries: Array<{ key: string; value: string }>) => {
+      if (!Array.isArray(entries) || entries.length === 0) {
+        throw new Error('No hay configuraciones para guardar');
+      }
+
+      if (isCloudEnabled()) {
+        if (!Object.prototype.hasOwnProperty.call(CLOUD_SETTINGS_SECTION_KEYS, section)) {
+          throw new Error('Seccion de configuracion invalida');
+        }
+
+        const allowedKeys = new Set(CLOUD_SETTINGS_SECTION_KEYS[section]);
+        const values: Record<string, string> = {};
+        for (const entry of entries) {
+          if (!entry || typeof entry.key !== 'string' || typeof entry.value !== 'string') {
+            throw new Error('Entrada de configuracion invalida');
+          }
+          if (!allowedKeys.has(entry.key)) {
+            throw new Error(`La clave ${entry.key} no pertenece a la seccion ${section}`);
+          }
+          values[entry.key] = entry.value;
+        }
+
+        await cloudApi.updateSettingsSection(section, values);
+        return;
+      }
+
+      for (const entry of entries) {
+        settingsRepo.setSetting(entry.key, entry.value);
+      }
+    }
+  );
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, (_, value: string) => {
     if (typeof value !== 'string') {
       throw new Error('La API key debe ser texto');

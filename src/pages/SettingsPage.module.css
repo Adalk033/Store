@@ -63,6 +63,13 @@
   gap: var(--spacing-sm);
 }
 
+.section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
 .section__title {
   font-size: var(--font-size-lg);
   font-weight: 600;

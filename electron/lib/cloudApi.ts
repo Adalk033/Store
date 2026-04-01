@@ -20,7 +20,12 @@ import type {
   SaleDetail,
   SaleListItem,
   SortSpec,
+  Setting,
 } from '../../src/types/database';
+
+export type CloudSettingsSection = 'store' | 'products' | 'credits';
+
+export type CloudSectionValues = Record<string, string>;
 
 type CloudConfig = {
   baseUrl: string;
@@ -152,6 +157,25 @@ export class CloudApi {
   // Categories
   getCategories(): Promise<Category[]> {
     return this.request<Category[]>('GET', '/v1/categories');
+  }
+
+  // Settings (cloud-managed sections)
+  getSettingsSection(section: CloudSettingsSection): Promise<{ section: CloudSettingsSection; values: CloudSectionValues }> {
+    return this.request<{ section: CloudSettingsSection; values: CloudSectionValues }>('GET', `/v1/settings/sections/${section}`);
+  }
+
+  updateSettingsSection(
+    section: CloudSettingsSection,
+    values: CloudSectionValues
+  ): Promise<{ section: CloudSettingsSection; values: CloudSectionValues }> {
+    return this.request<{ section: CloudSettingsSection; values: CloudSectionValues }>('PUT', `/v1/settings/sections/${section}`, {
+      values,
+    });
+  }
+
+  async getSettingsSectionRows(section: CloudSettingsSection): Promise<Setting[]> {
+    const response = await this.getSettingsSection(section);
+    return Object.entries(response.values).map(([key, value]) => ({ key, value }));
   }
 
   createCategory(data: { name: string; parent_id?: number | null }): Promise<Category> {

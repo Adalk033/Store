@@ -98,7 +98,22 @@
 		"/v1/reports/profit": { "get": { "parameters": [{ "name": "start_date", "in": "query", "required": true, "type": "string" }, { "name": "end_date", "in": "query", "required": true, "type": "string" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/reports/inventory": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/reports/inventory-summary": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
-		"/v1/reports/credits-overview": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } }
+		"/v1/reports/credits-overview": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/settings/sections/{section}": {
+			"get": {
+				"parameters": [{ "name": "section", "in": "path", "required": true, "type": "string", "enum": ["store", "products", "credits"] }],
+				"responses": { "200": { "description": "OK" } },
+				"x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" }
+			},
+			"put": {
+				"parameters": [
+					{ "name": "section", "in": "path", "required": true, "type": "string", "enum": ["store", "products", "credits"] },
+					{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateSettingsSectionRequest" } }
+				],
+				"responses": { "200": { "description": "OK" } },
+				"x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" }
+			}
+		}
 	},
 	"definitions": {
 		"OpenCashRegisterRequest": {
@@ -234,6 +249,16 @@
 				"notes": { "type": "string" },
 				"cost_price": { "type": "number" },
 				"margin_percent": { "type": "number" }
+			}
+		},
+		"UpdateSettingsSectionRequest": {
+			"type": "object",
+			"required": ["values"],
+			"properties": {
+				"values": {
+					"type": "object",
+					"additionalProperties": { "type": "string" }
+				}
 			}
 		}
 	}

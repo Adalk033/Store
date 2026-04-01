@@ -116,6 +116,94 @@ function getPathId(path, regex, fieldName) {
   }
   return id;
 }
+
+const SETTINGS_SECTION_KEYS = {
+  store: ["store_name", "store_address", "store_phone", "ticket_footer_text"],
+  products: ["default_margin_percent"],
+  credits: ["default_credit_days", "default_surcharge_percent", "business_timezone"]
+};
+
+function parseSettingsSection(path) {
+  const match = path.match(/^\/v1\/settings\/sections\/(store|products|credits)$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1];
+}
+
+function validateSettingValueByKey(key, value) {
+  if (typeof value !== "string") {
+    throw new HttpError(422, "validation_error", `${key} must be string`);
+  }
+  const trimmed = value.trim();
+
+  if (key === "default_margin_percent") {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new HttpError(422, "validation_error", "default_margin_percent must be >= 0");
+    }
+    return String(n);
+  }
+
+  if (key === "default_credit_days") {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new HttpError(422, "validation_error", "default_credit_days must be integer >= 1");
+    }
+    return String(n);
+  }
+
+  if (key === "default_surcharge_percent") {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new HttpError(422, "validation_error", "default_surcharge_percent must be >= 0");
+    }
+    return String(n);
+  }
+
+  if (key === "business_timezone") {
+    if (!trimmed) {
+      throw new HttpError(422, "validation_error", "business_timezone is required");
+    }
+    if (trimmed.length > 80) {
+      throw new HttpError(422, "validation_error", "business_timezone exceeds max length");
+    }
+    return trimmed;
+  }
+
+  if (key === "store_name") {
+    if (!trimmed) {
+      throw new HttpError(422, "validation_error", "store_name is required");
+    }
+    if (trimmed.length > 150) {
+      throw new HttpError(422, "validation_error", "store_name exceeds max length");
+    }
+    return trimmed;
+  }
+
+  if (key === "store_address") {
+    if (trimmed.length > 255) {
+      throw new HttpError(422, "validation_error", "store_address exceeds max length");
+    }
+    return trimmed;
+  }
+
+  if (key === "store_phone") {
+    if (trimmed.length > 30) {
+      throw new HttpError(422, "validation_error", "store_phone exceeds max length");
+    }
+    return trimmed;
+  }
+
+  if (key === "ticket_footer_text") {
+    if (value.length > 300) {
+      throw new HttpError(422, "validation_error", "ticket_footer_text exceeds max length");
+    }
+    return value;
+  }
+
+  throw new HttpError(422, "validation_error", `Unsupported setting key: ${key}`);
+}
 function enforceApiKey(event) {
   const requireKey = (process.env.REQUIRE_API_KEY || "true") === "true";
   if (!requireKey) return;
@@ -1233,6 +1321,65 @@ const handler = async (event) => {
          ORDER BY CASE status WHEN 'overdue' THEN 1 WHEN 'pending' THEN 2 WHEN 'paid' THEN 3 END`
       );
       return ok(200, r.rows, requestId);
+    }
+    const settingsSection = parseSettingsSection(path);
+    if (settingsSection && method === "GET") {
+      const keys = SETTINGS_SECTION_KEYS[settingsSection];
+      const r = await pool.query(
+        "SELECT key, value FROM settings WHERE key = ANY($1::text[])",
+        [keys]
+      );
+      const map = {};
+      for (const row of r.rows) {
+        map[row.key] = row.value ?? "";
+      }
+      for (const key of keys) {
+        if (!(key in map)) {
+          map[key] = "";
+        }
+      }
+      return ok(200, { section: settingsSection, values: map }, requestId);
+    }
+    if (settingsSection && method === "PUT") {
+      const body = parseBody(event);
+      const incomingValues = typeof body.values === "object" && body.values !== null ? body.values : null;
+      if (!incomingValues) {
+        throw new HttpError(422, "validation_error", "values object is required");
+      }
+
+      const allowedKeys = new Set(SETTINGS_SECTION_KEYS[settingsSection]);
+      const rows = [];
+      for (const [key, rawValue] of Object.entries(incomingValues)) {
+        if (!allowedKeys.has(key)) {
+          throw new HttpError(422, "validation_error", `Key ${key} is not allowed for section ${settingsSection}`);
+        }
+        rows.push([key, validateSettingValueByKey(key, rawValue)]);
+      }
+
+      if (rows.length === 0) {
+        throw new HttpError(422, "validation_error", "At least one setting is required");
+      }
+
+      await withTx(async (client) => {
+        for (const [key, value] of rows) {
+          await client.query(
+            `INSERT INTO settings (key, value)
+             VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+            [key, value]
+          );
+        }
+      });
+
+      const r = await pool.query(
+        "SELECT key, value FROM settings WHERE key = ANY($1::text[])",
+        [Array.from(allowedKeys)]
+      );
+      const map = {};
+      for (const row of r.rows) {
+        map[row.key] = row.value ?? "";
+      }
+      return ok(200, { section: settingsSection, values: map }, requestId);
     }
     return fail(404, "not_found", "Route not found", requestId);
   } catch (err) {
