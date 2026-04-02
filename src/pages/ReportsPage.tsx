@@ -999,9 +999,18 @@ export function ReportsPage() {
                       <tr key={p.product_id}>
                         <td>{p.product_name}</td>
                         <td>
-                          <span className={p.stock <= 5 ? styles['stock--low'] : styles['stock--ok']}>
-                            {p.stock}
-                          </span>
+                          {(() => {
+                            const stock = Number(p.stock);
+                            const minStock = Number(p.min_stock);
+                            const hasAlert = Number.isFinite(minStock) && minStock >= 0;
+                            const isLow = hasAlert && Number.isFinite(stock) && stock <= minStock;
+                            const displayStock = Number.isFinite(stock) ? stock : p.stock;
+                            return (
+                              <span className={isLow ? styles['stock--low'] : styles['stock--ok']}>
+                                {displayStock}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td>{formatCurrency(p.cost_price)}</td>
                         <td>{formatCurrency(p.sale_price)}</td>

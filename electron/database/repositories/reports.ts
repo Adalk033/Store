@@ -32,6 +32,7 @@ export interface InventoryValueRow {
   product_id: number;
   product_name: string;
   stock: number;
+  min_stock: number;
   cost_price: number;
   sale_price: number;
   stock_value_cost: number;
@@ -124,6 +125,7 @@ export function getInventoryReport(): InventoryValueRow[] {
       id AS product_id,
       name AS product_name,
       stock,
+      min_stock,
       cost_price,
       sale_price,
       ROUND(stock * cost_price, 2) AS stock_value_cost,
@@ -144,7 +146,7 @@ export function getInventorySummary(): InventorySummary {
       COALESCE(SUM(CASE WHEN is_active = 1 THEN stock ELSE 0 END), 0) AS total_stock_units,
       COALESCE(SUM(CASE WHEN is_active = 1 THEN ROUND(stock * cost_price, 2) ELSE 0 END), 0) AS total_value_cost,
       COALESCE(SUM(CASE WHEN is_active = 1 THEN ROUND(stock * sale_price, 2) ELSE 0 END), 0) AS total_value_sale,
-      SUM(CASE WHEN is_active = 1 AND stock <= min_stock THEN 1 ELSE 0 END) AS low_stock_count
+      SUM(CASE WHEN is_active = 1 AND min_stock >= 0 AND stock <= min_stock THEN 1 ELSE 0 END) AS low_stock_count
     FROM products
   `).get() as InventorySummary;
   return row;
@@ -219,6 +221,7 @@ export function getInventoryReportPaginated(query: ReportPaginatedQuery): Pagina
       id AS product_id,
       name AS product_name,
       stock,
+      min_stock,
       cost_price,
       sale_price,
       ROUND(stock * cost_price, 2) AS stock_value_cost,
