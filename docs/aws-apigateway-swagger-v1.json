@@ -2,7 +2,7 @@
 	"swagger": "2.0",
 	"info": {
 		"version": "1.0.0",
-		"title": "MichiPapeleria POS API",
+		"title": "POS API",
 		"description": "API v1 para POS en AWS API Gateway + Lambda (single handler)."
 	},
 	"schemes": ["https"],
