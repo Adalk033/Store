@@ -157,6 +157,15 @@ export class CloudApi {
     throw lastError ?? new Error('Error inesperado llamando API cloud');
   }
 
+  async checkHealth(): Promise<boolean> {
+    try {
+      const response = await this.request<{ status?: string }>('GET', '/v1/health');
+      return response.status === 'ok';
+    } catch {
+      return false;
+    }
+  }
+
   // Categories
   getCategories(): Promise<Category[]> {
     return this.request<Category[]>('GET', '/v1/categories');
