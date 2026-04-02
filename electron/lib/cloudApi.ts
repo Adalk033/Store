@@ -46,6 +46,72 @@ type ApiEnvelope<T> = {
   request_id?: string;
 };
 
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function toFiniteInteger(value: unknown): number | undefined {
+  const parsed = toFiniteNumber(value);
+  if (parsed === undefined) return undefined;
+  return Math.trunc(parsed);
+}
+
+function normalizeTimestamp(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return value;
+}
+
+function normalizeProductRow(raw: unknown): Product {
+  if (typeof raw !== 'object' || raw === null) {
+    return raw as Product;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...row };
+
+  const id = toFiniteInteger(row.id);
+  if (id !== undefined) normalized.id = id;
+
+  const categoryId = row.category_id;
+  if (categoryId === null) {
+    normalized.category_id = null;
+  } else {
+    const parsedCategoryId = toFiniteInteger(categoryId);
+    if (parsedCategoryId !== undefined) normalized.category_id = parsedCategoryId;
+  }
+
+  const costPrice = toFiniteNumber(row.cost_price);
+  if (costPrice !== undefined) normalized.cost_price = costPrice;
+  const marginPercent = toFiniteNumber(row.margin_percent);
+  if (marginPercent !== undefined) normalized.margin_percent = marginPercent;
+  const salePrice = toFiniteNumber(row.sale_price);
+  if (salePrice !== undefined) normalized.sale_price = salePrice;
+
+  const stock = toFiniteNumber(row.stock);
+  if (stock !== undefined) normalized.stock = stock;
+  const minStock = toFiniteNumber(row.min_stock);
+  if (minStock !== undefined) normalized.min_stock = minStock;
+
+  const isActive = toFiniteInteger(row.is_active);
+  if (isActive !== undefined) normalized.is_active = isActive;
+
+  normalized.created_at = normalizeTimestamp(row.created_at);
+  normalized.updated_at = normalizeTimestamp(row.updated_at);
+
+  return normalized as unknown as Product;
+}
+
 function toUrl(baseUrl: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const normalizedPath = path.replace(/^\/+/, '');
@@ -223,8 +289,8 @@ export class CloudApi {
     }
     if (typeof data.cost_price === 'number') payload.cost_price = data.cost_price;
     if (typeof data.margin_percent === 'number') payload.margin_percent = data.margin_percent;
-    if (typeof data.stock === 'number') payload.stock = data.stock;
-    if (typeof data.min_stock === 'number') payload.min_stock = data.min_stock;
+    if (typeof data.stock === 'number') payload.stock = Math.trunc(data.stock);
+    if (typeof data.min_stock === 'number') payload.min_stock = Math.trunc(data.min_stock);
     if (typeof data.is_active === 'number') payload.is_active = data.is_active;
 
     return payload;
@@ -312,20 +378,28 @@ export class CloudApi {
   }
 
   // Products
-  getProducts(query?: { search?: string; category_id?: number; low_stock?: boolean }): Promise<Product[]> {
-    return this.request<Product[]>('GET', '/v1/products', undefined, query);
+  async getProducts(query?: { search?: string; category_id?: number; low_stock?: boolean }): Promise<Product[]> {
+    const raw = await this.request<unknown>('GET', '/v1/products', undefined, query);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeProductRow);
   }
 
-  getProductById(id: number): Promise<Product | undefined> {
-    return this.request<Product>('GET', `/v1/products/${id}`);
+  async getProductById(id: number): Promise<Product | undefined> {
+    const raw = await this.request<unknown>('GET', `/v1/products/${id}`);
+    if (!raw) return undefined;
+    return normalizeProductRow(raw);
   }
 
-  getProductByBarcode(barcode: string): Promise<Product | undefined> {
-    return this.request<Product>('GET', `/v1/products/barcode/${encodeURIComponent(barcode)}`);
+  async getProductByBarcode(barcode: string): Promise<Product | undefined> {
+    const raw = await this.request<unknown>('GET', `/v1/products/barcode/${encodeURIComponent(barcode)}`);
+    if (!raw) return undefined;
+    return normalizeProductRow(raw);
   }
 
-  getLowStockProducts(): Promise<Product[]> {
-    return this.request<Product[]>('GET', '/v1/products/low-stock');
+  async getLowStockProducts(): Promise<Product[]> {
+    const raw = await this.request<unknown>('GET', '/v1/products/low-stock');
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeProductRow);
   }
 
   createProduct(data: {
@@ -338,7 +412,7 @@ export class CloudApi {
     stock?: number;
     min_stock?: number;
   }): Promise<Product> {
-    return this.request<Product>('POST', '/v1/products', this.toProductWritePayload(data));
+    return this.request<unknown>('POST', '/v1/products', this.toProductWritePayload(data)).then(normalizeProductRow);
   }
 
   updateProduct(id: number, data: {
@@ -350,7 +424,9 @@ export class CloudApi {
     min_stock?: number;
     is_active?: number;
   }): Promise<Product | undefined> {
-    return this.request<Product>('PUT', `/v1/products/${id}`, this.toProductWritePayload(data));
+    return this.request<unknown>('PUT', `/v1/products/${id}`, this.toProductWritePayload(data)).then((raw) =>
+      raw ? normalizeProductRow(raw) : undefined
+    );
   }
 
   deleteProduct(id: number): Promise<boolean> {
@@ -373,8 +449,10 @@ export class CloudApi {
       low_stock: query.lowStock,
     });
 
-    const filtered = typeof query.status === 'string'
-      ? all.filter((p) => (query.status === 'active' ? p.is_active === 1 : p.is_active === 0))
+    const filtered = query.status === 'active'
+      ? all.filter((p) => p.is_active === 1)
+      : query.status === 'inactive'
+      ? all.filter((p) => p.is_active === 0)
       : all;
 
     const start = (Math.max(1, query.page) - 1) * Math.max(1, query.pageSize);

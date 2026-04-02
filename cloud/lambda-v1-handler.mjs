@@ -120,6 +120,22 @@ function requireNonNegativeNumber(value, field) {
   }
   return n;
 }
+
+function requireNonNegativeInteger(value, field) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    throw new HttpError(422, "validation_error", `${field} must be integer >= 0`);
+  }
+  return n;
+}
+
+function requireMinStock(value, field) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || (n < 0 && n !== -1)) {
+    throw new HttpError(422, "validation_error", `${field} must be integer >= 0 or -1 to disable alert`);
+  }
+  return n;
+}
 function requireString(value, field, max = 255) {
   if (typeof value !== "string" || !value.trim()) {
     throw new HttpError(422, "validation_error", `${field} is required`);
@@ -668,7 +684,7 @@ const handler = async (event) => {
         idx += 1;
       }
       if (lowStock) {
-        where.push("p.min_stock >= 0 AND p.stock <= p.min_stock");
+        where.push("p.min_stock >= 0 AND p.stock <= p.min_stock AND p.is_active = 1");
       }
       const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
       const r = await pool.query(
@@ -719,8 +735,8 @@ const handler = async (event) => {
       const name = requireString(body.name, "name", 255);
       const costPrice = requireNonNegativeNumber(body.cost_price, "cost_price");
       const marginPercent = requireNonNegativeNumber(body.margin_percent, "margin_percent");
-      const stock = body.stock === void 0 ? 0 : requireNonNegativeNumber(body.stock, "stock");
-      const minStock = body.min_stock === void 0 ? 5 : requireNonNegativeNumber(body.min_stock, "min_stock");
+      const stock = body.stock === void 0 ? 0 : requireNonNegativeInteger(body.stock, "stock");
+      const minStock = body.min_stock === void 0 ? 5 : requireMinStock(body.min_stock, "min_stock");
       const r = await pool.query(
         `INSERT INTO products (barcode, name, description, category_id, cost_price, margin_percent, stock, min_stock, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
@@ -766,7 +782,7 @@ const handler = async (event) => {
       }
       if (body.min_stock !== void 0) {
         setParts.push(`min_stock = $${idx++}`);
-        values.push(requireNonNegativeNumber(body.min_stock, "min_stock"));
+        values.push(requireMinStock(body.min_stock, "min_stock"));
       }
       if (body.is_active !== void 0) {
         setParts.push(`is_active = $${idx++}`);
@@ -1321,6 +1337,7 @@ const handler = async (event) => {
           id AS product_id,
           name AS product_name,
           stock,
+          min_stock,
           cost_price,
           sale_price,
           ROUND(stock * cost_price, 2) AS stock_value_cost,
@@ -1339,7 +1356,7 @@ const handler = async (event) => {
           COALESCE(SUM(CASE WHEN is_active = 1 THEN stock ELSE 0 END), 0) AS total_stock_units,
           COALESCE(SUM(CASE WHEN is_active = 1 THEN ROUND(stock * cost_price, 2) ELSE 0 END), 0) AS total_value_cost,
           COALESCE(SUM(CASE WHEN is_active = 1 THEN ROUND(stock * sale_price, 2) ELSE 0 END), 0) AS total_value_sale,
-          SUM(CASE WHEN is_active = 1 AND stock <= min_stock THEN 1 ELSE 0 END) AS low_stock_count
+          SUM(CASE WHEN is_active = 1 AND min_stock >= 0 AND stock <= min_stock THEN 1 ELSE 0 END) AS low_stock_count
          FROM products`
       );
       return ok(200, r.rows[0], requestId);

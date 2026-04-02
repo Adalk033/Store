@@ -372,7 +372,10 @@ export function ProductsPage() {
           {lowStockProducts.length > 0 && (
             <button
               className={`${styles['low-stock-alert-btn']} ${filterLowStock ? styles['low-stock-alert-btn--active'] : ''}`}
-              onClick={() => setFilterLowStock(!filterLowStock)}
+              onClick={() => {
+                setCurrentPage(1);
+                setFilterLowStock(prev => !prev);
+              }}
               title="Filtrar por stock bajo"
             >
               <AlertTriangle size={14} strokeWidth={2} />
