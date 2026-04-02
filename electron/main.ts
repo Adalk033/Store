@@ -1198,6 +1198,18 @@ function registerIpcHandlers(): void {
     return true;
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY, () => hasCloudApiKeySecret());
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_CHECK_CLOUD_HEALTH, async () => {
+    if (!isCloudEnabled()) {
+      return 'disabled' as const;
+    }
+
+    if (!hasCloudApiKeySecret()) {
+      return 'missing-key' as const;
+    }
+
+    const healthy = await cloudApi.checkHealth();
+    return healthy ? ('ready' as const) : ('error' as const);
+  });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY, () => getAwsRecoveryConfig());
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, (_, config: Partial<AwsRecoveryConfig>) => {
     if (!config || typeof config !== 'object') {

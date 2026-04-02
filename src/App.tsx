@@ -18,6 +18,7 @@ import { HelpPage } from './pages/HelpPage';
 
 const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings', 'help'];
 const PAGE_TRANSITION_MS = 280;
+const CLOUD_HEALTH_CHECK_INTERVAL_MS = 15000;
 
 type AwsRecoveryForm = {
   aws_enabled: string;
@@ -94,19 +95,11 @@ export function App() {
   useEffect(() => {
     async function checkConnection() {
       try {
-        const [configuredStoreNameResult, lastActivePageResult, hasApiKeyResult, awsRecoveryConfigResult] =
+        const [configuredStoreNameResult, lastActivePageResult] =
           await Promise.allSettled([
           window.electronAPI.settings.get('store_name'),
           window.electronAPI.settings.get('last_active_page'),
-          window.electronAPI.settings.hasCloudApiKey(),
-          window.electronAPI.settings.getAwsRecovery(),
         ] as const);
-
-        const awsRecoveryConfig =
-          awsRecoveryConfigResult.status === 'fulfilled'
-            ? (awsRecoveryConfigResult.value as AwsRecoveryForm)
-            : DEFAULT_AWS_RECOVERY_FORM;
-        const hasApiKey = hasApiKeyResult.status === 'fulfilled' ? Boolean(hasApiKeyResult.value) : false;
         const configuredStoreName =
           configuredStoreNameResult.status === 'fulfilled'
             ? (configuredStoreNameResult.value as string | null | undefined)
@@ -117,7 +110,10 @@ export function App() {
             : undefined;
         const localSettingsAvailable =
           configuredStoreNameResult.status === 'fulfilled' && lastActivePageResult.status === 'fulfilled';
-        const cloudReady = awsRecoveryConfig.aws_enabled === '1' && hasApiKey;
+
+        const cloudStatusResult = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        setCloudStatus(cloudStatusResult);
+        const cloudReady = cloudStatusResult === 'ready';
 
         if (configuredStoreName?.trim()) {
           setStoreName(configuredStoreName.trim());
@@ -125,12 +121,6 @@ export function App() {
 
         if (lastActivePage && isPageId(lastActivePage)) {
           setCurrentPage(lastActivePage);
-        }
-
-        if (awsRecoveryConfig.aws_enabled === '1') {
-          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
-        } else {
-          setCloudStatus('disabled');
         }
 
         if (localSettingsAvailable) {
@@ -171,6 +161,35 @@ export function App() {
   }, [currentPage, dbStatus]);
 
   useEffect(() => {
+    async function refreshCloudStatus() {
+      try {
+        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        setCloudStatus(status);
+      } catch (error) {
+        console.error('Error checking cloud health:', error);
+        setCloudStatus('error');
+      }
+    }
+
+    void refreshCloudStatus();
+    const intervalId = window.setInterval(() => {
+      void refreshCloudStatus();
+    }, CLOUD_HEALTH_CHECK_INTERVAL_MS);
+    const onBrowserConnectivityChange = () => {
+      void refreshCloudStatus();
+    };
+
+    window.addEventListener('online', onBrowserConnectivityChange);
+    window.addEventListener('offline', onBrowserConnectivityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('online', onBrowserConnectivityChange);
+      window.removeEventListener('offline', onBrowserConnectivityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (dbStatus !== 'error' || startupMode !== 'recovery') {
       return;
     }
@@ -193,11 +212,8 @@ export function App() {
           aws_retry_max: config.aws_retry_max || '2',
         });
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
-        if (config.aws_enabled === '1') {
-          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
-        } else {
-          setCloudStatus('disabled');
-        }
+        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        setCloudStatus(status);
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo cargar configuracion AWS de recuperacion');
       } finally {
@@ -260,11 +276,8 @@ export function App() {
 
         const hasApiKey = await window.electronAPI.settings.hasCloudApiKey();
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
-        if (awsRecoveryForm.aws_enabled === '1') {
-          setCloudStatus(hasApiKey ? 'ready' : 'missing-key');
-        } else {
-          setCloudStatus('disabled');
-        }
+        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        setCloudStatus(status);
         setAwsRecoveryMessage('Configuracion AWS guardada. Reinicia la app para reintentar la conexion.');
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo guardar la configuracion AWS');

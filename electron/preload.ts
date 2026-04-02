@@ -202,6 +202,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, value),
     hasCloudApiKey: () =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY),
+    checkCloudHealth: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CHECK_CLOUD_HEALTH),
     getAwsRecovery: () =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY),
     setAwsRecovery: (config: {
