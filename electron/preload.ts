@@ -47,7 +47,13 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, id),
     deletePermanently: (id: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, id),
-    getAllPaginated: (query: PaginatedQuery & { categoryId?: number; lowStock?: boolean }) =>
+    getAllPaginated: (query: PaginatedQuery & {
+      categoryId?: number;
+      lowStock?: boolean;
+      startsWith?: string;
+      stockMode?: 'eq' | 'lte' | 'gte';
+      stockValue?: number;
+    }) =>
       ipcRenderer.invoke(IPC_CHANNELS.PRODUCTS_GET_ALL_PAGINATED, query),
   },
 

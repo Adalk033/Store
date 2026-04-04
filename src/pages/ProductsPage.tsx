@@ -10,6 +10,8 @@ import type { Product, PaginatedResponse } from '../types';
 import styles from './ProductsPage.module.css';
 
 type ViewMode = 'list' | 'form' | 'categories';
+type StockFilterMode = 'all' | 'eq' | 'lte' | 'gte';
+type ProductsSortOrder = 'name_asc' | 'name_desc' | 'created_desc' | 'created_asc';
 
 const ROWS_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
 
@@ -34,6 +36,9 @@ export function ProductsPage() {
   const [filterCategory, setFilterCategory] = useState<number | ''>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
   const [filterLowStock, setFilterLowStock] = useState(false);
+  const [sortOrder, setSortOrder] = useState<ProductsSortOrder>('name_asc');
+  const [filterStockMode, setFilterStockMode] = useState<StockFilterMode>('all');
+  const [filterStockValue, setFilterStockValue] = useState<string>('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Product | null>(null);
   const [canDeletePermanently, setCanDeletePermanently] = useState(false);
@@ -51,10 +56,16 @@ export function ProductsPage() {
     category: number | '';
     status: 'all' | 'active' | 'inactive';
     lowStock: boolean;
+    sortOrder: ProductsSortOrder;
+    stockMode: StockFilterMode;
+    stockValue?: number;
   }>({
     category: '',
     status: 'active',
     lowStock: false,
+    sortOrder: 'name_asc',
+    stockMode: 'all',
+    stockValue: undefined,
   });
   const loadPageRef = useRef<((
     page: number,
@@ -62,10 +73,30 @@ export function ProductsPage() {
     category: number | '',
     status: string,
     lowStock: boolean,
+    sortOrder: ProductsSortOrder,
+    stockMode: StockFilterMode,
+    stockValue?: number,
   ) => Promise<void>) | null>(null);
 
+  const parsedStockFilterValue = useMemo(() => {
+    const trimmed = filterStockValue.trim();
+    if (!trimmed) return undefined;
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric) || numeric < 0) return undefined;
+    return Math.trunc(numeric);
+  }, [filterStockValue]);
+
   // Fetch paginated data from server
-  const loadPage = useCallback(async (page: number, search: string, category: number | '', status: string, lowStock: boolean) => {
+  const loadPage = useCallback(async (
+    page: number,
+    search: string,
+    category: number | '',
+    status: string,
+    lowStock: boolean,
+    sortOrder: ProductsSortOrder,
+    stockMode: StockFilterMode,
+    stockValue?: number,
+  ) => {
     try {
       setLoading(true);
       const query: {
@@ -75,15 +106,30 @@ export function ProductsPage() {
         status?: string;
         categoryId?: number;
         lowStock?: boolean;
+        stockMode?: Exclude<StockFilterMode, 'all'>;
+        stockValue?: number;
+        sort?: { field: 'name' | 'created_at'; direction: 'ASC' | 'DESC' };
       } = {
         page,
         pageSize: rowsPerPage,
+      };
+
+      const sortMap: Record<ProductsSortOrder, { field: 'name' | 'created_at'; direction: 'ASC' | 'DESC' }> = {
+        name_asc: { field: 'name', direction: 'ASC' },
+        name_desc: { field: 'name', direction: 'DESC' },
+        created_desc: { field: 'created_at', direction: 'DESC' },
+        created_asc: { field: 'created_at', direction: 'ASC' },
       };
 
       if (search.trim()) query.search = search;
       if (status !== 'all') query.status = status;
       if (category !== '') query.categoryId = category;
       if (lowStock) query.lowStock = true;
+      if (stockMode !== 'all' && Number.isInteger(stockValue) && stockValue !== undefined) {
+        query.stockMode = stockMode;
+        query.stockValue = stockValue;
+      }
+      query.sort = sortMap[sortOrder];
 
       const result = await fetchProductsPaginated(query);
       setPaginatedData(result);
@@ -96,16 +142,28 @@ export function ProductsPage() {
 
   // Reload current page
   const reloadCurrentPage = useCallback(() => {
-    loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
-  }, [loadPage, currentPage, searchQuery, filterCategory, filterStatus, filterLowStock]);
+    loadPage(
+      currentPage,
+      searchQuery,
+      filterCategory,
+      filterStatus,
+      filterLowStock,
+      sortOrder,
+      filterStockMode,
+      parsedStockFilterValue,
+    );
+  }, [loadPage, currentPage, searchQuery, filterCategory, filterStatus, filterLowStock, sortOrder, filterStockMode, parsedStockFilterValue]);
 
   useEffect(() => {
     latestFiltersRef.current = {
       category: filterCategory,
       status: filterStatus,
       lowStock: filterLowStock,
+      sortOrder,
+      stockMode: filterStockMode,
+      stockValue: parsedStockFilterValue,
     };
-  }, [filterCategory, filterStatus, filterLowStock]);
+  }, [filterCategory, filterStatus, filterLowStock, sortOrder, filterStockMode, parsedStockFilterValue]);
 
   useEffect(() => {
     loadPageRef.current = loadPage;
@@ -113,8 +171,17 @@ export function ProductsPage() {
 
   // Load data when filters or page change
   useEffect(() => {
-    loadPage(currentPage, searchQuery, filterCategory, filterStatus, filterLowStock);
-  }, [loadPage, currentPage, filterCategory, filterStatus, filterLowStock]);
+    loadPage(
+      currentPage,
+      searchQuery,
+      filterCategory,
+      filterStatus,
+      filterLowStock,
+      sortOrder,
+      filterStockMode,
+      parsedStockFilterValue,
+    );
+  }, [loadPage, currentPage, filterCategory, filterStatus, filterLowStock, sortOrder, filterStockMode, parsedStockFilterValue]);
 
   // Load persisted settings (including default margin percent for new products)
   useEffect(() => {
@@ -125,10 +192,10 @@ export function ProductsPage() {
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      const { category, status, lowStock } = latestFiltersRef.current;
+      const { category, status, lowStock, sortOrder, stockMode, stockValue } = latestFiltersRef.current;
       if (!loadPageRef.current) return;
       setCurrentPage(1);
-      loadPageRef.current(1, searchQuery, category, status, lowStock);
+      loadPageRef.current(1, searchQuery, category, status, lowStock, sortOrder, stockMode, stockValue);
     }, 300);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -175,6 +242,40 @@ export function ProductsPage() {
   const categoryMap = useMemo(() => {
     const map = new Map<number, string>();
     categories.forEach(c => map.set(c.id, c.name));
+    return map;
+  }, [categories]);
+
+  const categoryPathMap = useMemo(() => {
+    const map = new Map<number, string>();
+
+    const buildPath = (categoryId: number): string => {
+      const cached = map.get(categoryId);
+      if (cached) return cached;
+
+      const pathParts: string[] = [];
+      const visited = new Set<number>();
+      let currentId: number | null = categoryId;
+
+      while (currentId !== null) {
+        if (visited.has(currentId)) break;
+        visited.add(currentId);
+
+        const currentCategory = categories.find((c) => c.id === currentId);
+        if (!currentCategory) break;
+
+        pathParts.unshift(currentCategory.name);
+        currentId = currentCategory.parent_id;
+      }
+
+      const pathLabel = pathParts.join(' / ');
+      map.set(categoryId, pathLabel);
+      return pathLabel;
+    };
+
+    categories.forEach((category) => {
+      buildPath(category.id);
+    });
+
     return map;
   }, [categories]);
 
@@ -436,6 +537,47 @@ export function ProductsPage() {
         </select>
         <select
           className={styles['toolbar__filter']}
+          value={sortOrder}
+          onChange={e => { setSortOrder(e.target.value as ProductsSortOrder); setCurrentPage(1); }}
+          title="Ordenar productos"
+        >
+          <option value="name_asc">Orden: A a Z</option>
+          <option value="name_desc">Orden: Z a A</option>
+          <option value="created_desc">Mas nuevos</option>
+          <option value="created_asc">Mas viejos</option>
+        </select>
+        <select
+          className={styles['toolbar__filter']}
+          value={filterStockMode}
+          onChange={e => {
+            const mode = e.target.value as StockFilterMode;
+            setFilterStockMode(mode);
+            if (mode === 'all') setFilterStockValue('');
+            setCurrentPage(1);
+          }}
+          title="Filtrar por numero de stock"
+        >
+          <option value="all">Stock: todos</option>
+          <option value="eq">Stock igual a</option>
+          <option value="lte">Stock menor o igual</option>
+          <option value="gte">Stock mayor o igual</option>
+        </select>
+        <input
+          className={styles['toolbar__filter']}
+          type="number"
+          min={0}
+          step={1}
+          placeholder="Stock #"
+          value={filterStockValue}
+          onChange={(e) => {
+            setFilterStockValue(e.target.value);
+            setCurrentPage(1);
+          }}
+          disabled={filterStockMode === 'all'}
+          title="Numero de stock"
+        />
+        <select
+          className={styles['toolbar__filter']}
           value={rowsPerPage}
           onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
         >
@@ -481,7 +623,8 @@ export function ProductsPage() {
                     <div className={styles['table__barcode']}>{product.barcode}</div>
                   </td>
                   <td className={styles['table__category']}>
-                    {product.category_id ? categoryMap.get(product.category_id) ?? '-' : '-'}
+                    {product.category_name
+                      ?? (product.category_id ? categoryPathMap.get(product.category_id) ?? categoryMap.get(product.category_id) ?? '-' : '-')}
                   </td>
                   <td className={styles['table__cost']}>{formatCurrency(product.cost_price)}</td>
                   <td className={styles['table__price']}>{formatCurrency(product.sale_price)}</td>

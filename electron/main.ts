@@ -435,6 +435,13 @@ function registerIpcHandlers(): void {
           status: typeof q.status === 'string' ? q.status : undefined,
           categoryId: typeof q.categoryId === 'number' ? q.categoryId : undefined,
           lowStock: typeof q.lowStock === 'boolean' ? q.lowStock : undefined,
+          startsWith: typeof q.startsWith === 'string' ? q.startsWith.slice(0, 4).toUpperCase() : undefined,
+          stockMode: q.stockMode === 'eq' || q.stockMode === 'lte' || q.stockMode === 'gte'
+            ? q.stockMode
+            : undefined,
+          stockValue: typeof q.stockValue === 'number' && Number.isFinite(q.stockValue)
+            ? Math.max(0, Math.trunc(q.stockValue))
+            : undefined,
           sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
         });
       }
@@ -446,6 +453,13 @@ function registerIpcHandlers(): void {
         status: typeof q.status === 'string' ? q.status : undefined,
         categoryId: typeof q.categoryId === 'number' ? q.categoryId : undefined,
         lowStock: typeof q.lowStock === 'boolean' ? q.lowStock : undefined,
+        startsWith: typeof q.startsWith === 'string' ? q.startsWith.slice(0, 4).toUpperCase() : undefined,
+        stockMode: q.stockMode === 'eq' || q.stockMode === 'lte' || q.stockMode === 'gte'
+          ? q.stockMode
+          : undefined,
+        stockValue: typeof q.stockValue === 'number' && Number.isFinite(q.stockValue)
+          ? Math.max(0, Math.trunc(q.stockValue))
+          : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
       });
     }
