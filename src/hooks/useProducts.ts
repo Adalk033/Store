@@ -159,6 +159,9 @@ export function useProducts() {
     status?: string;
     categoryId?: number;
     lowStock?: boolean;
+    startsWith?: string;
+    stockMode?: 'eq' | 'lte' | 'gte';
+    stockValue?: number;
     sort?: { field: string; direction: 'ASC' | 'DESC' };
   }): Promise<PaginatedResponse<Product>> => {
     try {

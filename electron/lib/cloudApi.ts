@@ -441,7 +441,13 @@ export class CloudApi {
     return this.request<{ deleted: boolean }>('DELETE', `/v1/products/${id}/permanent`).then((r) => r.deleted);
   }
 
-  async getProductsPaginated(query: PaginatedQuery & { categoryId?: number; lowStock?: boolean }): Promise<PaginatedResponse<Product>> {
+  async getProductsPaginated(query: PaginatedQuery & {
+    categoryId?: number;
+    lowStock?: boolean;
+    startsWith?: string;
+    stockMode?: 'eq' | 'lte' | 'gte';
+    stockValue?: number;
+  }): Promise<PaginatedResponse<Product>> {
     const sort = query.sort ?? ({ field: 'name', direction: 'ASC' } as SortSpec);
     const all = await this.getProducts({
       search: query.search,
@@ -449,22 +455,61 @@ export class CloudApi {
       low_stock: query.lowStock,
     });
 
-    const filtered = query.status === 'active'
+    let filtered = query.status === 'active'
       ? all.filter((p) => p.is_active === 1)
       : query.status === 'inactive'
       ? all.filter((p) => p.is_active === 0)
       : all;
 
+    if (query.startsWith === '0-9') {
+      filtered = filtered.filter((p) => /^\d/.test((p.name || '').trim()));
+    } else if (typeof query.startsWith === 'string' && /^[A-Z]$/.test(query.startsWith)) {
+      const startsWith = query.startsWith.toUpperCase();
+      filtered = filtered.filter((p) => (p.name || '').toUpperCase().startsWith(startsWith));
+    }
+
+    if (
+      (query.stockMode === 'eq' || query.stockMode === 'lte' || query.stockMode === 'gte') &&
+      typeof query.stockValue === 'number' &&
+      Number.isFinite(query.stockValue) &&
+      query.stockValue >= 0
+    ) {
+      const stockValue = Math.trunc(query.stockValue);
+      filtered = filtered.filter((p) => {
+        if (query.stockMode === 'eq') return p.stock === stockValue;
+        if (query.stockMode === 'lte') return p.stock <= stockValue;
+        return p.stock >= stockValue;
+      });
+    }
+
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+
+      if (sort.field === 'created_at') {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        comparison = (Number.isFinite(aTime) ? aTime : 0) - (Number.isFinite(bTime) ? bTime : 0);
+      } else {
+        comparison = (a.name || '').localeCompare((b.name || ''), 'es', { sensitivity: 'base' });
+      }
+
+      if (comparison === 0) {
+        comparison = a.id - b.id;
+      }
+
+      return sort.direction === 'DESC' ? -comparison : comparison;
+    });
+
     const start = (Math.max(1, query.page) - 1) * Math.max(1, query.pageSize);
     const end = start + Math.max(1, query.pageSize);
-    const items = filtered.slice(start, end);
+    const items = sorted.slice(start, end);
 
     return {
       items,
       page: Math.max(1, query.page),
       pageSize: Math.max(1, query.pageSize),
-      total: filtered.length,
-      hasMore: end < filtered.length,
+      total: sorted.length,
+      hasMore: end < sorted.length,
       sort,
     };
   }

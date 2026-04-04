@@ -14,6 +14,9 @@ interface ProductPaginatedQuery {
   status?: string;
   categoryId?: number;
   lowStock?: boolean;
+  startsWith?: string;
+  stockMode?: 'eq' | 'lte' | 'gte';
+  stockValue?: number;
   sort?: SortSpec;
 }
 
@@ -41,6 +44,33 @@ export function getAllProductsPaginated(query: ProductPaginatedQuery): Paginated
   if (typeof query.categoryId === 'number' && Number.isInteger(query.categoryId) && query.categoryId >= 1) {
     conditions.push('p.category_id = ?');
     params.push(query.categoryId);
+  }
+
+  // Alphabetical filter by first character
+  if (typeof query.startsWith === 'string' && query.startsWith) {
+    if (query.startsWith === '0-9') {
+      conditions.push("SUBSTR(TRIM(COALESCE(p.name, '')), 1, 1) GLOB '[0-9]'");
+    } else if (/^[A-Z]$/.test(query.startsWith)) {
+      conditions.push("UPPER(COALESCE(p.name, '')) LIKE ? ESCAPE '\\'");
+      params.push(`${query.startsWith}%`);
+    }
+  }
+
+  // Stock number filter
+  if (
+    (query.stockMode === 'eq' || query.stockMode === 'lte' || query.stockMode === 'gte') &&
+    typeof query.stockValue === 'number' &&
+    Number.isInteger(query.stockValue) &&
+    query.stockValue >= 0
+  ) {
+    if (query.stockMode === 'eq') {
+      conditions.push('p.stock = ?');
+    } else if (query.stockMode === 'lte') {
+      conditions.push('p.stock <= ?');
+    } else {
+      conditions.push('p.stock >= ?');
+    }
+    params.push(query.stockValue);
   }
 
   // Low stock filter
