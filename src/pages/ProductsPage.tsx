@@ -594,12 +594,12 @@ export function ProductsPage() {
         <table className={styles.table}>
           <thead>
             <tr>
+              <th style={{ textAlign: 'center' }}>Stock</th>
               <th>Producto</th>
               <th>Categoria</th>
               <th style={{ textAlign: 'right' }}>Costo</th>
-              <th style={{ textAlign: 'right' }}>Precio venta</th>
               <th style={{ textAlign: 'center' }}>%</th>
-              <th style={{ textAlign: 'center' }}>Stock</th>
+              <th style={{ textAlign: 'right' }}>Precio venta</th>
               <th>Estado</th>
               <th style={{ textAlign: 'right' }}>Acciones</th>
             </tr>
@@ -618,19 +618,6 @@ export function ProductsPage() {
             ) : (
               displayedProducts.map(product => (
                 <tr key={product.id} className={product.is_active === 0 ? styles['table__inactive'] : undefined}>
-                  <td>
-                    <div className={styles['table__name']}>{product.name}</div>
-                    <div className={styles['table__barcode']}>{product.barcode}</div>
-                  </td>
-                  <td className={styles['table__category']}>
-                    {product.category_name
-                      ?? (product.category_id ? categoryPathMap.get(product.category_id) ?? categoryMap.get(product.category_id) ?? '-' : '-')}
-                  </td>
-                  <td className={styles['table__cost']}>{formatCurrency(product.cost_price)}</td>
-                  <td className={styles['table__price']}>{formatCurrency(product.sale_price)}</td>
-                  <td style={{ textAlign: 'center', fontSize: 'var(--font-size-sm)' }}>
-                    {product.margin_percent}%
-                  </td>
                   <td className={`${styles['table__stock']} ${getStockClass(product)}`}>
                     {product.stock}
                     {product.min_stock < 0 && product.is_active === 1 && (
@@ -640,6 +627,19 @@ export function ProductsPage() {
                       <AlertTriangle size={12} strokeWidth={2} style={{ marginLeft: 4, verticalAlign: 'middle' }} />
                     )}
                   </td>
+                  <td>
+                    <div className={styles['table__name']}>{product.name}</div>
+                    <div className={styles['table__barcode']}>{product.barcode}</div>
+                  </td>
+                  <td className={styles['table__category']}>
+                    {product.category_name
+                      ?? (product.category_id ? categoryPathMap.get(product.category_id) ?? categoryMap.get(product.category_id) ?? '-' : '-')}
+                  </td>
+                  <td className={styles['table__cost']}>{formatCurrency(product.cost_price)}</td>
+                  <td style={{ textAlign: 'center', fontSize: 'var(--font-size-sm)' }}>
+                    {product.margin_percent}%
+                  </td>
+                  <td className={styles['table__price']}>{formatCurrency(product.sale_price)}</td>
                   <td>
                     <span className={`${styles['table__badge']} ${product.is_active === 1 ? styles['table__badge--active'] : styles['table__badge--inactive']}`}>
                       {product.is_active === 1 ? 'Activo' : 'Inactivo'}
