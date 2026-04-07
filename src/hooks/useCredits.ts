@@ -47,8 +47,19 @@ export function useCredits() {
 
   const addPayment = useCallback(async (creditId: number, amount: number, paymentDate?: string): Promise<Credit> => {
     try {
-      const updated = await window.electronAPI.credits.addPayment(creditId, amount, paymentDate);
-      setCredits(prev => prev.map(c => c.id === creditId ? updated : c));
+      const normalizedCreditId = Number(creditId);
+      const normalizedAmount = Number(amount);
+
+      if (!Number.isInteger(normalizedCreditId) || normalizedCreditId < 1) {
+        throw new Error('ID de credito invalido');
+      }
+
+      if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+        throw new Error('Monto de abono invalido');
+      }
+
+      const updated = await window.electronAPI.credits.addPayment(normalizedCreditId, normalizedAmount, paymentDate);
+      setCredits(prev => prev.map(c => c.id === normalizedCreditId ? updated : c));
       return updated;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al registrar abono';

@@ -30,6 +30,11 @@ const RENDERER_DIST = path.join(__dirname, '../dist');
 
 let mainWindow: BrowserWindow | null = null;
 
+let cloudHealthInFlight: Promise<'ready' | 'error'> | null = null;
+let lastCloudHealthStatus: 'ready' | 'error' | null = null;
+let lastCloudHealthCheckedAt = 0;
+const CLOUD_HEALTH_CACHE_MS = 5000;
+
 const CLOUD_API_KEY_FILE = 'cloud-api-key.bin';
 const AWS_BOOTSTRAP_FILE = 'aws-bootstrap.json';
 
@@ -261,6 +266,22 @@ function getCloudApiConfig() {
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs >= 1000 ? timeoutMs : 5000,
     retryMax: Number.isFinite(retryMax) && retryMax >= 0 ? retryMax : 2,
   };
+}
+
+function normalizePositiveIntegerId(value: unknown, fieldName: string): number {
+  const normalized = typeof value === 'string' ? Number(value.trim()) : value;
+  if (typeof normalized !== 'number' || !Number.isInteger(normalized) || normalized < 1) {
+    throw new Error(`ID de ${fieldName} invalido`);
+  }
+  return normalized;
+}
+
+function normalizePositiveAmount(value: unknown): number {
+  const normalized = typeof value === 'string' ? Number(value.trim()) : value;
+  if (typeof normalized !== 'number' || !Number.isFinite(normalized) || normalized <= 0) {
+    throw new Error('Monto de abono invalido');
+  }
+  return normalized;
 }
 
 const cloudApi = new CloudApi(getCloudApiConfig);
@@ -685,13 +706,9 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(
     IPC_CHANNELS.CREDITS_ADD_PAYMENT,
-    (_, creditId: number, amount: number, paymentDate?: string, idempotencyKey?: string) => {
-      if (typeof creditId !== 'number' || !Number.isInteger(creditId) || creditId < 1) {
-        throw new Error('ID de credito invalido');
-      }
-      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-        throw new Error('Monto de abono invalido');
-      }
+    (_, creditIdInput: unknown, amountInput: unknown, paymentDate?: string, idempotencyKey?: string) => {
+      const creditId = normalizePositiveIntegerId(creditIdInput, 'credito');
+      const amount = normalizePositiveAmount(amountInput);
       if (paymentDate !== undefined && typeof paymentDate !== 'string') {
         throw new Error('Fecha de abono invalida');
       }
@@ -1272,8 +1289,29 @@ function registerIpcHandlers(): void {
       return 'missing-key' as const;
     }
 
-    const healthy = await cloudApi.checkHealth();
-    return healthy ? ('ready' as const) : ('error' as const);
+    const now = Date.now();
+    if (
+      lastCloudHealthStatus
+      && (now - lastCloudHealthCheckedAt) < CLOUD_HEALTH_CACHE_MS
+    ) {
+      return lastCloudHealthStatus;
+    }
+
+    if (!cloudHealthInFlight) {
+      cloudHealthInFlight = (async () => {
+        const healthy = await cloudApi.checkHealth();
+        const status: 'ready' | 'error' = healthy ? 'ready' : 'error';
+        lastCloudHealthStatus = status;
+        lastCloudHealthCheckedAt = Date.now();
+        return status;
+      })();
+
+      cloudHealthInFlight.finally(() => {
+        cloudHealthInFlight = null;
+      });
+    }
+
+    return cloudHealthInFlight;
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY, () => getAwsRecoveryConfig());
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, (_, config: Partial<AwsRecoveryConfig>) => {

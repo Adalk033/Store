@@ -45,6 +45,10 @@ export function getCreditById(id: number): Credit | undefined {
   return db.prepare('SELECT * FROM credits WHERE id = ?').get(id) as Credit | undefined;
 }
 
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function resolvePaymentCreatedAt(paymentDate: string | undefined, businessTimeZone: string): string {
   const todayDate = getBusinessTodayDate(businessTimeZone);
 
@@ -89,6 +93,11 @@ export function addCreditPayment(
   const db = getDatabase();
   const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
   const paymentCreatedAt = resolvePaymentCreatedAt(paymentDate, businessTimeZone);
+  const paymentAmount = roundMoney(amount);
+
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    throw new Error('Monto de abono invalido');
+  }
 
   // Idempotency check: return existing credit state if same key was already processed
   const idempotencyKey = isValidIdempotencyKey(idempotencyKeyInput) ? idempotencyKeyInput : null;
@@ -113,12 +122,12 @@ export function addCreditPayment(
     // Insert payment record
     db.prepare(
       'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(creditId, amount, openPeriod.id, idempotencyKey, paymentCreatedAt);
+    ).run(creditId, paymentAmount, openPeriod.id, idempotencyKey, paymentCreatedAt);
 
     // Update credit amount_paid
     db.prepare(
-      'UPDATE credits SET amount_paid = amount_paid + ? WHERE id = ?'
-    ).run(amount, creditId);
+      'UPDATE credits SET amount_paid = ROUND(amount_paid + ?, 2) WHERE id = ?'
+    ).run(paymentAmount, creditId);
 
     // Check if fully paid
     const credit = getCreditById(creditId)!;

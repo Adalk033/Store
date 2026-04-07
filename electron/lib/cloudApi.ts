@@ -296,6 +296,12 @@ function paginateArray<T>(items: T[], page: number, pageSize: number): { slice: 
   };
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export class CloudApi {
   private readonly getConfig: () => CloudConfig;
 
@@ -343,6 +349,10 @@ export class CloudApi {
         if (attempt >= config.retryMax) {
           throw lastError;
         }
+
+        const backoffMs = Math.min(2000, 250 * (2 ** attempt));
+        const jitterMs = Math.floor(Math.random() * 150);
+        await wait(backoffMs + jitterMs);
       } finally {
         clearTimeout(timer);
       }

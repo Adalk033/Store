@@ -290,7 +290,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
     if (!selectedCredit) return;
 
-    const amount = parseFloat(paymentAmount);
+    const amount = Math.round((parseFloat(paymentAmount) + Number.EPSILON) * 100) / 100;
     if (isNaN(amount) || amount <= 0) {
       setPaymentError('Ingresa un monto valido mayor a 0');
       return;
