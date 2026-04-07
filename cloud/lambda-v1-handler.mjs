@@ -930,10 +930,15 @@ const handler = async (event) => {
       }
       const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
       const r = await pool.query(
-        `SELECT s.*, c.name AS customer_name
+        `SELECT
+          s.*,
+          c.name AS customer_name,
+          COALESCE(SUM(si.quantity), 0) AS item_count
          FROM sales s
          LEFT JOIN customers c ON c.id = s.customer_id
+         LEFT JOIN sale_items si ON si.sale_id = s.id
          ${whereSql}
+         GROUP BY s.id, c.name
          ORDER BY s.created_at DESC, s.id DESC
          LIMIT 500`,
         params

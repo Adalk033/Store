@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import { useSales } from '../hooks/useSales';
-import { formatCurrency, formatDateTime } from '../lib/formatters';
+import { formatCurrency, formatDateTime, formatInteger } from '../lib/formatters';
 import type { SaleDetail, SaleListItem, PaginatedQuery } from '../types';
 import styles from './SalesPage.module.css';
 
@@ -60,6 +60,15 @@ function getRangeDateFrom(range: TimeRangeFilter): string | undefined {
   }
 
   return formatDateYMD(start);
+}
+
+function normalizeInteger(value: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.round(parsed);
 }
 
 export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
@@ -293,7 +302,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
   }
 
   if (viewMode === 'detail' && selectedSale) {
-    const totalItems = selectedSale.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = selectedSale.items.reduce((sum, item) => sum + normalizeInteger(item.quantity), 0);
 
     return (
       <div className={styles.page}>
@@ -363,7 +372,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
               </div>
               <div className={styles['detail-card__row']}>
                 <span className={styles['detail-card__label']}>Articulos</span>
-                <span className={styles['detail-card__value']}>{totalItems}</span>
+                <span className={styles['detail-card__value']}>{formatInteger(totalItems)}</span>
               </div>
             </div>
           </section>
@@ -411,7 +420,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                   <tr key={item.id}>
                     <td>{item.product_name}</td>
                     <td className={styles['table__meta']}>{item.product_barcode || 'N/D'}</td>
-                    <td>{item.quantity}</td>
+                    <td>{formatInteger(normalizeInteger(item.quantity))}</td>
                     <td>{formatCurrency(item.unit_price)}</td>
                     <td className={styles['table__strong']}>{formatCurrency(item.line_total)}</td>
                   </tr>
@@ -455,7 +464,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                         </span>
                       </div>
                       <div className={styles['ticket__item-detail']}>
-                        {item.quantity} x {formatCurrency(item.unit_price)}
+                        {formatInteger(normalizeInteger(item.quantity))} x {formatCurrency(item.unit_price)}
                       </div>
                     </div>
                   ))}
@@ -675,7 +684,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                     </span>
                   </td>
                   <td>{sale.customer_name ?? 'Mostrador'}</td>
-                  <td>{sale.item_count}</td>
+                  <td>{formatInteger(normalizeInteger(sale.item_count))}</td>
                   <td className={styles['table__strong']}>{formatCurrency(sale.total)}</td>
                   <td>
                     <button

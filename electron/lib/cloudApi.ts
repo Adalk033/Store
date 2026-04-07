@@ -112,6 +112,88 @@ function normalizeProductRow(raw: unknown): Product {
   return normalized as unknown as Product;
 }
 
+function normalizeSaleListRow(raw: unknown): SaleListItem {
+  if (typeof raw !== 'object' || raw === null) {
+    return raw as SaleListItem;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...row };
+
+  const itemCount = toFiniteNumber(row.item_count ?? row.itemCount);
+  normalized.item_count = itemCount ?? 0;
+
+  const subtotal = toFiniteNumber(row.subtotal);
+  if (subtotal !== undefined) normalized.subtotal = subtotal;
+
+  const surcharge = toFiniteNumber(row.surcharge);
+  if (surcharge !== undefined) normalized.surcharge = surcharge;
+
+  const total = toFiniteNumber(row.total);
+  if (total !== undefined) normalized.total = total;
+
+  const cashReceived = row.cash_received;
+  if (cashReceived === null) {
+    normalized.cash_received = null;
+  } else {
+    const parsedCashReceived = toFiniteNumber(cashReceived);
+    if (parsedCashReceived !== undefined) normalized.cash_received = parsedCashReceived;
+  }
+
+  const cashChange = row.cash_change;
+  if (cashChange === null) {
+    normalized.cash_change = null;
+  } else {
+    const parsedCashChange = toFiniteNumber(cashChange);
+    if (parsedCashChange !== undefined) normalized.cash_change = parsedCashChange;
+  }
+
+  normalized.created_at = normalizeTimestamp(row.created_at);
+  return normalized as unknown as SaleListItem;
+}
+
+function normalizeSaleDetailRow(raw: unknown): SaleDetail {
+  if (typeof raw !== 'object' || raw === null) {
+    return raw as SaleDetail;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...row };
+
+  const subtotal = toFiniteNumber(row.subtotal);
+  if (subtotal !== undefined) normalized.subtotal = subtotal;
+
+  const surcharge = toFiniteNumber(row.surcharge);
+  if (surcharge !== undefined) normalized.surcharge = surcharge;
+
+  const total = toFiniteNumber(row.total);
+  if (total !== undefined) normalized.total = total;
+
+  const rawItems = Array.isArray(row.items) ? row.items : [];
+  normalized.items = rawItems.map((itemRaw) => {
+    if (typeof itemRaw !== 'object' || itemRaw === null) {
+      return itemRaw;
+    }
+
+    const item = itemRaw as Record<string, unknown>;
+    const itemNormalized: Record<string, unknown> = { ...item };
+
+    const quantity = toFiniteNumber(item.quantity);
+    if (quantity !== undefined) itemNormalized.quantity = quantity;
+
+    const unitPrice = toFiniteNumber(item.unit_price);
+    if (unitPrice !== undefined) itemNormalized.unit_price = unitPrice;
+
+    const lineTotal = toFiniteNumber(item.line_total);
+    if (lineTotal !== undefined) itemNormalized.line_total = lineTotal;
+
+    return itemNormalized;
+  });
+
+  normalized.created_at = normalizeTimestamp(row.created_at);
+  return normalized as unknown as SaleDetail;
+}
+
 function toUrl(baseUrl: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const normalizedPath = path.replace(/^\/+/, '');
@@ -587,16 +669,20 @@ export class CloudApi {
     return this.request<{ sale: Sale; created: boolean }>('POST', '/v1/sales', data).then((r) => r.sale);
   }
 
-  getSales(query?: { type?: string; date_from?: string; date_to?: string }): Promise<SaleListItem[]> {
-    return this.request<SaleListItem[]>('GET', '/v1/sales', undefined, query);
+  async getSales(query?: { type?: string; date_from?: string; date_to?: string }): Promise<SaleListItem[]> {
+    const raw = await this.request<unknown>('GET', '/v1/sales', undefined, query);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeSaleListRow);
   }
 
   getSaleById(id: number): Promise<Sale | undefined> {
     return this.request<Sale>('GET', `/v1/sales/${id}`);
   }
 
-  getSaleDetailById(id: number): Promise<SaleDetail | undefined> {
-    return this.request<SaleDetail>('GET', `/v1/sales/${id}/detail`);
+  async getSaleDetailById(id: number): Promise<SaleDetail | undefined> {
+    const raw = await this.request<unknown>('GET', `/v1/sales/${id}/detail`);
+    if (!raw) return undefined;
+    return normalizeSaleDetailRow(raw);
   }
 
   async getSalesPaginated(query: PaginatedQuery): Promise<PaginatedResponse<SaleListItem>> {
