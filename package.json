@@ -14,9 +14,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:build": "npm run build && electron-builder",
-    "postinstall": "electron-builder install-app-deps",
-    "rebuild:native": "electron-builder install-app-deps"
+    "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
