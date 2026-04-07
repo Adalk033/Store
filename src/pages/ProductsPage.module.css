@@ -319,7 +319,7 @@ input.toolbar__filter {
 
 .modal {
   width: 100%;
-  max-width: 480px;
+  max-width: 600px;
   background-color: var(--color-card);
   border: var(--card-border);
   border-radius: var(--radius);

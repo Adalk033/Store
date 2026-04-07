@@ -144,6 +144,25 @@ function getAwsRecoveryConfig(): AwsRecoveryConfig {
   return toAwsRecoveryConfig(merged);
 }
 
+function isCloudEnabled(): boolean {
+  try {
+    return getAwsRecoveryConfig().aws_enabled === '1';
+  } catch (error) {
+    console.error('Failed to evaluate cloud mode flag:', error);
+    return false;
+  }
+}
+
+function canUseCloudApi(): boolean {
+  try {
+    const config = getAwsRecoveryConfig();
+    return config.aws_enabled === '1' && config.aws_api_base_url.trim() !== '' && hasCloudApiKeySecret();
+  } catch (error) {
+    console.error('Failed to evaluate cloud availability:', error);
+    return false;
+  }
+}
+
 function saveAwsRecoveryConfig(input: Partial<AwsRecoveryConfig>): AwsRecoveryConfig {
   const normalized = validateAwsRecoveryConfig(toAwsRecoveryConfig(input));
 
@@ -198,10 +217,6 @@ function getCloudApiKeySecret(): string {
 
   const encrypted = fs.readFileSync(secretPath);
   return safeStorage.decryptString(encrypted).trim();
-}
-
-function isCloudEnabled(): boolean {
-  return getAwsRecoveryConfig().aws_enabled === '1';
 }
 
 function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
@@ -276,17 +291,26 @@ async function getCloudManagedSettingValue(key: string): Promise<string | undefi
   if (!section) {
     return undefined;
   }
-  const data = await cloudApi.getSettingsSection(section);
-  return data.values[key];
+  try {
+    const data = await cloudApi.getSettingsSection(section);
+    return data.values[key];
+  } catch (error) {
+    console.error('Falling back to local settings due to cloud settings access error:', { key, error });
+    return settingsRepo.getSetting(key);
+  }
 }
 
 async function mergeCloudManagedSettings(localRows: Array<{ key: string; value: string }>) {
   const merged = new Map(localRows.map((row) => [row.key, row.value]));
 
   for (const section of Object.keys(CLOUD_SETTINGS_SECTION_KEYS) as CloudSettingsSection[]) {
-    const data = await cloudApi.getSettingsSection(section);
-    for (const [key, value] of Object.entries(data.values)) {
-      merged.set(key, value);
+    try {
+      const data = await cloudApi.getSettingsSection(section);
+      for (const [key, value] of Object.entries(data.values)) {
+        merged.set(key, value);
+      }
+    } catch (error) {
+      console.error('Falling back to local settings for cloud-managed section:', { section, error });
     }
   }
 
@@ -335,32 +359,32 @@ function initDatabase(): void {
 function registerIpcHandlers(): void {
   // Categories
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_ALL, async () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCategories();
     }
     return categoriesRepo.getAllCategories();
   });
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_GET_BY_ID, async (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       const categories = await cloudApi.getCategories();
       return categories.find((c) => c.id === id);
     }
     return categoriesRepo.getCategoryById(id);
   });
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_CREATE, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.createCategory(data);
     }
     return categoriesRepo.createCategory(data);
   });
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_UPDATE, (_, id: number, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.updateCategory(id, data);
     }
     return categoriesRepo.updateCategory(id, data);
   });
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_DELETE, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.deleteCategory(id);
     }
     return categoriesRepo.deleteCategory(id);
@@ -368,58 +392,58 @@ function registerIpcHandlers(): void {
 
   // Products
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_ALL, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getProducts();
     }
     return productsRepo.getAllProducts();
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_ID, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getProductById(id);
     }
     return productsRepo.getProductById(id);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_GET_BY_BARCODE, (_, barcode: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getProductByBarcode(barcode);
     }
     return productsRepo.getProductByBarcode(barcode);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_SEARCH, (_, query: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getProducts({ search: query });
     }
     return productsRepo.searchProducts(query);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_LOW_STOCK, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getLowStockProducts();
     }
     return productsRepo.getLowStockProducts();
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_CREATE, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.createProduct(data);
     }
     return productsRepo.createProduct(data);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_UPDATE, (_, id: number, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.updateProduct(id, data);
     }
     return productsRepo.updateProduct(id, data);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.deleteProduct(id);
     }
     return productsRepo.deleteProduct(id);
   });
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_CAN_DELETE_PERMANENTLY, (_, id: number) =>
-    isCloudEnabled() ? cloudApi.canDeleteProductPermanently(id) : productsRepo.canDeleteProductPermanently(id)
+    canUseCloudApi() ? cloudApi.canDeleteProductPermanently(id) : productsRepo.canDeleteProductPermanently(id)
   );
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_DELETE_PERMANENTLY, (_, id: number) =>
-    isCloudEnabled() ? cloudApi.deleteProductPermanently(id) : productsRepo.deleteProductPermanently(id)
+    canUseCloudApi() ? cloudApi.deleteProductPermanently(id) : productsRepo.deleteProductPermanently(id)
   );
 
   // Products - Paginated endpoint (Phase 4)
@@ -427,7 +451,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.PRODUCTS_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getProductsPaginated({
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -467,31 +491,31 @@ function registerIpcHandlers(): void {
 
   // Customers
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_ALL, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCustomers({ status: 'active' });
     }
     return customersRepo.getAllCustomers();
   });
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_GET_BY_ID, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCustomerById(id);
     }
     return customersRepo.getCustomerById(id);
   });
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_CREATE, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.createCustomer(data);
     }
     return customersRepo.createCustomer(data);
   });
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, id: number, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.updateCustomer(id, data);
     }
     return customersRepo.updateCustomer(id, data);
   });
   ipcMain.handle(IPC_CHANNELS.CUSTOMERS_DELETE, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.deleteCustomer(id);
     }
     return customersRepo.deleteCustomer(id);
@@ -507,7 +531,7 @@ function registerIpcHandlers(): void {
         ? q.creditStatus as (typeof allowedCreditStatuses)[number]
         : undefined;
 
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getCustomersPaginated({
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -531,14 +555,14 @@ function registerIpcHandlers(): void {
 
   // Sales
   ipcMain.handle(IPC_CHANNELS.SALES_CREATE, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.createSale(data);
     }
     const result = salesRepo.createSale(data);
     return result.data;
   });
   ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, async (_, limit?: number, offset?: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       const items = await cloudApi.getSales();
       if (typeof limit === 'number' && typeof offset === 'number') {
         return items.slice(offset, offset + limit);
@@ -548,13 +572,13 @@ function registerIpcHandlers(): void {
     return salesRepo.getAllSales(limit, offset);
   });
   ipcMain.handle(IPC_CHANNELS.SALES_GET_BY_ID, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getSaleById(id);
     }
     return salesRepo.getSaleById(id);
   });
   ipcMain.handle(IPC_CHANNELS.SALES_GET_DETAIL, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getSaleDetailById(id);
     }
     return salesRepo.getSaleDetailById(id);
@@ -565,7 +589,7 @@ function registerIpcHandlers(): void {
       throw new Error('ID de venta invalido');
     }
 
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.deleteSale(parsedId);
     }
 
@@ -577,7 +601,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.SALES_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getSalesPaginated({
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -605,7 +629,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.SALES_GET_SUMMARY,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getSalesSummary({
           search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
           type: typeof q.type === 'string' ? q.type : undefined,
@@ -642,19 +666,19 @@ function registerIpcHandlers(): void {
 
   // Credits
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_ALL, (_, status?: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCredits(status);
     }
     return creditsRepo.getAllCredits(status);
   });
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_ID, (_, id: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCreditById(id);
     }
     return creditsRepo.getCreditById(id);
   });
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, (_, customerId: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCreditsByCustomer(customerId);
     }
     return creditsRepo.getCreditsByCustomer(customerId);
@@ -672,7 +696,7 @@ function registerIpcHandlers(): void {
         throw new Error('Fecha de abono invalida');
       }
 
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.addCreditPayment(creditId, amount, paymentDate, idempotencyKey);
       }
 
@@ -681,13 +705,13 @@ function registerIpcHandlers(): void {
     }
   );
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCreditPayments(creditId);
     }
     return creditsRepo.getCreditPayments(creditId);
   });
   ipcMain.handle(IPC_CHANNELS.CREDITS_CHECK_OVERDUE, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.checkOverdueCredits();
     }
     return creditsRepo.checkOverdueCredits();
@@ -698,7 +722,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CREDITS_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getCreditsPaginated({
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -729,7 +753,7 @@ function registerIpcHandlers(): void {
         throw new Error('ID de cliente invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getCreditsByCustomerPaginated(customerId, {
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -758,7 +782,7 @@ function registerIpcHandlers(): void {
         throw new Error('ID de credito invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getCreditPaymentsPaginated(creditId, {
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
@@ -782,7 +806,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CREDITS_GET_SUMMARY,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getCreditsSummary({
           search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
           status: typeof q.status === 'string' ? q.status : undefined,
@@ -802,19 +826,19 @@ function registerIpcHandlers(): void {
 
   // Inventory
   ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.addInventoryMovement(data);
     }
     return inventoryRepo.addInventoryMovement(data);
   });
   ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, (_, productId: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getInventoryMovementsByProduct(productId);
     }
     return inventoryRepo.getMovementsByProduct(productId);
   });
   ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_ALL, async (_, limit?: number, offset?: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       const items = await cloudApi.getInventoryMovements();
       if (typeof limit === 'number' && typeof offset === 'number') {
         return items.slice(offset, offset + limit);
@@ -829,7 +853,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.INVENTORY_GET_ALL_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getInventoryMovementsPaginated({
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -860,7 +884,7 @@ function registerIpcHandlers(): void {
         throw new Error('ID de producto invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getInventoryMovementsByProductPaginated(productId, {
           page: typeof q.page === 'number' ? q.page : 1,
           pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -884,45 +908,45 @@ function registerIpcHandlers(): void {
 
   // Cash Register
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.openCashRegister(data);
     }
     return cashRegisterRepo.openPeriod(data);
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number, endDate: string, expectedVersion?: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       void expectedVersion;
       return cloudApi.closeCashRegister({ id, closing_cash: closingCash, end_date: endDate });
     }
     return cashRegisterRepo.closePeriod(id, closingCash, endDate, expectedVersion);
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCurrentCashRegister();
     }
     return cashRegisterRepo.getCurrentPeriod();
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_ALL, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCashRegisterPeriods();
     }
     return cashRegisterRepo.getAllPeriods();
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, (_, data) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.addCashMovement(data);
     }
     const result = cashRegisterRepo.addCashMovement(data);
     return result.data;
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCashMovements(cashRegisterId);
     }
     return cashRegisterRepo.getMovementsByPeriod(cashRegisterId);
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, (_, cashRegisterId: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCashRegisterSalesSummary(cashRegisterId);
     }
     return cashRegisterRepo.getSalesSummaryByPeriod(cashRegisterId);
@@ -930,7 +954,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_SALES,
     async (_, cashRegisterId: number, limit?: number, offset?: number) => {
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         const items = await cloudApi.getCashRegisterSales(cashRegisterId);
         if (typeof limit === 'number' && typeof offset === 'number') {
           return items.slice(offset, offset + limit);
@@ -943,7 +967,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS,
     async (_, cashRegisterId: number, limit?: number, offset?: number) => {
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         const items = await cloudApi.getCashRegisterCreditPayments(cashRegisterId);
         if (typeof limit === 'number' && typeof offset === 'number') {
           return items.slice(offset, offset + limit);
@@ -1027,37 +1051,37 @@ function registerIpcHandlers(): void {
 
   // Reports
   ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getSalesByDate(startDate, endDate);
     }
     return reportsRepo.getSalesByDateRange(startDate, endDate);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getTopProducts(startDate, endDate, limit);
     }
     return reportsRepo.getTopProducts(startDate, endDate, limit);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, (_, startDate: string, endDate: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getProfitReport(startDate, endDate);
     }
     return reportsRepo.getProfitReport(startDate, endDate);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getInventoryReport();
     }
     return reportsRepo.getInventoryReport();
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getInventorySummary();
     }
     return reportsRepo.getInventorySummary();
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW, () => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       return cloudApi.getCreditsOverview();
     }
     return reportsRepo.getCreditsOverview();
@@ -1068,7 +1092,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_INVENTORY_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
           cloudApi.getInventoryReport(),
           {
@@ -1092,7 +1116,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_PROFIT_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
           cloudApi.getProfitReport(
             typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
@@ -1121,7 +1145,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_TOP_PRODUCTS_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
           cloudApi.getTopProducts(
             typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
@@ -1150,7 +1174,7 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW_PAGINATED,
     (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
           cloudApi.getCreditsOverview(),
           {
@@ -1172,7 +1196,7 @@ function registerIpcHandlers(): void {
 
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (_, key: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       const section = getCloudSettingsSectionByKey(key);
       if (section) {
         return getCloudManagedSettingValue(key);
@@ -1182,13 +1206,13 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, async () => {
     const localRows = settingsRepo.getAllSettings();
-    if (!isCloudEnabled()) {
+    if (!canUseCloudApi()) {
       return localRows;
     }
     return mergeCloudManagedSettings(localRows);
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, async (_, key: string, value: string) => {
-    if (isCloudEnabled()) {
+    if (canUseCloudApi()) {
       const section = getCloudSettingsSectionByKey(key);
       if (section) {
         await cloudApi.updateSettingsSection(section, { [key]: value });
@@ -1204,7 +1228,7 @@ function registerIpcHandlers(): void {
         throw new Error('No hay configuraciones para guardar');
       }
 
-      if (isCloudEnabled()) {
+      if (canUseCloudApi()) {
         if (!Object.prototype.hasOwnProperty.call(CLOUD_SETTINGS_SECTION_KEYS, section)) {
           throw new Error('Seccion de configuracion invalida');
         }
@@ -1243,7 +1267,8 @@ function registerIpcHandlers(): void {
       return 'disabled' as const;
     }
 
-    if (!hasCloudApiKeySecret()) {
+    const awsConfig = getAwsRecoveryConfig();
+    if (!awsConfig.aws_api_base_url.trim() || !hasCloudApiKeySecret()) {
       return 'missing-key' as const;
     }
 
