@@ -380,7 +380,6 @@ export function POSPage() {
   // Open credit modal
   function handleCreditSaleStart() {
     if (cart.length === 0) return;
-    setSaleDateInput(getTodayLocalDateInput());
     setCreditCustomerId('');
     setCreditInitialPayment('0');
     setShowNewCustomer(false);

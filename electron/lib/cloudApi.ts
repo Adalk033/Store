@@ -112,6 +112,135 @@ function normalizeProductRow(raw: unknown): Product {
   return normalized as unknown as Product;
 }
 
+function normalizeSaleListRow(raw: unknown): SaleListItem {
+  if (typeof raw !== 'object' || raw === null) {
+    return raw as SaleListItem;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...row };
+
+  const id = toFiniteInteger(row.id);
+  if (id !== undefined) normalized.id = id;
+
+  const customerId = row.customer_id;
+  if (customerId === null) {
+    normalized.customer_id = null;
+  } else {
+    const parsedCustomerId = toFiniteInteger(customerId);
+    if (parsedCustomerId !== undefined) normalized.customer_id = parsedCustomerId;
+  }
+
+  const cashRegisterId = row.cash_register_id;
+  if (cashRegisterId === null) {
+    normalized.cash_register_id = null;
+  } else {
+    const parsedCashRegisterId = toFiniteInteger(cashRegisterId);
+    if (parsedCashRegisterId !== undefined) normalized.cash_register_id = parsedCashRegisterId;
+  }
+
+  const itemCount = toFiniteNumber(row.item_count ?? row.itemCount);
+  normalized.item_count = itemCount ?? 0;
+
+  const subtotal = toFiniteNumber(row.subtotal);
+  if (subtotal !== undefined) normalized.subtotal = subtotal;
+
+  const surcharge = toFiniteNumber(row.surcharge);
+  if (surcharge !== undefined) normalized.surcharge = surcharge;
+
+  const total = toFiniteNumber(row.total);
+  if (total !== undefined) normalized.total = total;
+
+  const cashReceived = row.cash_received;
+  if (cashReceived === null) {
+    normalized.cash_received = null;
+  } else {
+    const parsedCashReceived = toFiniteNumber(cashReceived);
+    if (parsedCashReceived !== undefined) normalized.cash_received = parsedCashReceived;
+  }
+
+  const cashChange = row.cash_change;
+  if (cashChange === null) {
+    normalized.cash_change = null;
+  } else {
+    const parsedCashChange = toFiniteNumber(cashChange);
+    if (parsedCashChange !== undefined) normalized.cash_change = parsedCashChange;
+  }
+
+  normalized.created_at = normalizeTimestamp(row.created_at);
+  return normalized as unknown as SaleListItem;
+}
+
+function normalizeSaleDetailRow(raw: unknown): SaleDetail {
+  if (typeof raw !== 'object' || raw === null) {
+    return raw as SaleDetail;
+  }
+
+  const row = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...row };
+
+  const id = toFiniteInteger(row.id);
+  if (id !== undefined) normalized.id = id;
+
+  const customerId = row.customer_id;
+  if (customerId === null) {
+    normalized.customer_id = null;
+  } else {
+    const parsedCustomerId = toFiniteInteger(customerId);
+    if (parsedCustomerId !== undefined) normalized.customer_id = parsedCustomerId;
+  }
+
+  const cashRegisterId = row.cash_register_id;
+  if (cashRegisterId === null) {
+    normalized.cash_register_id = null;
+  } else {
+    const parsedCashRegisterId = toFiniteInteger(cashRegisterId);
+    if (parsedCashRegisterId !== undefined) normalized.cash_register_id = parsedCashRegisterId;
+  }
+
+  const subtotal = toFiniteNumber(row.subtotal);
+  if (subtotal !== undefined) normalized.subtotal = subtotal;
+
+  const surcharge = toFiniteNumber(row.surcharge);
+  if (surcharge !== undefined) normalized.surcharge = surcharge;
+
+  const total = toFiniteNumber(row.total);
+  if (total !== undefined) normalized.total = total;
+
+  const rawItems = Array.isArray(row.items) ? row.items : [];
+  normalized.items = rawItems.map((itemRaw) => {
+    if (typeof itemRaw !== 'object' || itemRaw === null) {
+      return itemRaw;
+    }
+
+    const item = itemRaw as Record<string, unknown>;
+    const itemNormalized: Record<string, unknown> = { ...item };
+
+    const itemId = toFiniteInteger(item.id);
+    if (itemId !== undefined) itemNormalized.id = itemId;
+
+    const saleId = toFiniteInteger(item.sale_id);
+    if (saleId !== undefined) itemNormalized.sale_id = saleId;
+
+    const productId = toFiniteInteger(item.product_id);
+    if (productId !== undefined) itemNormalized.product_id = productId;
+
+    const quantity = toFiniteNumber(item.quantity);
+    if (quantity !== undefined) itemNormalized.quantity = quantity;
+
+    const unitPrice = toFiniteNumber(item.unit_price);
+    if (unitPrice !== undefined) itemNormalized.unit_price = unitPrice;
+
+    const lineTotal = toFiniteNumber(item.line_total);
+    if (lineTotal !== undefined) itemNormalized.line_total = lineTotal;
+
+    return itemNormalized;
+  });
+
+  normalized.created_at = normalizeTimestamp(row.created_at);
+  return normalized as unknown as SaleDetail;
+}
+
 function toUrl(baseUrl: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const normalizedPath = path.replace(/^\/+/, '');
@@ -167,6 +296,12 @@ function paginateArray<T>(items: T[], page: number, pageSize: number): { slice: 
   };
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export class CloudApi {
   private readonly getConfig: () => CloudConfig;
 
@@ -214,6 +349,10 @@ export class CloudApi {
         if (attempt >= config.retryMax) {
           throw lastError;
         }
+
+        const backoffMs = Math.min(2000, 250 * (2 ** attempt));
+        const jitterMs = Math.floor(Math.random() * 150);
+        await wait(backoffMs + jitterMs);
       } finally {
         clearTimeout(timer);
       }
@@ -587,16 +726,24 @@ export class CloudApi {
     return this.request<{ sale: Sale; created: boolean }>('POST', '/v1/sales', data).then((r) => r.sale);
   }
 
-  getSales(query?: { type?: string; date_from?: string; date_to?: string }): Promise<SaleListItem[]> {
-    return this.request<SaleListItem[]>('GET', '/v1/sales', undefined, query);
+  async getSales(query?: { type?: string; date_from?: string; date_to?: string }): Promise<SaleListItem[]> {
+    const raw = await this.request<unknown>('GET', '/v1/sales', undefined, query);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeSaleListRow);
   }
 
   getSaleById(id: number): Promise<Sale | undefined> {
     return this.request<Sale>('GET', `/v1/sales/${id}`);
   }
 
-  getSaleDetailById(id: number): Promise<SaleDetail | undefined> {
-    return this.request<SaleDetail>('GET', `/v1/sales/${id}/detail`);
+  deleteSale(id: number): Promise<boolean> {
+    return this.request<{ deleted: boolean }>('DELETE', `/v1/sales/${id}`).then((r) => r.deleted);
+  }
+
+  async getSaleDetailById(id: number): Promise<SaleDetail | undefined> {
+    const raw = await this.request<unknown>('GET', `/v1/sales/${id}/detail`);
+    if (!raw) return undefined;
+    return normalizeSaleDetailRow(raw);
   }
 
   async getSalesPaginated(query: PaginatedQuery): Promise<PaginatedResponse<SaleListItem>> {
@@ -660,9 +807,10 @@ export class CloudApi {
     return this.request<Credit[]>('GET', `/v1/customers/${customerId}/credits`);
   }
 
-  addCreditPayment(creditId: number, amount: number, idempotencyKey?: string): Promise<Credit> {
+  addCreditPayment(creditId: number, amount: number, paymentDate?: string, idempotencyKey?: string): Promise<Credit> {
     return this.request<{ credit: Credit; created: boolean }>('POST', `/v1/credits/${creditId}/payments`, {
       amount,
+      payment_date: paymentDate,
       idempotency_key: idempotencyKey,
     }).then((r) => r.credit);
   }

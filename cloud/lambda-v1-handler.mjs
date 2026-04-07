@@ -146,6 +146,48 @@ function requireString(value, field, max = 255) {
   }
   return trimmed;
 }
+
+function parseDateOnly(value, field) {
+  const raw = requireString(value, field, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new HttpError(422, "validation_error", `${field} must be YYYY-MM-DD`);
+  }
+  const [year, month, day] = raw.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    throw new HttpError(422, "validation_error", `${field} is invalid`);
+  }
+  return raw;
+}
+
+function todayDateOnly() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function resolveCreatedAtFromDate(dateOnly, field) {
+  if (!dateOnly) {
+    return null;
+  }
+  const validDate = parseDateOnly(dateOnly, field);
+  if (validDate > todayDateOnly()) {
+    throw new HttpError(422, "validation_error", `${field} cannot be in the future`);
+  }
+  if (validDate === todayDateOnly()) {
+    return null;
+  }
+  return `${validDate} 00:00:00`;
+}
+
+function addDaysToDateOnly(dateOnly, days) {
+  const base = new Date(`${dateOnly}T00:00:00`);
+  base.setDate(base.getDate() + days);
+  return base.toISOString().slice(0, 10);
+}
 function normalizePath(rawPath) {
   return rawPath.replace(/\/+$/, "") || "/";
 }
@@ -814,6 +856,8 @@ const handler = async (event) => {
       if (!Array.isArray(body.items) || body.items.length === 0) {
         throw new HttpError(422, "validation_error", "items is required");
       }
+      const saleCreatedAt = resolveCreatedAtFromDate(body.sale_date, "sale_date");
+      const saleDateOnly = saleCreatedAt ? saleCreatedAt.slice(0, 10) : todayDateOnly();
       const idempotencyKey = body.idempotency_key?.trim() || null;
       const data = await withTx(async (client) => {
         if (idempotencyKey) {
@@ -843,8 +887,8 @@ const handler = async (event) => {
           }
         }
         const saleIns = await client.query(
-          `INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, idempotency_key)
-           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7)
+          `INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, idempotency_key, created_at)
+           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7, COALESCE($8::timestamp, NOW()))
            RETURNING *`,
           [
             body.sale_type,
@@ -853,7 +897,8 @@ const handler = async (event) => {
             body.sale_type === "cash" ? body.cash_received ?? subtotal : null,
             body.sale_type === "cash" ? body.cash_change ?? 0 : null,
             cashRegisterId,
-            idempotencyKey
+            idempotencyKey,
+            saleCreatedAt
           ]
         );
         const sale = saleIns.rows[0];
@@ -867,8 +912,8 @@ const handler = async (event) => {
           );
           await client.query("UPDATE products SET stock = stock - $1 WHERE id = $2", [qty, item.product_id]);
           await client.query(
-            "INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes) VALUES ($1, 'out', $2, $3, $4)",
-            [item.product_id, -qty, saleId, "Venta automatica"]
+            "INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes, created_at) VALUES ($1, 'out', $2, $3, $4, COALESCE($5::timestamp, NOW()))",
+            [item.product_id, -qty, saleId, "Venta automatica", saleCreatedAt]
           );
         }
         if (body.sale_type === "credit") {
@@ -887,26 +932,57 @@ const handler = async (event) => {
           if (initialPayment < 0 || initialPayment > subtotal) {
             throw new HttpError(422, "validation_error", "initial_payment is out of range");
           }
-          const dueDate = /* @__PURE__ */ new Date();
-          dueDate.setDate(dueDate.getDate() + creditDays);
-          const dueDateStr = dueDate.toISOString().slice(0, 10);
+          const dueDateStr = addDaysToDateOnly(saleDateOnly, creditDays);
           const status = initialPayment >= subtotal ? "paid" : "pending";
           const creditIns = await client.query(
             `INSERT INTO credits (sale_id, customer_id, original_amount, due_date, surcharge_percent, surcharge_applied, total_due, amount_paid, status, paid_at)
-             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN NOW() ELSE NULL END)
+             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN COALESCE($8::timestamp, NOW()) ELSE NULL END)
              RETURNING *`,
-            [saleId, body.customer_id, subtotal, dueDateStr, surchargePercent, initialPayment, status]
+            [saleId, body.customer_id, subtotal, dueDateStr, surchargePercent, initialPayment, status, saleCreatedAt]
           );
           if (initialPayment > 0) {
             await client.query(
-              "INSERT INTO credit_payments (credit_id, amount, cash_register_id) VALUES ($1, $2, $3)",
-              [creditIns.rows[0].id, initialPayment, cashRegisterId]
+              "INSERT INTO credit_payments (credit_id, amount, cash_register_id, created_at) VALUES ($1, $2, $3, COALESCE($4::timestamp, NOW()))",
+              [creditIns.rows[0].id, initialPayment, cashRegisterId, saleCreatedAt]
             );
           }
         }
         return { created: true, sale };
       });
       return ok(data.created ? 201 : 200, data, requestId);
+    }
+    if (method === "DELETE" && /^\/v1\/sales\/\d+$/.test(path)) {
+      const saleId = getPathId(path, /^\/v1\/sales\/(\d+)$/, "id");
+      const data = await withTx(async (client) => {
+        const sale = await client.query("SELECT id FROM sales WHERE id = $1 LIMIT 1", [saleId]);
+        if (sale.rowCount === 0) {
+          return { deleted: false };
+        }
+
+        const items = await client.query(
+          "SELECT product_id, quantity FROM sale_items WHERE sale_id = $1",
+          [saleId]
+        );
+
+        for (const item of items.rows) {
+          await client.query("UPDATE products SET stock = stock + $1 WHERE id = $2", [item.quantity, item.product_id]);
+          await client.query(
+            "INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes) VALUES ($1, 'in', $2, $3, $4)",
+            [item.product_id, item.quantity, saleId, "Reversion por eliminacion de venta"]
+          );
+        }
+
+        await client.query(
+          "DELETE FROM credit_payments WHERE credit_id IN (SELECT id FROM credits WHERE sale_id = $1)",
+          [saleId]
+        );
+        await client.query("DELETE FROM credits WHERE sale_id = $1", [saleId]);
+        await client.query("DELETE FROM sales WHERE id = $1", [saleId]);
+
+        return { deleted: true };
+      });
+
+      return ok(200, data, requestId);
     }
     if (method === "GET" && path === "/v1/sales") {
       const q = event.queryStringParameters || {};
@@ -930,10 +1006,15 @@ const handler = async (event) => {
       }
       const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
       const r = await pool.query(
-        `SELECT s.*, c.name AS customer_name
+        `SELECT
+          s.*,
+          c.name AS customer_name,
+          COALESCE(SUM(si.quantity), 0) AS item_count
          FROM sales s
          LEFT JOIN customers c ON c.id = s.customer_id
+         LEFT JOIN sale_items si ON si.sale_id = s.id
          ${whereSql}
+         GROUP BY s.id, c.name
          ORDER BY s.created_at DESC, s.id DESC
          LIMIT 500`,
         params
@@ -1049,6 +1130,7 @@ const handler = async (event) => {
       const creditId = getPathId(path, /^\/v1\/credits\/(\d+)\/payments$/, "credit_id");
       const body = parseBody(event);
       const amount = requirePositiveNumber(body.amount, "amount");
+      const paymentCreatedAt = resolveCreatedAtFromDate(body.payment_date, "payment_date");
       const idempotencyKey = body.idempotency_key?.trim() || null;
       const data = await withTx(async (client) => {
         if (idempotencyKey) {
@@ -1072,8 +1154,8 @@ const handler = async (event) => {
           throw new HttpError(409, "business_conflict", "Credit is already paid");
         }
         await client.query(
-          "INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key) VALUES ($1, $2, $3, $4)",
-          [creditId, amount, cashRegisterId, idempotencyKey]
+          "INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, NOW()))",
+          [creditId, amount, cashRegisterId, idempotencyKey, paymentCreatedAt]
         );
         const upd = await client.query(
           `UPDATE credits
@@ -1085,8 +1167,8 @@ const handler = async (event) => {
         const updated = upd.rows[0];
         if (Number(updated.amount_paid) >= Number(updated.total_due)) {
           const paid = await client.query(
-            "UPDATE credits SET status='paid', paid_at=NOW() WHERE id = $1 RETURNING *",
-            [creditId]
+            "UPDATE credits SET status='paid', paid_at=COALESCE($1::timestamp, NOW()) WHERE id = $2 RETURNING *",
+            [paymentCreatedAt, creditId]
           );
           return { created: true, credit: paid.rows[0] };
         }

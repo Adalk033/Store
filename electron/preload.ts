@@ -89,6 +89,7 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL, limit, offset),
     getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_BY_ID, id),
     getDetail: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_DETAIL, id),
+    delete: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SALES_DELETE, id),
     getAllPaginated: (query: PaginatedQuery) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_PAGINATED, query),
     getSummary: (query: { search?: string; type?: string; dateFrom?: string; dateTo?: string }) =>
@@ -103,8 +104,8 @@ const electronAPI = {
     getById: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_ID, id),
     getByCustomer: (customerId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_BY_CUSTOMER, customerId),
-    addPayment: (creditId: number, amount: number, idempotencyKey?: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_ADD_PAYMENT, creditId, amount, idempotencyKey),
+    addPayment: (creditId: number, amount: number, paymentDate?: string, idempotencyKey?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_ADD_PAYMENT, creditId, amount, paymentDate, idempotencyKey),
     getPayments: (creditId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS, creditId),
     checkOverdue: () => ipcRenderer.invoke(IPC_CHANNELS.CREDITS_CHECK_OVERDUE),

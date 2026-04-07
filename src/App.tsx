@@ -161,13 +161,27 @@ export function App() {
   }, [currentPage, dbStatus]);
 
   useEffect(() => {
+    let disposed = false;
+    let inFlight = false;
+
     async function refreshCloudStatus() {
+      if (inFlight || disposed) {
+        return;
+      }
+
+      inFlight = true;
       try {
         const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
-        setCloudStatus(status);
+        if (!disposed) {
+          setCloudStatus(status);
+        }
       } catch (error) {
         console.error('Error checking cloud health:', error);
-        setCloudStatus('error');
+        if (!disposed) {
+          setCloudStatus('error');
+        }
+      } finally {
+        inFlight = false;
       }
     }
 
@@ -183,6 +197,7 @@ export function App() {
     window.addEventListener('offline', onBrowserConnectivityChange);
 
     return () => {
+      disposed = true;
       window.clearInterval(intervalId);
       window.removeEventListener('online', onBrowserConnectivityChange);
       window.removeEventListener('offline', onBrowserConnectivityChange);

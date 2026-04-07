@@ -25,6 +25,10 @@ function formatDateYMD(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function getTodayLocalDateInput(): string {
+  return formatDateYMD(new Date());
+}
+
 function getRangeDateFrom(range: TimeRangeFilter): string | undefined {
   if (range === 'all' || range === 'select') return undefined;
   const start = new Date();
@@ -75,6 +79,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(getTodayLocalDateInput());
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -246,6 +251,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   const openDetail = useCallback(async (credit: Credit) => {
     setSelectedCredit(credit);
     setPaymentAmount('');
+    setPaymentDate(getTodayLocalDateInput());
     setPaymentError(null);
     const payments = await getPayments(credit.id);
     setCreditPayments(payments);
@@ -284,7 +290,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
     if (!selectedCredit) return;
 
-    const amount = parseFloat(paymentAmount);
+    const amount = Math.round((parseFloat(paymentAmount) + Number.EPSILON) * 100) / 100;
     if (isNaN(amount) || amount <= 0) {
       setPaymentError('Ingresa un monto valido mayor a 0');
       return;
@@ -296,9 +302,19 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
       return;
     }
 
+    if (!paymentDate) {
+      setPaymentError('Selecciona una fecha de abono valida');
+      return;
+    }
+
+    if (new Date(`${paymentDate}T00:00:00`) > new Date()) {
+      setPaymentError('La fecha del abono no puede ser futura');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const updated = await addPayment(selectedCredit.id, amount);
+      const updated = await addPayment(selectedCredit.id, amount, paymentDate);
       setSelectedCredit(updated);
       const payments = await getPayments(selectedCredit.id);
       setCreditPayments(payments);
@@ -453,6 +469,17 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
                     placeholder={`Saldo: ${formatCurrency(remaining)}`}
                   />
                   {paymentError && <span className={styles['payment-form__error']}>{paymentError}</span>}
+                </div>
+
+                <div className={styles['payment-form__field']}>
+                  <label className={styles['payment-form__label']}>Fecha del abono *</label>
+                  <input
+                    className={styles['payment-form__input']}
+                    type="date"
+                    value={paymentDate}
+                    max={getTodayLocalDateInput()}
+                    onChange={e => setPaymentDate(e.target.value)}
+                  />
                 </div>
 
                 <div className={styles['payment-form__quick']}>

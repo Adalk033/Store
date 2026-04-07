@@ -45,10 +45,59 @@ export function getCreditById(id: number): Credit | undefined {
   return db.prepare('SELECT * FROM credits WHERE id = ?').get(id) as Credit | undefined;
 }
 
-export function addCreditPayment(creditId: number, amount: number, idempotencyKeyInput?: string): IdempotentResult<Credit> {
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function resolvePaymentCreatedAt(paymentDate: string | undefined, businessTimeZone: string): string {
+  const todayDate = getBusinessTodayDate(businessTimeZone);
+
+  if (!paymentDate || paymentDate.trim() === '') {
+    return getBusinessNowDateTime(businessTimeZone);
+  }
+
+  const trimmedDate = paymentDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+    throw new Error('La fecha del abono no tiene un formato valido');
+  }
+
+  const [year, month, day] = trimmedDate.split('-').map(Number);
+  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const isValidDate =
+    !Number.isNaN(selectedDate.getTime())
+    && selectedDate.getFullYear() === year
+    && selectedDate.getMonth() === month - 1
+    && selectedDate.getDate() === day;
+
+  if (!isValidDate) {
+    throw new Error('La fecha del abono no es valida');
+  }
+
+  if (trimmedDate > todayDate) {
+    throw new Error('No se permiten fechas futuras para el abono');
+  }
+
+  if (trimmedDate === todayDate) {
+    return getBusinessNowDateTime(businessTimeZone);
+  }
+
+  return `${trimmedDate} 00:00:00`;
+}
+
+export function addCreditPayment(
+  creditId: number,
+  amount: number,
+  paymentDate?: string,
+  idempotencyKeyInput?: string,
+): IdempotentResult<Credit> {
   const db = getDatabase();
   const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
-  const nowDateTime = getBusinessNowDateTime(businessTimeZone);
+  const paymentCreatedAt = resolvePaymentCreatedAt(paymentDate, businessTimeZone);
+  const paymentAmount = roundMoney(amount);
+
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    throw new Error('Monto de abono invalido');
+  }
 
   // Idempotency check: return existing credit state if same key was already processed
   const idempotencyKey = isValidIdempotencyKey(idempotencyKeyInput) ? idempotencyKeyInput : null;
@@ -72,20 +121,20 @@ export function addCreditPayment(creditId: number, amount: number, idempotencyKe
   const transaction = db.transaction(() => {
     // Insert payment record
     db.prepare(
-      'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key) VALUES (?, ?, ?, ?)'
-    ).run(creditId, amount, openPeriod.id, idempotencyKey);
+      'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(creditId, paymentAmount, openPeriod.id, idempotencyKey, paymentCreatedAt);
 
     // Update credit amount_paid
     db.prepare(
-      'UPDATE credits SET amount_paid = amount_paid + ? WHERE id = ?'
-    ).run(amount, creditId);
+      'UPDATE credits SET amount_paid = ROUND(amount_paid + ?, 2) WHERE id = ?'
+    ).run(paymentAmount, creditId);
 
     // Check if fully paid
     const credit = getCreditById(creditId)!;
     if (credit.amount_paid >= credit.total_due) {
       db.prepare(
         "UPDATE credits SET status = 'paid', paid_at = ? WHERE id = ?"
-      ).run(nowDateTime, creditId);
+      ).run(paymentCreatedAt, creditId);
     }
 
     return creditId;

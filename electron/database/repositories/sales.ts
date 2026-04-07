@@ -443,6 +443,49 @@ export function getSaleDetailById(id: number): SaleDetail | undefined {
   };
 }
 
+export function deleteSale(id: number): boolean {
+  const db = getDatabase();
+  const sale = getSaleById(id);
+
+  if (!sale) {
+    throw new Error('La venta no existe');
+  }
+
+  const saleItems = getSaleItems(id);
+
+  const transaction = db.transaction(() => {
+    const movementCreatedAt = getBusinessNowDateTime(resolveBusinessTimeZone(getSetting('business_timezone')));
+    const updateStock = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+    const insertMovement = db.prepare(`
+      INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes, created_at)
+      VALUES (?, 'in', ?, ?, 'Reversion por eliminacion de venta', ?)
+    `);
+
+    for (const item of saleItems) {
+      updateStock.run(item.quantity, item.product_id);
+      insertMovement.run(item.product_id, item.quantity, id, movementCreatedAt);
+    }
+
+    db.prepare(`
+      DELETE FROM credit_payments
+      WHERE credit_id IN (SELECT id FROM credits WHERE sale_id = ?)
+    `).run(id);
+
+    db.prepare('DELETE FROM credits WHERE sale_id = ?').run(id);
+
+    const result = db.prepare('DELETE FROM sales WHERE id = ?').run(id);
+    return result.changes > 0;
+  });
+
+  const deleted = transaction();
+  if (deleted) {
+    incrementVersion('sales');
+    incrementVersion('inventory');
+    incrementVersion('credits');
+  }
+  return deleted;
+}
+
 // --- Cursor/keyset paginated endpoint (Phase 5 - Hardening cloud) ---
 
 export function getAllSalesCursor(
