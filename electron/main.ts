@@ -559,6 +559,18 @@ function registerIpcHandlers(): void {
     }
     return salesRepo.getSaleDetailById(id);
   });
+  ipcMain.handle(IPC_CHANNELS.SALES_DELETE, (_, id: number | string) => {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId) || parsedId < 1) {
+      throw new Error('ID de venta invalido');
+    }
+
+    if (isCloudEnabled()) {
+      return cloudApi.deleteSale(parsedId);
+    }
+
+    return salesRepo.deleteSale(parsedId);
+  });
 
   // Sales - Paginated endpoints (Phase 2)
   ipcMain.handle(
@@ -647,13 +659,27 @@ function registerIpcHandlers(): void {
     }
     return creditsRepo.getCreditsByCustomer(customerId);
   });
-  ipcMain.handle(IPC_CHANNELS.CREDITS_ADD_PAYMENT, (_, creditId: number, amount: number, idempotencyKey?: string) => {
-    if (isCloudEnabled()) {
-      return cloudApi.addCreditPayment(creditId, amount, idempotencyKey);
+  ipcMain.handle(
+    IPC_CHANNELS.CREDITS_ADD_PAYMENT,
+    (_, creditId: number, amount: number, paymentDate?: string, idempotencyKey?: string) => {
+      if (typeof creditId !== 'number' || !Number.isInteger(creditId) || creditId < 1) {
+        throw new Error('ID de credito invalido');
+      }
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+        throw new Error('Monto de abono invalido');
+      }
+      if (paymentDate !== undefined && typeof paymentDate !== 'string') {
+        throw new Error('Fecha de abono invalida');
+      }
+
+      if (isCloudEnabled()) {
+        return cloudApi.addCreditPayment(creditId, amount, paymentDate, idempotencyKey);
+      }
+
+      const result = creditsRepo.addCreditPayment(creditId, amount, paymentDate, idempotencyKey);
+      return result.data;
     }
-    const result = creditsRepo.addCreditPayment(creditId, amount, idempotencyKey);
-    return result.data;
-  });
+  );
   ipcMain.handle(IPC_CHANNELS.CREDITS_GET_PAYMENTS, (_, creditId: number) => {
     if (isCloudEnabled()) {
       return cloudApi.getCreditPayments(creditId);

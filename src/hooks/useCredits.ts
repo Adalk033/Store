@@ -45,9 +45,9 @@ export function useCredits() {
     }
   }, []);
 
-  const addPayment = useCallback(async (creditId: number, amount: number): Promise<Credit> => {
+  const addPayment = useCallback(async (creditId: number, amount: number, paymentDate?: string): Promise<Credit> => {
     try {
-      const updated = await window.electronAPI.credits.addPayment(creditId, amount);
+      const updated = await window.electronAPI.credits.addPayment(creditId, amount, paymentDate);
       setCredits(prev => prev.map(c => c.id === creditId ? updated : c));
       return updated;
     } catch (err) {

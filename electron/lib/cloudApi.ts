@@ -120,6 +120,25 @@ function normalizeSaleListRow(raw: unknown): SaleListItem {
   const row = raw as Record<string, unknown>;
   const normalized: Record<string, unknown> = { ...row };
 
+  const id = toFiniteInteger(row.id);
+  if (id !== undefined) normalized.id = id;
+
+  const customerId = row.customer_id;
+  if (customerId === null) {
+    normalized.customer_id = null;
+  } else {
+    const parsedCustomerId = toFiniteInteger(customerId);
+    if (parsedCustomerId !== undefined) normalized.customer_id = parsedCustomerId;
+  }
+
+  const cashRegisterId = row.cash_register_id;
+  if (cashRegisterId === null) {
+    normalized.cash_register_id = null;
+  } else {
+    const parsedCashRegisterId = toFiniteInteger(cashRegisterId);
+    if (parsedCashRegisterId !== undefined) normalized.cash_register_id = parsedCashRegisterId;
+  }
+
   const itemCount = toFiniteNumber(row.item_count ?? row.itemCount);
   normalized.item_count = itemCount ?? 0;
 
@@ -160,6 +179,25 @@ function normalizeSaleDetailRow(raw: unknown): SaleDetail {
   const row = raw as Record<string, unknown>;
   const normalized: Record<string, unknown> = { ...row };
 
+  const id = toFiniteInteger(row.id);
+  if (id !== undefined) normalized.id = id;
+
+  const customerId = row.customer_id;
+  if (customerId === null) {
+    normalized.customer_id = null;
+  } else {
+    const parsedCustomerId = toFiniteInteger(customerId);
+    if (parsedCustomerId !== undefined) normalized.customer_id = parsedCustomerId;
+  }
+
+  const cashRegisterId = row.cash_register_id;
+  if (cashRegisterId === null) {
+    normalized.cash_register_id = null;
+  } else {
+    const parsedCashRegisterId = toFiniteInteger(cashRegisterId);
+    if (parsedCashRegisterId !== undefined) normalized.cash_register_id = parsedCashRegisterId;
+  }
+
   const subtotal = toFiniteNumber(row.subtotal);
   if (subtotal !== undefined) normalized.subtotal = subtotal;
 
@@ -177,6 +215,15 @@ function normalizeSaleDetailRow(raw: unknown): SaleDetail {
 
     const item = itemRaw as Record<string, unknown>;
     const itemNormalized: Record<string, unknown> = { ...item };
+
+    const itemId = toFiniteInteger(item.id);
+    if (itemId !== undefined) itemNormalized.id = itemId;
+
+    const saleId = toFiniteInteger(item.sale_id);
+    if (saleId !== undefined) itemNormalized.sale_id = saleId;
+
+    const productId = toFiniteInteger(item.product_id);
+    if (productId !== undefined) itemNormalized.product_id = productId;
 
     const quantity = toFiniteNumber(item.quantity);
     if (quantity !== undefined) itemNormalized.quantity = quantity;
@@ -679,6 +726,10 @@ export class CloudApi {
     return this.request<Sale>('GET', `/v1/sales/${id}`);
   }
 
+  deleteSale(id: number): Promise<boolean> {
+    return this.request<{ deleted: boolean }>('DELETE', `/v1/sales/${id}`).then((r) => r.deleted);
+  }
+
   async getSaleDetailById(id: number): Promise<SaleDetail | undefined> {
     const raw = await this.request<unknown>('GET', `/v1/sales/${id}/detail`);
     if (!raw) return undefined;
@@ -746,9 +797,10 @@ export class CloudApi {
     return this.request<Credit[]>('GET', `/v1/customers/${customerId}/credits`);
   }
 
-  addCreditPayment(creditId: number, amount: number, idempotencyKey?: string): Promise<Credit> {
+  addCreditPayment(creditId: number, amount: number, paymentDate?: string, idempotencyKey?: string): Promise<Credit> {
     return this.request<{ credit: Credit; created: boolean }>('POST', `/v1/credits/${creditId}/payments`, {
       amount,
+      payment_date: paymentDate,
       idempotency_key: idempotencyKey,
     }).then((r) => r.credit);
   }

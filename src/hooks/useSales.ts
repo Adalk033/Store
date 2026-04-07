@@ -92,6 +92,21 @@ export function useSales() {
     }
   }, []);
 
+  const deleteSale = useCallback(async (id: number): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      return await window.electronAPI.sales.delete(id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar venta';
+      setError(message);
+      console.error('useSales.deleteSale:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -100,5 +115,6 @@ export function useSales() {
     getAllSales,
     getAllSalesPaginated,
     getSaleDetailById,
+    deleteSale,
   };
 }

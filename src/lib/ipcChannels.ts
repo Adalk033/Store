@@ -33,6 +33,7 @@ export const IPC_CHANNELS = {
   SALES_GET_ALL: 'sales:getAll',
   SALES_GET_BY_ID: 'sales:getById',
   SALES_GET_DETAIL: 'sales:getDetail',
+  SALES_DELETE: 'sales:delete',
   SALES_GET_ALL_PAGINATED: 'sales:getAllPaginated',
   SALES_GET_SUMMARY: 'sales:getSummary',
   SALES_GET_ALL_CURSOR: 'sales:getAllCursor',

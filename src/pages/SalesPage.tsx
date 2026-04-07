@@ -6,6 +6,7 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  Trash2,
   User,
 } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
@@ -72,7 +73,7 @@ function normalizeInteger(value: number): number {
 }
 
 export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
-  const { getAllSalesPaginated, getSaleDetailById } = useSales();
+  const { getAllSalesPaginated, getSaleDetailById, deleteSale } = useSales();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sales, setSales] = useState<SaleListItem[]>([]);
@@ -301,6 +302,29 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
     setShowTicket(false);
   }
 
+  async function handleDeleteSale(saleId: number) {
+    const confirmed = window.confirm(
+      `Se eliminara la venta #${saleId}. El stock de los productos regresara automaticamente.\n\nEsta accion no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const deleted = await deleteSale(saleId);
+      if (!deleted) {
+        showNotification('error', `No se pudo eliminar la venta #${saleId}`);
+        return;
+      }
+
+      showNotification('success', `Venta #${saleId} eliminada y stock restablecido`);
+      backToList();
+      await loadSales();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar la venta';
+      showNotification('error', message);
+    }
+  }
+
   if (viewMode === 'detail' && selectedSale) {
     const totalItems = selectedSale.items.reduce((sum, item) => sum + normalizeInteger(item.quantity), 0);
 
@@ -344,6 +368,10 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
             <button className={styles['btn-primary']} onClick={() => window.print()}>
               <Printer size={16} strokeWidth={1.5} />
               Imprimir ticket
+            </button>
+            <button className={styles['btn-danger']} onClick={() => void handleDeleteSale(selectedSale.id)}>
+              <Trash2 size={16} strokeWidth={1.5} />
+              Eliminar venta
             </button>
           </div>
         </div>
@@ -661,7 +689,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
               <th>Cliente</th>
               <th>Articulos</th>
               <th>Total</th>
-              <th>Ticket</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -687,16 +715,28 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                   <td>{formatInteger(normalizeInteger(sale.item_count))}</td>
                   <td className={styles['table__strong']}>{formatCurrency(sale.total)}</td>
                   <td>
-                    <button
-                      className={styles['btn-link']}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void openTicketFromList(sale.id);
-                      }}
-                      disabled={loadingDetail}
-                    >
-                      Recuperar ticket
-                    </button>
+                    <div className={styles['table__actions']}>
+                      <button
+                        className={styles['btn-link']}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openTicketFromList(sale.id);
+                        }}
+                        disabled={loadingDetail}
+                      >
+                        Recuperar ticket
+                      </button>
+                      <button
+                        className={`${styles['btn-link']} ${styles['btn-link--danger']}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteSale(sale.id);
+                        }}
+                        disabled={loadingSales}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

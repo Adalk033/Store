@@ -231,6 +231,12 @@
   font-size: var(--font-size-xs);
 }
 
+.table__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .table__row--clickable {
   cursor: pointer;
   transition: background-color var(--transition-fast);
@@ -341,6 +347,7 @@
 
 .btn-primary,
 .btn-secondary,
+.btn-danger,
 .btn-back,
 .btn-link {
   border: none;
@@ -372,6 +379,17 @@
   padding: 9px 14px;
 }
 
+.btn-danger {
+  background-color: transparent;
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  padding: 9px 14px;
+}
+
+.btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
 .btn-secondary:hover,
 .btn-back:hover {
   background-color: rgba(26, 43, 60, 0.06);
@@ -388,8 +406,13 @@
   opacity: 0.75;
 }
 
+.btn-link--danger {
+  color: var(--color-error);
+}
+
 .btn-primary:disabled,
 .btn-secondary:disabled,
+.btn-danger:disabled,
 .btn-link:disabled {
   opacity: 0.55;
   cursor: not-allowed;
