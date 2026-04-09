@@ -77,7 +77,7 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
       const sale = parseFloat(salePrice) || 0;
       if (cost > 0) {
         const newMargin = ((sale / cost) - 1) * 100;
-        setMarginPercent(String(Math.round(newMargin * 10) / 10));
+        setMarginPercent(String(Math.round(newMargin * 10000) / 10000));
       }
     }
   }
@@ -104,7 +104,7 @@ export function ProductForm({ product, categories, defaultMarginPercent = 50, on
     const sale = parseFloat(value);
     if (cost > 0 && !Number.isNaN(sale)) {
       const newMargin = ((sale / cost) - 1) * 100;
-      setMarginPercent(String(Math.round(newMargin * 10) / 10));
+      setMarginPercent(String(Math.round(newMargin * 10000) / 10000));
     }
   }
 
