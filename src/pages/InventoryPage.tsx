@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Plus, PackagePlus, SlidersHorizontal, X, Search } from 'lucide-react';
 import { useInventory } from '../hooks/useInventory';
 import { useProducts } from '../hooks/useProducts';
-import { formatDateTime } from '../lib/formatters';
+import { formatDateTime, formatInteger } from '../lib/formatters';
 import type { Product, PaginatedQuery, InventoryMovementListItem } from '../types';
 import styles from './InventoryPage.module.css';
 
@@ -408,7 +408,7 @@ export function InventoryPage() {
               >
                 <option value="">Seleccionar producto...</option>
                 {formProductOptions.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>
+                  <option key={p.id} value={p.id}>{p.name} (Stock: {formatInteger(p.stock)})</option>
                 ))}
               </select>
               <span className={styles['form__hint']}>
@@ -418,7 +418,7 @@ export function InventoryPage() {
 
             {selectedProduct && (
               <div className={styles['form__product-info']}>
-                <strong>{selectedProduct.name}</strong> - Codigo: {selectedProduct.barcode} - Stock actual: <strong>{selectedProduct.stock}</strong>
+                <strong>{selectedProduct.name}</strong> - Codigo: {selectedProduct.barcode} - Stock actual: <strong>{formatInteger(selectedProduct.stock)}</strong>
               </div>
             )}
 
@@ -613,7 +613,7 @@ export function InventoryPage() {
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <span className={isPositive ? styles['table__quantity--positive'] : styles['table__quantity--negative']}>
-                            {isPositive ? '+' : ''}{mov.quantity}
+                            {isPositive ? '+' : ''}{formatInteger(mov.quantity)}
                           </span>
                         </td>
                         <td style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>

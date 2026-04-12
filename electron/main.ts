@@ -964,7 +964,9 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_SALES_SUMMARY, (_, cashRegisterId: number) => {
     if (canUseCloudApi()) {
-      return cloudApi.getCashRegisterSalesSummary(cashRegisterId);
+      return cloudApi.getCashRegisterSalesSummary(cashRegisterId).then((data) => {
+        return cashRegisterRepo.normalizeCashRegisterSalesSummary(data);
+      });
     }
     return cashRegisterRepo.getSalesSummaryByPeriod(cashRegisterId);
   });

@@ -3,7 +3,7 @@ import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X, ChevronLeft, Ch
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
 import { useSettings } from '../hooks/useSettings';
-import { formatCurrency } from '../lib/formatters';
+import { formatCurrency, formatInteger } from '../lib/formatters';
 import { ProductForm } from '../components/products/ProductForm';
 import { CategoryManager } from '../components/categories/CategoryManager';
 import type { Product, PaginatedResponse } from '../types';
@@ -619,7 +619,7 @@ export function ProductsPage() {
               displayedProducts.map(product => (
                 <tr key={product.id} className={product.is_active === 0 ? styles['table__inactive'] : undefined}>
                   <td className={`${styles['table__stock']} ${getStockClass(product)}`}>
-                    {product.stock}
+                    {formatInteger(product.stock)}
                     {product.min_stock < 0 && product.is_active === 1 && (
                       <span className={styles['table__meta-badge']}>Sin alerta</span>
                     )}
