@@ -117,6 +117,10 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_PAYMENTS_PAGINATED, creditId, query),
     getSummary: (query: { search?: string; status?: string; dateFrom?: string; dateTo?: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.CREDITS_GET_SUMMARY, query),
+    delete: (id: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_DELETE, id),
+    update: (id: number, data: { due_date?: string; surcharge_percent?: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CREDITS_UPDATE, id, data),
   },
 
   // Inventory

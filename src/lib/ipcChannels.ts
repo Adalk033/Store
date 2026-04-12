@@ -49,6 +49,8 @@ export const IPC_CHANNELS = {
   CREDITS_GET_BY_CUSTOMER_PAGINATED: 'credits:getByCustomerPaginated',
   CREDITS_GET_PAYMENTS_PAGINATED: 'credits:getPaymentsPaginated',
   CREDITS_GET_SUMMARY: 'credits:getSummary',
+  CREDITS_DELETE: 'credits:delete',
+  CREDITS_UPDATE: 'credits:update',
 
   // Inventory
   INVENTORY_ADD_MOVEMENT: 'inventory:addMovement',

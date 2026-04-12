@@ -416,9 +416,17 @@ export function getSaleDetailById(id: number): SaleDetail | undefined {
       s.*,
       c.name AS customer_name,
       c.phone AS customer_phone,
-      c.email AS customer_email
+      c.email AS customer_email,
+      cr.due_date AS credit_due_date,
+      cr.created_at AS credit_created_at,
+      CASE
+        WHEN cr.id IS NOT NULL
+        THEN CAST(ROUND(julianday(cr.due_date) - julianday(SUBSTR(cr.created_at, 1, 10))) AS INTEGER)
+        ELSE NULL
+      END AS credit_days
     FROM sales s
     LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN credits cr ON cr.sale_id = s.id
     WHERE s.id = ?`
   ).get(id) as Omit<SaleDetail, 'items'> | undefined;
 
