@@ -155,8 +155,6 @@ export function getCreditPayments(creditId: number): CreditPayment[] {
 
 // Delete a credit and its associated sale (reverses stock)
 export function deleteCredit(creditId: number): boolean {
-  const db = getDatabase();
-
   const parsedId = Number(creditId);
   if (!Number.isInteger(parsedId) || parsedId < 1) {
     throw new Error('ID de credito invalido');
