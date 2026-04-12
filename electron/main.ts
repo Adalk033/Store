@@ -841,6 +841,33 @@ function registerIpcHandlers(): void {
     }
   );
 
+  ipcMain.handle(IPC_CHANNELS.CREDITS_DELETE, (_, id: number | string) => {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId) || parsedId < 1) {
+      throw new Error('ID de credito invalido');
+    }
+    return creditsRepo.deleteCredit(parsedId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CREDITS_UPDATE, (_, id: number | string, data: unknown) => {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId) || parsedId < 1) {
+      throw new Error('ID de credito invalido');
+    }
+
+    const d = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
+    const updateData: { due_date?: string; surcharge_percent?: number } = {};
+
+    if (typeof d.due_date === 'string') {
+      updateData.due_date = d.due_date.slice(0, 10);
+    }
+    if (typeof d.surcharge_percent === 'number') {
+      updateData.surcharge_percent = d.surcharge_percent;
+    }
+
+    return creditsRepo.updateCredit(parsedId, updateData);
+  });
+
   // Inventory
   ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => {
     if (canUseCloudApi()) {

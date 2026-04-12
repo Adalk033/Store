@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import { useSales } from '../hooks/useSales';
-import { formatCurrency, formatDateTime, formatInteger } from '../lib/formatters';
+import { formatCurrency, formatDate, formatDateTime, formatInteger } from '../lib/formatters';
 import type { SaleDetail, SaleListItem, PaginatedQuery } from '../types';
 import styles from './SalesPage.module.css';
 
@@ -402,6 +402,30 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                 <span className={styles['detail-card__label']}>Articulos</span>
                 <span className={styles['detail-card__value']}>{formatInteger(totalItems)}</span>
               </div>
+              {selectedSale.sale_type === 'credit' && selectedSale.credit_due_date && (
+                <>
+                  <div className={styles['detail-card__row']}>
+                    <span className={styles['detail-card__label']}>Fecha de credito</span>
+                    <span className={styles['detail-card__value']}>
+                      <CalendarDays size={14} strokeWidth={1.5} />
+                      {formatDate(selectedSale.credit_created_at ?? selectedSale.created_at)}
+                    </span>
+                  </div>
+                  <div className={styles['detail-card__row']}>
+                    <span className={styles['detail-card__label']}>Fecha limite</span>
+                    <span className={styles['detail-card__value']}>
+                      <CalendarDays size={14} strokeWidth={1.5} />
+                      {formatDate(selectedSale.credit_due_date)}
+                    </span>
+                  </div>
+                  {selectedSale.credit_days !== null && (
+                    <div className={styles['detail-card__row']}>
+                      <span className={styles['detail-card__label']}>Plazo</span>
+                      <span className={styles['detail-card__value']}>{selectedSale.credit_days} dias</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </section>
 
@@ -476,9 +500,25 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                   <span>{formatDateTime(selectedSale.created_at)}</span>
                 </div>
                 <div className={styles['ticket__meta']}>
+                  <span>Fecha de venta:</span>
+                  <span>{formatDate(selectedSale.created_at)}</span>
+                </div>
+                <div className={styles['ticket__meta']}>
                   <span>Cliente: {selectedSale.customer_name ?? 'Mostrador'}</span>
                   <span>{SALE_TYPE_LABEL[selectedSale.sale_type].toUpperCase()}</span>
                 </div>
+                {selectedSale.sale_type === 'credit' && selectedSale.credit_due_date && (
+                  <>
+                    <div className={styles['ticket__meta']}>
+                      <span>Plazo:</span>
+                      <span>{selectedSale.credit_days} dias</span>
+                    </div>
+                    <div className={styles['ticket__meta']}>
+                      <span>Fecha limite de pago:</span>
+                      <span>{formatDate(selectedSale.credit_due_date)}</span>
+                    </div>
+                  </>
+                )}
 
                 <hr className={styles['ticket__divider']} />
 

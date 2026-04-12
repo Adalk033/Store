@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, DollarSign, RefreshCw, Search, User } from 'lucide-react';
+import { ArrowLeft, DollarSign, Edit3, RefreshCw, Search, Trash2, User } from 'lucide-react';
 import { useCredits } from '../hooks/useCredits';
 import { useCustomers } from '../hooks/useCustomers';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
@@ -49,6 +49,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     loading, error,
     addPayment, getPayments, getCreditById, checkOverdue,
     fetchCreditsPaginated, fetchCreditsByCustomerPaginated, fetchSummary,
+    deleteCredit, updateCredit,
   } = useCredits();
   const { customers } = useCustomers();
 
@@ -82,6 +83,11 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   const [paymentDate, setPaymentDate] = useState(getTodayLocalDateInput());
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit credit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editSurchargePercent, setEditSurchargePercent] = useState('');
 
   // Debounced search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -344,6 +350,61 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     return styles['progress__fill--low'];
   }
 
+  async function handleDeleteCredit(creditId: number, saleId: number) {
+    const confirmed = window.confirm(
+      `Se eliminara el credito #${creditId} y su venta asociada #${saleId}.\nEl stock de los productos se restablecera automaticamente.\n\nEsta accion no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteCredit(creditId);
+      showNotification('success', `Credito #${creditId} y venta #${saleId} eliminados`);
+      backToList();
+      void loadCredits();
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Error al eliminar credito');
+    }
+  }
+
+  function openEditModal(credit: Credit) {
+    setEditDueDate(credit.due_date);
+    setEditSurchargePercent(String(credit.surcharge_percent));
+    setShowEditModal(true);
+  }
+
+  async function handleEditCredit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCredit) return;
+
+    const updateData: { due_date?: string; surcharge_percent?: number } = {};
+
+    if (editDueDate && editDueDate !== selectedCredit.due_date) {
+      updateData.due_date = editDueDate;
+    }
+
+    const parsedSurcharge = parseFloat(editSurchargePercent);
+    if (Number.isFinite(parsedSurcharge) && parsedSurcharge !== selectedCredit.surcharge_percent) {
+      updateData.surcharge_percent = parsedSurcharge;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      setShowEditModal(false);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const updated = await updateCredit(selectedCredit.id, updateData);
+      setSelectedCredit(updated);
+      setShowEditModal(false);
+      showNotification('success', 'Credito actualizado');
+    } catch (err) {
+      showNotification('error', err instanceof Error ? err.message : 'Error al actualizar credito');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // =====================================================
   // DETAIL VIEW
   // =====================================================
@@ -371,6 +432,26 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             <span className={`${styles.badge} ${styles[`badge--${selectedCredit.status}`]}`}>
               {STATUS_LABELS[selectedCredit.status]}
             </span>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
+            {!isPaid && (
+              <button
+                className={styles['btn-secondary']}
+                onClick={() => openEditModal(selectedCredit)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <Edit3 size={14} strokeWidth={1.5} />
+                Editar
+              </button>
+            )}
+            <button
+              className={styles['btn-danger']}
+              onClick={() => void handleDeleteCredit(selectedCredit.id, selectedCredit.sale_id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+              Eliminar
+            </button>
           </div>
         </div>
 
@@ -540,6 +621,80 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
             </div>
           </div>
         </div>
+
+        {/* Edit credit modal */}
+        {showEditModal && (
+          <div
+            className={styles['modal-overlay'] ?? ''}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => setShowEditModal(false)}
+          >
+            <div
+              style={{
+                backgroundColor: 'var(--color-card)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--spacing-lg)',
+                width: '100%',
+                maxWidth: 420,
+                boxShadow: 'var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.15))',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <h2 style={{ marginBottom: 'var(--spacing-md)', fontSize: 'var(--font-size-lg)' }}>
+                Editar credito #{selectedCredit.id}
+              </h2>
+              <form onSubmit={handleEditCredit}>
+                <div style={{ marginBottom: 'var(--spacing-sm)' }}>
+                  <label className={styles['payment-form__label']}>Fecha limite</label>
+                  <input
+                    className={styles['payment-form__input']}
+                    type="date"
+                    value={editDueDate}
+                    onChange={e => setEditDueDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                  <label className={styles['payment-form__label']}>% Recargo por atraso</label>
+                  <input
+                    className={styles['payment-form__input']}
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={editSurchargePercent}
+                    onChange={e => setEditSurchargePercent(e.target.value)}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-xs)' }}>
+                  <button
+                    type="button"
+                    className={styles['btn-secondary']}
+                    onClick={() => setShowEditModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className={styles['btn-primary']}
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -833,13 +988,14 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
               <th>Saldo</th>
               <th>Progreso</th>
               <th>Estado</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className={styles['table__empty']}>Cargando...</td></tr>
+              <tr><td colSpan={10} className={styles['table__empty']}>Cargando...</td></tr>
             ) : creditItems.length === 0 ? (
-              <tr><td colSpan={9} className={styles['table__empty']}>No hay creditos{activeTab !== 'all' ? ` con estado "${STATUS_LABELS[activeTab]}"` : ''}</td></tr>
+              <tr><td colSpan={10} className={styles['table__empty']}>No hay creditos{activeTab !== 'all' ? ` con estado "${STATUS_LABELS[activeTab]}"` : ''}</td></tr>
             ) : (
               creditItems.map(credit => {
                 const remaining = credit.total_due - credit.amount_paid;
@@ -895,6 +1051,28 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
                       <span className={`${styles.badge} ${styles[`badge--${credit.status}`]}`}>
                         {STATUS_LABELS[credit.status]}
                       </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            color: 'var(--color-error)',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          title="Eliminar credito"
+                          onClick={e => {
+                            e.stopPropagation();
+                            void handleDeleteCredit(credit.id, credit.sale_id);
+                          }}
+                        >
+                          <Trash2 size={14} strokeWidth={1.5} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
