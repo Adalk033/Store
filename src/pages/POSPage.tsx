@@ -16,7 +16,7 @@ import { useCustomers } from '../hooks/useCustomers';
 import { useSales } from '../hooks/useSales';
 import type { CartItem } from '../hooks/useSales';
 import type { Product, Sale, Customer } from '../types';
-import { formatCurrency, formatDateTime } from '../lib/formatters';
+import { formatCurrency, formatDateTime, formatInteger } from '../lib/formatters';
 import styles from './POSPage.module.css';
 
 const SEARCH_RESULT_LIMIT = 20;
@@ -519,7 +519,7 @@ export function POSPage() {
                   <div className={styles['pos__result-meta']}>
                     <span>{product.barcode}</span>
                     <span className={`${styles['pos__result-stock']} ${getStockClass(product)}`}>
-                      Stock: {product.stock}
+                      Stock: {formatInteger(product.stock)}
                     </span>
                   </div>
                 </div>
@@ -565,7 +565,7 @@ export function POSPage() {
                   >
                     <Minus size={12} />
                   </button>
-                  <span className={styles['cart-item__qty']}>{item.quantity}</span>
+                  <span className={styles['cart-item__qty']}>{formatInteger(item.quantity)}</span>
                   <button
                     className={styles['cart-item__qty-btn']}
                     onClick={() => updateQuantity(item.product_id, 1)}
@@ -927,7 +927,7 @@ export function POSPage() {
                       </span>
                     </div>
                     <div className={styles['ticket__item-detail']}>
-                      {item.quantity} x {formatCurrency(item.unit_price)}
+                      {formatInteger(item.quantity)} x {formatCurrency(item.unit_price)}
                     </div>
                   </div>
                 ))}

@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useReports } from '../hooks/useReports';
-import { formatCurrency, formatDate } from '../lib/formatters';
+import { formatCurrency, formatDate, formatInteger } from '../lib/formatters';
 import type {
   DailySalesRow,
   TopProductRow,
@@ -581,7 +581,7 @@ export function ReportsPage() {
                   <tr key={p.product_id}>
                     <td>{(salesTopPage - 1) * salesTopRowsPerPage + i + 1}</td>
                     <td>{p.product_name}</td>
-                    <td>{p.total_quantity}</td>
+                    <td>{formatInteger(p.total_quantity)}</td>
                     <td>{formatCurrency(p.total_revenue)}</td>
                   </tr>
                 ))
@@ -721,7 +721,7 @@ export function ReportsPage() {
                   <tr key={p.product_id}>
                     <td>{(productsDetailPage - 1) * productsDetailRowsPerPage + i + 1}</td>
                     <td>{p.product_name}</td>
-                    <td>{p.total_quantity}</td>
+                    <td>{formatInteger(p.total_quantity)}</td>
                     <td>{formatCurrency(p.total_revenue)}</td>
                   </tr>
                 ))
@@ -848,7 +848,7 @@ export function ReportsPage() {
                     (profitDetailPaginatedData?.items ?? []).map(p => (
                       <tr key={p.product_id}>
                         <td>{p.product_name}</td>
-                        <td>{p.total_quantity}</td>
+                        <td>{formatInteger(p.total_quantity)}</td>
                         <td>{formatCurrency(p.total_revenue)}</td>
                         <td>{formatCurrency(p.total_cost)}</td>
                         <td>

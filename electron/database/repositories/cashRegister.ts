@@ -10,6 +10,19 @@ export interface CashRegisterSalesSummary {
   total_credit_collected: number;
 }
 
+export function normalizeCashRegisterSalesSummary(data: unknown): CashRegisterSalesSummary {
+  if (typeof data !== 'object' || data === null) {
+    return { sale_count: 0, total_cash_sales: 0, total_credit_sales: 0, total_credit_collected: 0 };
+  }
+  const obj = data as Record<string, unknown>;
+  return {
+    sale_count: typeof obj.sale_count === 'number' ? obj.sale_count : 0,
+    total_cash_sales: typeof obj.total_cash_sales === 'number' ? obj.total_cash_sales : 0,
+    total_credit_sales: typeof obj.total_credit_sales === 'number' ? obj.total_credit_sales : 0,
+    total_credit_collected: typeof obj.total_credit_collected === 'number' ? obj.total_credit_collected : 0,
+  };
+}
+
 const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
 const ALLOWED_SALE_TYPES = ['cash', 'credit'] as const;
 const ALLOWED_MOVEMENT_TYPES = ['expense', 'withdrawal', 'deposit'] as const;
