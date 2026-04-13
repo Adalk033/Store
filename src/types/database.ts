@@ -71,6 +71,10 @@ export interface SaleDetail extends Sale {
   customer_phone: string | null;
   customer_email: string | null;
   items: SaleDetailItem[];
+  // Credit info (populated only for credit sales)
+  credit_due_date: string | null;
+  credit_created_at: string | null;
+  credit_days: number | null;
 }
 
 export interface Credit {

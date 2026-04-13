@@ -150,6 +150,38 @@ export function useCredits() {
     }
   }, []);
 
+  const deleteCredit = useCallback(async (creditId: number): Promise<boolean> => {
+    try {
+      setLoading(true);
+      const result = await window.electronAPI.credits.delete(creditId);
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar credito';
+      console.error('useCredits.deleteCredit:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const updateCredit = useCallback(async (
+    creditId: number,
+    data: { due_date?: string; surcharge_percent?: number }
+  ): Promise<Credit> => {
+    try {
+      setLoading(true);
+      const updated = await window.electronAPI.credits.update(creditId, data);
+      setCredits(prev => prev.map(c => c.id === creditId ? updated : c));
+      return updated;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar credito';
+      console.error('useCredits.updateCredit:', err);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     credits,
     loading,
@@ -164,5 +196,7 @@ export function useCredits() {
     fetchCreditsByCustomerPaginated,
     fetchPaymentsPaginated,
     fetchSummary,
+    deleteCredit,
+    updateCredit,
   };
 }

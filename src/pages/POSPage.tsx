@@ -16,7 +16,7 @@ import { useCustomers } from '../hooks/useCustomers';
 import { useSales } from '../hooks/useSales';
 import type { CartItem } from '../hooks/useSales';
 import type { Product, Sale, Customer } from '../types';
-import { formatCurrency, formatDateTime, formatInteger } from '../lib/formatters';
+import { formatCurrency, formatDate, formatDateTime, formatInteger } from '../lib/formatters';
 import styles from './POSPage.module.css';
 
 const SEARCH_RESULT_LIMIT = 20;
@@ -28,6 +28,9 @@ interface TicketData {
   storeName: string;
   storeAddress: string;
   footerText: string;
+  // Credit-specific fields for ticket display
+  creditDueDate?: string;
+  creditDays?: number;
 }
 
 function roundMoney(value: number): number {
@@ -60,6 +63,13 @@ function isFutureDateInput(value: string): boolean {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return selectedDate.getTime() > todayStart.getTime();
+}
+
+function addDaysToDateInput(baseDate: string, days: number): string {
+  const [year, month, day] = baseDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
 }
 
 export function POSPage() {
@@ -428,6 +438,8 @@ export function POSPage() {
         storeName,
         storeAddress,
         footerText,
+        creditDueDate: addDaysToDateInput(saleDateInput, creditDays),
+        creditDays,
       });
 
       showNotification('success', `Venta a credito #${sale.id} registrada`);
@@ -900,12 +912,29 @@ export function POSPage() {
                 <span>Venta #{ticketData.sale.id}</span>
                 <span>{formatDateTime(ticketData.sale.created_at)}</span>
               </div>
+              <div className={styles['ticket__meta']}>
+                <span>Fecha de venta:</span>
+                <span>{formatDate(ticketData.sale.created_at)}</span>
+              </div>
 
               {ticketData.customer && (
                 <div className={styles['ticket__meta']} style={{ marginTop: 4 }}>
                   <span>Cliente: {ticketData.customer.name}</span>
                   <span style={{ textTransform: 'capitalize' }}>{ticketData.sale.sale_type === 'credit' ? 'Credito' : 'Contado'}</span>
                 </div>
+              )}
+
+              {ticketData.sale.sale_type === 'credit' && ticketData.creditDueDate && (
+                <>
+                  <div className={styles['ticket__meta']} style={{ marginTop: 4 }}>
+                    <span>Plazo:</span>
+                    <span>{ticketData.creditDays} dias</span>
+                  </div>
+                  <div className={styles['ticket__meta']}>
+                    <span>Fecha limite de pago:</span>
+                    <span>{formatDate(ticketData.creditDueDate)}</span>
+                  </div>
+                </>
               )}
 
               {ticketData.sale.sale_type === 'cash' && (

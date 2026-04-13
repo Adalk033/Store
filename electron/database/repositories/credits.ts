@@ -24,6 +24,7 @@ import type {
   IdempotentResult,
 } from '../../../src/types/database';
 import { incrementVersion } from '../../lib/dataVersions';
+import { deleteSale } from './sales';
 
 export function getAllCredits(status?: string): Credit[] {
   const db = getDatabase();
@@ -150,6 +151,104 @@ export function getCreditPayments(creditId: number): CreditPayment[] {
   return db.prepare(
     'SELECT * FROM credit_payments WHERE credit_id = ? ORDER BY created_at DESC'
   ).all(creditId) as CreditPayment[];
+}
+
+// Delete a credit and its associated sale (reverses stock)
+export function deleteCredit(creditId: number): boolean {
+  const parsedId = Number(creditId);
+  if (!Number.isInteger(parsedId) || parsedId < 1) {
+    throw new Error('ID de credito invalido');
+  }
+
+  const credit = getCreditById(parsedId);
+  if (!credit) {
+    throw new Error('El credito no existe');
+  }
+
+  // Delegate to deleteSale which handles stock reversal, credit cleanup, and sale deletion
+  return deleteSale(credit.sale_id);
+}
+
+// Update credit fields: due_date and/or surcharge_percent
+export function updateCredit(
+  creditId: number,
+  data: { due_date?: string; surcharge_percent?: number }
+): Credit {
+  const db = getDatabase();
+
+  const parsedId = Number(creditId);
+  if (!Number.isInteger(parsedId) || parsedId < 1) {
+    throw new Error('ID de credito invalido');
+  }
+
+  const credit = getCreditById(parsedId);
+  if (!credit) {
+    throw new Error('El credito no existe');
+  }
+
+  if (credit.status === 'paid') {
+    throw new Error('No se puede editar un credito ya pagado');
+  }
+
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (data.due_date !== undefined) {
+    const trimmedDate = data.due_date.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+      throw new Error('La fecha limite no tiene un formato valido');
+    }
+    const [year, month, day] = trimmedDate.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day, 0, 0, 0, 0);
+    if (
+      Number.isNaN(dateObj.getTime()) ||
+      dateObj.getFullYear() !== year ||
+      dateObj.getMonth() !== month - 1 ||
+      dateObj.getDate() !== day
+    ) {
+      throw new Error('La fecha limite no es valida');
+    }
+    updates.push('due_date = ?');
+    params.push(trimmedDate);
+  }
+
+  if (data.surcharge_percent !== undefined) {
+    const percent = Number(data.surcharge_percent);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      throw new Error('El porcentaje de recargo debe estar entre 0 y 100');
+    }
+    updates.push('surcharge_percent = ?');
+    params.push(percent);
+
+    // If surcharge has not been applied yet, update total_due to original_amount
+    // (surcharge will be recalculated when overdue check runs)
+    if (credit.surcharge_applied === 0) {
+      // total_due stays as original_amount; surcharge_percent just changes the future rate
+    } else {
+      // Recalculate total_due with new surcharge percent
+      const newTotalDue = roundMoney(credit.original_amount * (1 + percent / 100));
+      updates.push('total_due = ?');
+      params.push(newTotalDue);
+
+      // Also update the sale surcharge and total
+      const surchargeDiff = roundMoney(newTotalDue - credit.original_amount);
+      db.prepare(
+        'UPDATE sales SET surcharge = ?, total = subtotal + ? WHERE id = ?'
+      ).run(surchargeDiff, surchargeDiff, credit.sale_id);
+    }
+  }
+
+  if (updates.length === 0) {
+    return credit;
+  }
+
+  params.push(parsedId);
+  db.prepare(
+    `UPDATE credits SET ${updates.join(', ')} WHERE id = ?`
+  ).run(...params);
+
+  incrementVersion('credits');
+  return getCreditById(parsedId)!;
 }
 
 // Check and apply surcharges to overdue credits
