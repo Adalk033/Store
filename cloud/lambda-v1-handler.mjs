@@ -935,8 +935,8 @@ const handler = async (event) => {
           const dueDateStr = addDaysToDateOnly(saleDateOnly, creditDays);
           const status = initialPayment >= subtotal ? "paid" : "pending";
           const creditIns = await client.query(
-            `INSERT INTO credits (sale_id, customer_id, original_amount, due_date, surcharge_percent, surcharge_applied, total_due, amount_paid, status, paid_at)
-             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN COALESCE($8::timestamp, NOW()) ELSE NULL END)
+            `INSERT INTO credits (sale_id, customer_id, original_amount, due_date, surcharge_percent, surcharge_applied, total_due, amount_paid, status, paid_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN COALESCE($8::timestamp, NOW()) ELSE NULL END, COALESCE($8::timestamp, NOW()))
              RETURNING *`,
             [saleId, body.customer_id, subtotal, dueDateStr, surchargePercent, initialPayment, status, saleCreatedAt]
           );

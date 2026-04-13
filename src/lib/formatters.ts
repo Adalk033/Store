@@ -9,41 +9,30 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-// Parse "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" into a UTC Date preserving the
-// stored date/time values as-is.  All dates in the DB are already expressed in
-// the business timezone, so we must NOT let the JS engine apply any local-
-// timezone offset. We create a UTC Date and then format with timeZone:'UTC'.
+// Parse stored dates into a UTC Date preserving the original calendar day.
+// DB values are usually stored as "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS".
+// Cloud responses can also come back as ISO-8601 strings with "T" and "Z".
+// We handle both without letting the local timezone shift the visible date.
 function parseDateStringAsUTC(dateString: string | null | undefined): Date | null {
   if (!dateString || dateString.trim() === '') {
     return null;
   }
 
-  const datePart = dateString.slice(0, 10);
-  const [year, month, day] = datePart.split('-').map(Number);
+  const trimmed = dateString.trim();
 
-  // Validate date parts
-  if (!year || !month || !day || Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
-    return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  const timePart = dateString.length > 10 ? dateString.slice(11).trim() : '';
-  let hour = 0;
-  let minute = 0;
-  let second = 0;
-
-  if (timePart) {
-    const timePieces = timePart.split(':').map(Number);
-    hour = timePieces[0] ?? 0;
-    minute = timePieces[1] ?? 0;
-    second = timePieces[2] ?? 0;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(trimmed)) {
+    const date = new Date(trimmed);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export function formatDate(dateString: string | null | undefined): string {
