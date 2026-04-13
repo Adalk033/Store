@@ -841,11 +841,27 @@ function registerIpcHandlers(): void {
     }
   );
 
-  ipcMain.handle(IPC_CHANNELS.CREDITS_DELETE, (_, id: number | string) => {
+  ipcMain.handle(IPC_CHANNELS.CREDITS_DELETE, async (_, id: number | string) => {
     const parsedId = Number(id);
     if (!Number.isInteger(parsedId) || parsedId < 1) {
       throw new Error('ID de credito invalido');
     }
+
+    if (canUseCloudApi()) {
+      try {
+        const credit = await cloudApi.getCreditById(parsedId);
+        if (!credit) {
+          throw new Error('El credito no existe');
+        }
+        return cloudApi.deleteSale(credit.sale_id);
+      } catch (error) {
+        if (error instanceof Error && error.message.toLowerCase().includes('no encontrado')) {
+          throw new Error('El credito no existe');
+        }
+        throw error;
+      }
+    }
+
     return creditsRepo.deleteCredit(parsedId);
   });
 
