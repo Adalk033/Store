@@ -1142,40 +1142,137 @@ function registerIpcHandlers(): void {
     }
   );
 
+  function toSafeNumber(value: unknown): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+      const parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }
+
+  function toSafeInt(value: unknown): number {
+    const n = toSafeNumber(value);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  }
+
+  function toSafeString(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    return String(value);
+  }
+
+  function normalizeDailySalesRows(rows: Array<Record<string, unknown>>): reportsRepo.DailySalesRow[] {
+    return rows.map((r) => ({
+      date: toSafeString(r.date),
+      count: toSafeInt(r.count),
+      total_cash: toSafeNumber(r.total_cash),
+      total_credit: toSafeNumber(r.total_credit),
+      total: toSafeNumber(r.total),
+    }));
+  }
+
+  function normalizeTopProductRows(rows: Array<Record<string, unknown>>): reportsRepo.TopProductRow[] {
+    return rows.map((r) => ({
+      product_id: toSafeInt(r.product_id),
+      product_name: toSafeString(r.product_name),
+      total_quantity: toSafeNumber(r.total_quantity),
+      total_revenue: toSafeNumber(r.total_revenue),
+    }));
+  }
+
+  function normalizeProfitRows(rows: Array<Record<string, unknown>>): reportsRepo.ProfitRow[] {
+    return rows.map((r) => ({
+      product_id: toSafeInt(r.product_id),
+      product_name: toSafeString(r.product_name),
+      total_quantity: toSafeNumber(r.total_quantity),
+      total_revenue: toSafeNumber(r.total_revenue),
+      total_cost: toSafeNumber(r.total_cost),
+      profit: toSafeNumber(r.profit),
+      margin: toSafeNumber(r.margin),
+    }));
+  }
+
+  function normalizeInventoryRows(rows: Array<Record<string, unknown>>): reportsRepo.InventoryValueRow[] {
+    return rows.map((r) => ({
+      product_id: toSafeInt(r.product_id),
+      product_name: toSafeString(r.product_name),
+      stock: toSafeNumber(r.stock),
+      min_stock: toSafeNumber(r.min_stock),
+      cost_price: toSafeNumber(r.cost_price),
+      sale_price: toSafeNumber(r.sale_price),
+      stock_value_cost: toSafeNumber(r.stock_value_cost),
+      stock_value_sale: toSafeNumber(r.stock_value_sale),
+    }));
+  }
+
+  function normalizeInventorySummary(row: Record<string, unknown>): reportsRepo.InventorySummary {
+    return {
+      total_products: toSafeInt(row.total_products),
+      total_active: toSafeInt(row.total_active),
+      total_stock_units: toSafeNumber(row.total_stock_units),
+      total_value_cost: toSafeNumber(row.total_value_cost),
+      total_value_sale: toSafeNumber(row.total_value_sale),
+      low_stock_count: toSafeInt(row.low_stock_count),
+    };
+  }
+
+  function normalizeCreditsOverviewRows(rows: Array<Record<string, unknown>>): reportsRepo.CreditsOverviewRow[] {
+    return rows.map((r) => ({
+      status: toSafeString(r.status),
+      count: toSafeInt(r.count),
+      total_due: toSafeNumber(r.total_due),
+      total_paid: toSafeNumber(r.total_paid),
+      total_remaining: toSafeNumber(r.total_remaining),
+    }));
+  }
+
   // Reports
   ipcMain.handle(IPC_CHANNELS.REPORTS_SALES_BY_DATE, (_, startDate: string, endDate: string) => {
     if (canUseCloudApi()) {
-      return cloudApi.getSalesByDate(startDate, endDate);
+      return cloudApi.getSalesByDate(startDate, endDate).then((rows) => {
+        return normalizeDailySalesRows(rows);
+      });
     }
     return reportsRepo.getSalesByDateRange(startDate, endDate);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_TOP_PRODUCTS, (_, startDate: string, endDate: string, limit?: number) => {
     if (canUseCloudApi()) {
-      return cloudApi.getTopProducts(startDate, endDate, limit);
+      return cloudApi.getTopProducts(startDate, endDate, limit).then((rows) => {
+        return normalizeTopProductRows(rows);
+      });
     }
     return reportsRepo.getTopProducts(startDate, endDate, limit);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, (_, startDate: string, endDate: string) => {
     if (canUseCloudApi()) {
-      return cloudApi.getProfitReport(startDate, endDate);
+      return cloudApi.getProfitReport(startDate, endDate).then((rows) => {
+        return normalizeProfitRows(rows);
+      });
     }
     return reportsRepo.getProfitReport(startDate, endDate);
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY, () => {
     if (canUseCloudApi()) {
-      return cloudApi.getInventoryReport();
+      return cloudApi.getInventoryReport().then((rows) => {
+        return normalizeInventoryRows(rows);
+      });
     }
     return reportsRepo.getInventoryReport();
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_INVENTORY_SUMMARY, () => {
     if (canUseCloudApi()) {
-      return cloudApi.getInventorySummary();
+      return cloudApi.getInventorySummary().then((row) => {
+        return normalizeInventorySummary(row);
+      });
     }
     return reportsRepo.getInventorySummary();
   });
   ipcMain.handle(IPC_CHANNELS.REPORTS_CREDITS_OVERVIEW, () => {
     if (canUseCloudApi()) {
-      return cloudApi.getCreditsOverview();
+      return cloudApi.getCreditsOverview().then((rows) => {
+        return normalizeCreditsOverviewRows(rows);
+      });
     }
     return reportsRepo.getCreditsOverview();
   });
@@ -1187,7 +1284,7 @@ function registerIpcHandlers(): void {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
       if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
-          cloudApi.getInventoryReport(),
+          cloudApi.getInventoryReport().then((rows) => normalizeInventoryRows(rows)),
           {
             page: typeof q.page === 'number' ? q.page : 1,
             pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -1214,7 +1311,7 @@ function registerIpcHandlers(): void {
           cloudApi.getProfitReport(
             typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
             typeof q.dateTo === 'string' ? q.dateTo : '9999-12-31'
-          ),
+          ).then((rows) => normalizeProfitRows(rows)),
           {
             page: typeof q.page === 'number' ? q.page : 1,
             pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -1243,7 +1340,7 @@ function registerIpcHandlers(): void {
           cloudApi.getTopProducts(
             typeof q.dateFrom === 'string' ? q.dateFrom : '1970-01-01',
             typeof q.dateTo === 'string' ? q.dateTo : '9999-12-31'
-          ),
+          ).then((rows) => normalizeTopProductRows(rows)),
           {
             page: typeof q.page === 'number' ? q.page : 1,
             pageSize: typeof q.pageSize === 'number' ? q.pageSize : 50,
@@ -1269,7 +1366,7 @@ function registerIpcHandlers(): void {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
       if (canUseCloudApi()) {
         return cloudApi.getReportPaginated(
-          cloudApi.getCreditsOverview(),
+          cloudApi.getCreditsOverview().then((rows) => normalizeCreditsOverviewRows(rows)),
           {
             page: typeof q.page === 'number' ? q.page : 1,
             pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,

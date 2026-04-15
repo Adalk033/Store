@@ -1117,10 +1117,10 @@ export class CloudApi {
     return this.request<Array<Record<string, unknown>>>('GET', '/v1/reports/credits-overview');
   }
 
-  async getReportPaginated(
-    source: Promise<Array<Record<string, unknown>>>,
+  async getReportPaginated<T>(
+    source: Promise<T[]>,
     query: { page: number; pageSize: number; sort?: SortSpec }
-  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+  ): Promise<PaginatedResponse<T>> {
     const all = await source;
     const { slice, page, pageSize, total, hasMore } = paginateArray(all, query.page, query.pageSize);
     return {
