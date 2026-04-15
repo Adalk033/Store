@@ -1,4 +1,6 @@
 import { getDatabase } from '../connection';
+import { getSetting } from './settings';
+import { getBusinessNowDateTime, getBusinessTodayDate, resolveBusinessTimeZone } from '../../lib/time';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse, SortSpec, IdempotentResult } from '../../../src/types/database';
 import { sanitizePagination, calcLimitOffset, buildLikePattern, isValidDateFilter, isValidStatus, isValidIdempotencyKey } from '../../lib/queryHelpers';
 import { incrementVersion } from '../../lib/dataVersions';
@@ -31,6 +33,45 @@ function toSafeNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function isValidDateString(dateValue: string): boolean {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  return (
+    !Number.isNaN(selectedDate.getTime())
+    && selectedDate.getFullYear() === year
+    && selectedDate.getMonth() === month - 1
+    && selectedDate.getDate() === day
+  );
+}
+
+function resolveCashMovementCreatedAt(movementDate: string | undefined, businessTimeZone: string): string {
+  const todayDate = getBusinessTodayDate(businessTimeZone);
+
+  if (!movementDate || movementDate.trim() === '') {
+    return getBusinessNowDateTime(businessTimeZone);
+  }
+
+  const trimmedDate = movementDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+    throw new Error('La fecha del movimiento no tiene un formato valido');
+  }
+
+  if (!isValidDateString(trimmedDate)) {
+    throw new Error('La fecha del movimiento no es valida');
+  }
+
+  if (trimmedDate > todayDate) {
+    throw new Error('No se permiten fechas futuras para el movimiento');
+  }
+
+  if (trimmedDate === todayDate) {
+    return getBusinessNowDateTime(businessTimeZone);
+  }
+
+  return `${trimmedDate} 00:00:00`;
 }
 
 const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
@@ -145,9 +186,12 @@ export function addCashMovement(data: {
   type: 'expense' | 'withdrawal' | 'deposit';
   amount: number;
   description?: string | null;
+  movement_date?: string;
   idempotency_key?: string;
 }): IdempotentResult<CashMovement> {
   const db = getDatabase();
+  const businessTimeZone = resolveBusinessTimeZone(getSetting('business_timezone'));
+  const createdAt = resolveCashMovementCreatedAt(data.movement_date, businessTimeZone);
 
   // Idempotency check
   const idempotencyKey = isValidIdempotencyKey(data.idempotency_key) ? data.idempotency_key : null;
@@ -162,9 +206,9 @@ export function addCashMovement(data: {
   }
 
   const result = db.prepare(`
-    INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(data.cash_register_id, data.type, data.amount, data.description ?? null, idempotencyKey);
+    INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(data.cash_register_id, data.type, data.amount, data.description ?? null, idempotencyKey, createdAt);
 
   const movement = db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(
     Number(result.lastInsertRowid)

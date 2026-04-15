@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Plus, Lock, DollarSign, Edit2, Trash2 } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
-import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
+import { formatCurrency, formatDate, formatDateTime, getBusinessTodayDate } from '../lib/formatters';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
 import styles from './CashRegisterPage.module.css';
 
@@ -51,16 +51,14 @@ export function CashRegisterPage() {
   // Open period form state
   const [periodName, setPeriodName] = useState('');
   const [openingCash, setOpeningCash] = useState('');
-  const [startDate, setStartDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  });
+  const [startDate, setStartDate] = useState(() => getBusinessTodayDate());
   const [openError, setOpenError] = useState<string | null>(null);
 
   // Movement form state
   const [movementType, setMovementType] = useState<'expense' | 'withdrawal' | 'deposit'>('expense');
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
+  const [movementDate, setMovementDate] = useState(() => getBusinessTodayDate());
   const [movementError, setMovementError] = useState<string | null>(null);
 
   // Edit movement modal state  
@@ -72,10 +70,7 @@ export function CashRegisterPage() {
 
   // Close period state
   const [closingCash, setClosingCash] = useState('');
-  const [closingDate, setClosingDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  });
+  const [closingDate, setClosingDate] = useState(() => getBusinessTodayDate());
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Detail view for historical periods
@@ -467,6 +462,52 @@ export function CashRegisterPage() {
     setTimeout(() => setNotification(null), 3000);
   }
 
+  function getDateOnly(value: string | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return value;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value.slice(0, 10);
+    }
+
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(parsed);
+  }
+
+  function parseDateOnly(value: string): number | null {
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return null;
+    }
+
+    const [year, month, day] = trimmed.split('-').map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    if (
+      Number.isNaN(parsed.getTime())
+      || parsed.getUTCFullYear() !== year
+      || parsed.getUTCMonth() !== month - 1
+      || parsed.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    return parsed.getTime();
+  }
+
+  useEffect(() => {
+    setMovementDate(getBusinessTodayDate());
+  }, [currentPeriod?.id]);
+
   // Summary for the current period based on live movements
   const movementsSummary = useMemo(() => {
     const totalExpenses = movements
@@ -521,12 +562,39 @@ export function CashRegisterPage() {
   async function handleAddMovement() {
     setMovementError(null);
     const amount = parseFloat(movementAmount);
+    const todayDate = getBusinessTodayDate();
 
     if (isNaN(amount) || amount <= 0) {
       setMovementError('Ingrese un monto valido mayor a 0');
       return;
     }
     if (!currentPeriod) return;
+    if (!movementDate) {
+      setMovementError('Seleccione la fecha del movimiento');
+      return;
+    }
+    const periodStartDate = getDateOnly(currentPeriod.start_date);
+    const movementTime = parseDateOnly(movementDate);
+    const periodStartTime = parseDateOnly(periodStartDate);
+
+    if (movementTime === null) {
+      setMovementError('La fecha del movimiento no es valida');
+      return;
+    }
+
+    if (periodStartTime === null) {
+      setMovementError('La fecha de inicio del periodo no es valida');
+      return;
+    }
+
+    if (movementTime < periodStartTime) {
+      setMovementError('La fecha del movimiento no puede ser menor a la fecha de inicio del periodo');
+      return;
+    }
+    if (movementDate > todayDate) {
+      setMovementError('La fecha del movimiento no puede ser futura');
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -535,9 +603,11 @@ export function CashRegisterPage() {
         type: movementType,
         amount,
         description: movementDescription.trim() || null,
+        movement_date: movementDate,
       });
       setMovementAmount('');
       setMovementDescription('');
+      setMovementDate(todayDate);
       showNotification('success', `${MOVEMENT_TYPE_LABELS[movementType]} registrado correctamente`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al registrar movimiento';
@@ -621,7 +691,23 @@ export function CashRegisterPage() {
       return;
     }
 
-    if (closingDate < currentPeriod.start_date) {
+    const periodStartDate = getDateOnly(currentPeriod.start_date);
+    const closingTime = parseDateOnly(closingDate);
+    const periodStartTime = parseDateOnly(periodStartDate);
+
+    if (closingTime === null) {
+      showNotification('error', 'La fecha de cierre no es valida');
+      setShowCloseConfirm(false);
+      return;
+    }
+
+    if (periodStartTime === null) {
+      showNotification('error', 'La fecha de inicio del periodo no es valida');
+      setShowCloseConfirm(false);
+      return;
+    }
+
+    if (closingTime < periodStartTime) {
       showNotification('error', 'La fecha de cierre no puede ser menor a la fecha de inicio del periodo');
       setShowCloseConfirm(false);
       return;
@@ -829,6 +915,17 @@ export function CashRegisterPage() {
                 />
               </div>
               <div className={styles['form-field']}>
+                <label className={styles['form-field__label']}>Fecha del movimiento</label>
+                <input
+                  type="date"
+                  className={styles['form-field__input']}
+                  value={movementDate}
+                  onChange={e => setMovementDate(e.target.value)}
+                  min={getDateOnly(currentPeriod.start_date)}
+                  max={getBusinessTodayDate()}
+                />
+              </div>
+              <div className={styles['form-field']}>
                 <label className={styles['form-field__label']}>Descripcion (opcional)</label>
                 <input
                   type="text"
@@ -972,7 +1069,7 @@ export function CashRegisterPage() {
               className={styles['form-field__input']}
               value={closingDate}
               onChange={e => setClosingDate(e.target.value)}
-              min={currentPeriod.start_date}
+              min={getDateOnly(currentPeriod.start_date)}
             />
           </div>
           <div className={styles['form-field']}>

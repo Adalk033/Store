@@ -445,6 +445,7 @@ const handler = async (event) => {
       }
       const amount = requirePositiveNumber(body.amount, "amount");
       const idempotencyKey = body.idempotency_key?.trim() || null;
+      const movementCreatedAt = resolveCreatedAtFromDate(body.movement_date, "movement_date");
       const data = await withTx(async (client) => {
         if (idempotencyKey) {
           const existing = await client.query(
@@ -456,10 +457,10 @@ const handler = async (event) => {
           }
         }
         const ins = await client.query(
-          `INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key, created_at)
+           VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamp, NOW()))
            RETURNING *`,
-          [cashRegisterId, body.type, amount, body.description ?? null, idempotencyKey]
+          [cashRegisterId, body.type, amount, body.description ?? null, idempotencyKey, movementCreatedAt]
         );
         return ins.rows[0];
       });

@@ -131,6 +131,7 @@ export function useCashRegister() {
     type: 'expense' | 'withdrawal' | 'deposit';
     amount: number;
     description?: string | null;
+    movement_date?: string;
   }): Promise<CashMovement> => {
     try {
       const movement = await window.electronAPI.cashRegister.addMovement(data);

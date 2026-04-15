@@ -736,6 +736,7 @@ export class CloudApi {
     type: 'expense' | 'withdrawal' | 'deposit';
     amount: number;
     description?: string | null;
+    movement_date?: string;
     idempotency_key?: string;
   }): Promise<CashMovement> {
     return this.request<CashMovement>('POST', '/v1/cash-register/movements', data)
@@ -751,6 +752,7 @@ export class CloudApi {
     type?: 'expense' | 'withdrawal' | 'deposit';
     amount?: number;
     description?: string | null;
+    movement_date?: string;
   }): Promise<CashMovement> {
     return this.request<CashMovement>('PUT', `/v1/cash-register/movements/${id}`, data)
       .then(normalizeCashMovementRow);

@@ -157,6 +157,7 @@ const electronAPI = {
       type: 'expense' | 'withdrawal' | 'deposit';
       amount: number;
       description?: string | null;
+      movement_date?: string;
       idempotency_key?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, data),
     updateMovement: (id: number, data: {
