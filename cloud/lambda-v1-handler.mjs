@@ -165,21 +165,68 @@ function parseDateOnly(value, field) {
   return raw;
 }
 
-function todayDateOnly() {
-  return new Date().toISOString().slice(0, 10);
+const DEFAULT_BUSINESS_TIMEZONE = "America/Mexico_City";
+
+function resolveBusinessTimeZone(raw) {
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+  if (!trimmed || trimmed.length > 80) {
+    return DEFAULT_BUSINESS_TIMEZONE;
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format(new Date());
+    return trimmed;
+  } catch {
+    return DEFAULT_BUSINESS_TIMEZONE;
+  }
 }
 
-function resolveCreatedAtFromDate(dateOnly, field) {
+async function getBusinessTimeZone(client) {
+  try {
+    const r = await client.query(
+      "SELECT value FROM settings WHERE key = 'business_timezone' LIMIT 1"
+    );
+    return resolveBusinessTimeZone(r.rows?.[0]?.value);
+  } catch {
+    return DEFAULT_BUSINESS_TIMEZONE;
+  }
+}
+
+function todayDateOnlyInTimeZone(timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+
+  const values = {};
+  for (const part of parts) {
+    if (part.type === "year" || part.type === "month" || part.type === "day") {
+      values[part.type] = part.value;
+    }
+  }
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function resolveCreatedAtFromDate(dateOnly, field, timeZone) {
   if (!dateOnly) {
     return null;
   }
+
   const validDate = parseDateOnly(dateOnly, field);
-  if (validDate > todayDateOnly()) {
+  const today = todayDateOnlyInTimeZone(timeZone);
+
+  if (validDate > today) {
     throw new HttpError(422, "validation_error", `${field} cannot be in the future`);
   }
-  if (validDate === todayDateOnly()) {
+
+  if (validDate === today) {
     return null;
   }
+
+  // Caller will convert this local timestamp to timestamptz using the business time zone.
   return `${validDate} 00:00:00`;
 }
 
@@ -445,8 +492,10 @@ const handler = async (event) => {
       }
       const amount = requirePositiveNumber(body.amount, "amount");
       const idempotencyKey = body.idempotency_key?.trim() || null;
-      const movementCreatedAt = resolveCreatedAtFromDate(body.movement_date, "movement_date");
       const data = await withTx(async (client) => {
+        const businessTimeZone = await getBusinessTimeZone(client);
+        const movementCreatedAt = resolveCreatedAtFromDate(body.movement_date, "movement_date", businessTimeZone);
+
         if (idempotencyKey) {
           const existing = await client.query(
             "SELECT * FROM cash_movements WHERE idempotency_key = $1 LIMIT 1",
@@ -458,9 +507,9 @@ const handler = async (event) => {
         }
         const ins = await client.query(
           `INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key, created_at)
-           VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamp, NOW()))
+           VALUES ($1, $2, $3, $4, $5, COALESCE(($6::timestamp AT TIME ZONE $7), NOW()))
            RETURNING *`,
-          [cashRegisterId, body.type, amount, body.description ?? null, idempotencyKey, movementCreatedAt]
+          [cashRegisterId, body.type, amount, body.description ?? null, idempotencyKey, movementCreatedAt, businessTimeZone]
         );
         return ins.rows[0];
       });
@@ -945,10 +994,12 @@ const handler = async (event) => {
       if (!Array.isArray(body.items) || body.items.length === 0) {
         throw new HttpError(422, "validation_error", "items is required");
       }
-      const saleCreatedAt = resolveCreatedAtFromDate(body.sale_date, "sale_date");
-      const saleDateOnly = saleCreatedAt ? saleCreatedAt.slice(0, 10) : todayDateOnly();
       const idempotencyKey = body.idempotency_key?.trim() || null;
       const data = await withTx(async (client) => {
+        const businessTimeZone = await getBusinessTimeZone(client);
+        const saleCreatedAt = resolveCreatedAtFromDate(body.sale_date, "sale_date", businessTimeZone);
+        const saleDateOnly = saleCreatedAt ? saleCreatedAt.slice(0, 10) : todayDateOnlyInTimeZone(businessTimeZone);
+
         if (idempotencyKey) {
           const existing = await client.query(
             "SELECT id FROM sales WHERE idempotency_key = $1 LIMIT 1",
@@ -977,7 +1028,7 @@ const handler = async (event) => {
         }
         const saleIns = await client.query(
           `INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, idempotency_key, created_at)
-           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7, COALESCE($8::timestamp, NOW()))
+           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7, COALESCE(($8::timestamp AT TIME ZONE $9), NOW()))
            RETURNING *`,
           [
             body.sale_type,
@@ -987,7 +1038,8 @@ const handler = async (event) => {
             body.sale_type === "cash" ? body.cash_change ?? 0 : null,
             cashRegisterId,
             idempotencyKey,
-            saleCreatedAt
+            saleCreatedAt,
+            businessTimeZone
           ]
         );
         const sale = saleIns.rows[0];
@@ -1001,8 +1053,8 @@ const handler = async (event) => {
           );
           await client.query("UPDATE products SET stock = stock - $1 WHERE id = $2", [qty, item.product_id]);
           await client.query(
-            "INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes, created_at) VALUES ($1, 'out', $2, $3, $4, COALESCE($5::timestamp, NOW()))",
-            [item.product_id, -qty, saleId, "Venta automatica", saleCreatedAt]
+            "INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes, created_at) VALUES ($1, 'out', $2, $3, $4, COALESCE(($5::timestamp AT TIME ZONE $6), NOW()))",
+            [item.product_id, -qty, saleId, "Venta automatica", saleCreatedAt, businessTimeZone]
           );
         }
         if (body.sale_type === "credit") {
@@ -1025,14 +1077,14 @@ const handler = async (event) => {
           const status = initialPayment >= subtotal ? "paid" : "pending";
           const creditIns = await client.query(
             `INSERT INTO credits (sale_id, customer_id, original_amount, due_date, surcharge_percent, surcharge_applied, total_due, amount_paid, status, paid_at, created_at)
-             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN COALESCE($8::timestamp, NOW()) ELSE NULL END, COALESCE($8::timestamp, NOW()))
+             VALUES ($1, $2, $3, $4, $5, 0, $3, $6, $7, CASE WHEN $7='paid' THEN COALESCE(($8::timestamp AT TIME ZONE $9), NOW()) ELSE NULL END, COALESCE(($8::timestamp AT TIME ZONE $9), NOW()))
              RETURNING *`,
-            [saleId, body.customer_id, subtotal, dueDateStr, surchargePercent, initialPayment, status, saleCreatedAt]
+            [saleId, body.customer_id, subtotal, dueDateStr, surchargePercent, initialPayment, status, saleCreatedAt, businessTimeZone]
           );
           if (initialPayment > 0) {
             await client.query(
-              "INSERT INTO credit_payments (credit_id, amount, cash_register_id, created_at) VALUES ($1, $2, $3, COALESCE($4::timestamp, NOW()))",
-              [creditIns.rows[0].id, initialPayment, cashRegisterId, saleCreatedAt]
+              "INSERT INTO credit_payments (credit_id, amount, cash_register_id, created_at) VALUES ($1, $2, $3, COALESCE(($4::timestamp AT TIME ZONE $5), NOW()))",
+              [creditIns.rows[0].id, initialPayment, cashRegisterId, saleCreatedAt, businessTimeZone]
             );
           }
         }
@@ -1219,9 +1271,11 @@ const handler = async (event) => {
       const creditId = getPathId(path, /^\/v1\/credits\/(\d+)\/payments$/, "credit_id");
       const body = parseBody(event);
       const amount = requirePositiveNumber(body.amount, "amount");
-      const paymentCreatedAt = resolveCreatedAtFromDate(body.payment_date, "payment_date");
       const idempotencyKey = body.idempotency_key?.trim() || null;
       const data = await withTx(async (client) => {
+        const businessTimeZone = await getBusinessTimeZone(client);
+        const paymentCreatedAt = resolveCreatedAtFromDate(body.payment_date, "payment_date", businessTimeZone);
+
         if (idempotencyKey) {
           const existing = await client.query(
             "SELECT credit_id FROM credit_payments WHERE idempotency_key = $1 LIMIT 1",
@@ -1243,8 +1297,8 @@ const handler = async (event) => {
           throw new HttpError(409, "business_conflict", "Credit is already paid");
         }
         await client.query(
-          "INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, NOW()))",
-          [creditId, amount, cashRegisterId, idempotencyKey, paymentCreatedAt]
+          "INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES ($1, $2, $3, $4, COALESCE(($5::timestamp AT TIME ZONE $6), NOW()))",
+          [creditId, amount, cashRegisterId, idempotencyKey, paymentCreatedAt, businessTimeZone]
         );
         const upd = await client.query(
           `UPDATE credits
@@ -1256,8 +1310,8 @@ const handler = async (event) => {
         const updated = upd.rows[0];
         if (Number(updated.amount_paid) >= Number(updated.total_due)) {
           const paid = await client.query(
-            "UPDATE credits SET status='paid', paid_at=COALESCE($1::timestamp, NOW()) WHERE id = $2 RETURNING *",
-            [paymentCreatedAt, creditId]
+            "UPDATE credits SET status='paid', paid_at=COALESCE(($1::timestamp AT TIME ZONE $3), NOW()) WHERE id = $2 RETURNING *",
+            [paymentCreatedAt, creditId, businessTimeZone]
           );
           return { created: true, credit: paid.rows[0] };
         }
