@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText } from 'lucide-react';
+import { ArrowLeft, Search, User, Phone, Mail, CalendarDays, FileText, Trash2 } from 'lucide-react';
 import { useCustomers } from '../hooks/useCustomers';
 import { useCredits } from '../hooks/useCredits';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
@@ -28,6 +28,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     loading: loadingCustomers,
     error: customersError,
     updateCustomer,
+    deleteCustomer,
     fetchCustomersPaginated,
   } = useCustomers();
   const {
@@ -239,6 +240,22 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     }
   }
 
+  async function handleDeleteCustomer() {
+    if (!selectedCustomer) return;
+
+    if (!confirm(`¿Está seguro de eliminar el cliente "${selectedCustomer.name}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      await deleteCustomer(selectedCustomer.id);
+      await backToList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar el cliente';
+      setContactFeedback({ type: 'error', message });
+    }
+  }
+
   function getProgressPercent(credit: Credit): number {
     if (credit.total_due <= 0) return 100;
     return Math.min(100, Math.round((credit.amount_paid / credit.total_due) * 100));
@@ -309,9 +326,15 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
               <div className={styles['contact-form__header']}>
                 <h3 className={styles['contact-form__title']}>Datos de contacto</h3>
                 {!isEditingContact && (
-                  <button type="button" className={styles['btn-secondary']} onClick={startEditingContact}>
-                    Editar datos
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" className={styles['btn-secondary']} onClick={startEditingContact}>
+                      Editar datos
+                    </button>
+                    <button type="button" className={styles['btn-danger']} onClick={handleDeleteCustomer}>
+                      <Trash2 size={16} />
+                      Eliminar cliente
+                    </button>
+                  </div>
                 )}
               </div>
 

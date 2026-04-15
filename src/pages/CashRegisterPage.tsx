@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { ArrowLeft, Plus, Lock, DollarSign } from 'lucide-react';
+import { ArrowLeft, Plus, Lock, DollarSign, Edit2, Trash2 } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
@@ -41,6 +41,8 @@ export function CashRegisterPage() {
     openPeriod,
     closePeriod,
     addMovement,
+    updateMovement,
+    deleteMovement,
   } = useCashRegister();
 
   const [viewMode, setViewMode] = useState<ViewMode>('current');
@@ -60,6 +62,13 @@ export function CashRegisterPage() {
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
   const [movementError, setMovementError] = useState<string | null>(null);
+
+  // Edit movement modal state  
+  const [editMovement, setEditMovement] = useState<CashMovement | null>(null);
+  const [editType, setEditType] = useState<'expense' | 'withdrawal' | 'deposit'>('expense');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Close period state
   const [closingCash, setClosingCash] = useState('');
@@ -538,6 +547,64 @@ export function CashRegisterPage() {
     }
   }
 
+  function openEditMovementModal(movement: CashMovement) {
+    setEditMovement(movement);
+    setEditType(movement.type);
+    setEditAmount(movement.amount.toString());
+    setEditDescription(movement.description || '');
+    setEditError(null);
+  }
+
+  function closeEditMovementModal() {
+    setEditMovement(null);
+    setEditType('expense');
+    setEditAmount('');
+    setEditDescription('');
+    setEditError(null);
+  }
+
+  async function handleUpdateMovement() {
+    if (!editMovement) return;
+    setEditError(null);
+    const amount = parseFloat(editAmount);
+
+    if (isNaN(amount) || amount <= 0) {
+      setEditError('Ingrese un monto valido mayor a 0');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await updateMovement(editMovement.id, {
+        type: editType,
+        amount,
+        description: editDescription.trim() || null,
+      });
+      closeEditMovementModal();
+      showNotification('success', `${MOVEMENT_TYPE_LABELS[editType]} actualizado correctamente`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar movimiento';
+      showNotification('error', message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteMovement(movementId: number) {
+    if (!confirm('¿Está seguro de que desea eliminar este movimiento?')) return;
+
+    try {
+      setSubmitting(true);
+      await deleteMovement(movementId);
+      showNotification('success', 'Movimiento eliminado correctamente');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar movimiento';
+      showNotification('error', message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleClosePeriod() {
     if (!currentPeriod) return;
     const cash = parseFloat(closingCash);
@@ -792,12 +859,13 @@ export function CashRegisterPage() {
                   <th>Monto</th>
                   <th>Descripcion</th>
                   <th>Fecha</th>
+                  <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {movements.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className={styles['table__empty']}>
+                    <td colSpan={5} className={styles['table__empty']}>
                       No hay movimientos registrados en este periodo
                     </td>
                   </tr>
@@ -812,6 +880,24 @@ export function CashRegisterPage() {
                       <td>{formatCurrency(m.amount)}</td>
                       <td>{m.description || '-'}</td>
                       <td>{formatDateTime(m.created_at)}</td>
+                      <td style={{ textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          className={styles['btn-icon']}
+                          onClick={() => openEditMovementModal(m)}
+                          title="Editar"
+                          disabled={submitting}
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          className={`${styles['btn-icon']} ${styles['btn-icon--danger']}`}
+                          onClick={() => handleDeleteMovement(m.id)}
+                          title="Eliminar"
+                          disabled={submitting}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1164,6 +1250,67 @@ export function CashRegisterPage() {
               >
                 Cerrar Periodo
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Movement Modal */}
+      {editMovement && (
+        <div className={styles['confirm-overlay']}>
+          <div className={styles['confirm-dialog']}>
+            <h3 className={styles['confirm-dialog__title']}>Editar Movimiento</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className={styles['form-field']}>
+                <label className={styles['form-field__label']}>Tipo</label>
+                <select
+                  className={styles['form-field__select']}
+                  value={editType}
+                  onChange={e => setEditType(e.target.value as 'expense' | 'withdrawal' | 'deposit')}
+                >
+                  <option value="expense">Gasto</option>
+                  <option value="withdrawal">Retiro</option>
+                  <option value="deposit">Deposito</option>
+                </select>
+              </div>
+              <div className={styles['form-field']}>
+                <label className={styles['form-field__label']}>Monto</label>
+                <input
+                  type="number"
+                  className={styles['form-field__input']}
+                  value={editAmount}
+                  onChange={e => setEditAmount(e.target.value)}
+                  placeholder="0.00"
+                  min="0.01"
+                  step="0.01"
+                />
+              </div>
+              <div className={styles['form-field']}>
+                <label className={styles['form-field__label']}>Descripcion (opcional)</label>
+                <input
+                  type="text"
+                  className={styles['form-field__input']}
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  placeholder="Descripcion"
+                />
+              </div>
+              {editError && <span className={styles['form-field__error']}>{editError}</span>}
+              <div className={styles['confirm-dialog__actions']}>
+                <button
+                  className={styles['btn-secondary']}
+                  onClick={closeEditMovementModal}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className={styles['btn-primary']}
+                  onClick={handleUpdateMovement}
+                  disabled={submitting}
+                >
+                  Guardar Cambios
+                </button>
+              </div>
             </div>
           </div>
         </div>

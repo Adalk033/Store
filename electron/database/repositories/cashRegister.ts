@@ -181,6 +181,64 @@ export function getMovementsByPeriod(cashRegisterId: number): CashMovement[] {
   ).all(cashRegisterId) as CashMovement[];
 }
 
+export function updateCashMovement(id: number, data: {
+  type?: 'expense' | 'withdrawal' | 'deposit';
+  amount?: number;
+  description?: string | null;
+}): CashMovement {
+  const db = getDatabase();
+
+  // Verify movement exists and get its period
+  const movement = db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(id) as CashMovement | undefined;
+  if (!movement) {
+    throw new Error('El movimiento de caja no existe');
+  }
+
+  // Verify the period is still open
+  const period = db.prepare(
+    "SELECT status FROM cash_register_periods WHERE id = ? AND status = 'open'"
+  ).get(movement.cash_register_id) as { status: string } | undefined;
+  if (!period) {
+    throw new Error('No se puede editar movimientos de una caja cerrada');
+  }
+
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (data.type !== undefined) { fields.push('type = ?'); values.push(data.type); }
+  if (data.amount !== undefined) { fields.push('amount = ?'); values.push(data.amount); }
+  if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
+
+  if (fields.length === 0) return movement;
+
+  values.push(id);
+  db.prepare(`UPDATE cash_movements SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  incrementVersion('cash');
+  return db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(id) as CashMovement;
+}
+
+export function deleteCashMovement(id: number): boolean {
+  const db = getDatabase();
+
+  // Verify movement exists and get its period
+  const movement = db.prepare('SELECT * FROM cash_movements WHERE id = ?').get(id) as CashMovement | undefined;
+  if (!movement) {
+    throw new Error('El movimiento de caja no existe');
+  }
+
+  // Verify the period is still open
+  const period = db.prepare(
+    "SELECT status FROM cash_register_periods WHERE id = ? AND status = 'open'"
+  ).get(movement.cash_register_id) as { status: string } | undefined;
+  if (!period) {
+    throw new Error('No se puede eliminar movimientos de una caja cerrada');
+  }
+
+  const result = db.prepare('DELETE FROM cash_movements WHERE id = ?').run(id);
+  if (result.changes > 0) incrementVersion('cash');
+  return result.changes > 0;
+}
+
 export function getSalesSummaryByPeriod(cashRegisterId: number): CashRegisterSalesSummary {
   const db = getDatabase();
 

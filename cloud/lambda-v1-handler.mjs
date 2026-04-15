@@ -473,6 +473,79 @@ const handler = async (event) => {
       );
       return ok(200, r.rows, requestId);
     }
+    if (method === "PUT" && /^\/v1\/cash-register\/movements\/\d+$/.test(path)) {
+      const movementId = getPathId(path, /^\/v1\/cash-register\/movements\/(\d+)$/, "id");
+      const body = parseBody(event);
+      const setParts = [];
+      const values = [];
+      let idx = 1;
+      if (body.type !== void 0) {
+        if (!["expense", "withdrawal", "deposit"].includes(body.type)) {
+          throw new HttpError(422, "validation_error", "type must be expense|withdrawal|deposit");
+        }
+        setParts.push(`type = $${idx++}`);
+        values.push(body.type);
+      }
+      if (body.amount !== void 0) {
+        setParts.push(`amount = $${idx++}`);
+        values.push(requirePositiveNumber(body.amount, "amount"));
+      }
+      if (body.description !== void 0) {
+        setParts.push(`description = $${idx++}`);
+        values.push(body.description ?? null);
+      }
+      if (setParts.length === 0) {
+        throw new HttpError(400, "bad_request", "No fields to update");
+      }
+      const data = await withTx(async (client) => {
+        const movement = await client.query(
+          "SELECT * FROM cash_movements WHERE id = $1 LIMIT 1",
+          [movementId]
+        );
+        if (movement.rowCount === 0) {
+          throw new HttpError(404, "not_found", "Movement not found");
+        }
+        const period = await client.query(
+          "SELECT status FROM cash_register_periods WHERE id = $1 AND status = 'open' LIMIT 1",
+          [movement.rows[0].cash_register_id]
+        );
+        if (period.rowCount === 0) {
+          throw new HttpError(409, "conflict", "Cannot update movement from a closed cash period");
+        }
+        values.push(movementId);
+        const result = await client.query(
+          `UPDATE cash_movements SET ${setParts.join(", ")} WHERE id = $${idx} RETURNING *`,
+          values
+        );
+        return result.rows[0];
+      });
+      return ok(200, data, requestId);
+    }
+    if (method === "DELETE" && /^\/v1\/cash-register\/movements\/\d+$/.test(path)) {
+      const movementId = getPathId(path, /^\/v1\/cash-register\/movements\/(\d+)$/, "id");
+      const data = await withTx(async (client) => {
+        const movement = await client.query(
+          "SELECT * FROM cash_movements WHERE id = $1 LIMIT 1",
+          [movementId]
+        );
+        if (movement.rowCount === 0) {
+          throw new HttpError(404, "not_found", "Movement not found");
+        }
+        const period = await client.query(
+          "SELECT status FROM cash_register_periods WHERE id = $1 AND status = 'open' LIMIT 1",
+          [movement.rows[0].cash_register_id]
+        );
+        if (period.rowCount === 0) {
+          throw new HttpError(409, "conflict", "Cannot delete movement from a closed cash period");
+        }
+        const result = await client.query(
+          "DELETE FROM cash_movements WHERE id = $1",
+          [movementId]
+        );
+        return { deleted: result.rowCount > 0 };
+      });
+      return ok(200, data, requestId);
+    }
     if (method === "GET" && /^\/v1\/cash-register\/\d+\/sales$/.test(path)) {
       const cashRegisterId = getPathId(path, /^\/v1\/cash-register\/(\d+)\/sales$/, "id");
       const r = await pool.query(
@@ -635,8 +708,23 @@ const handler = async (event) => {
     }
     if (method === "DELETE" && /^\/v1\/customers\/\d+$/.test(path)) {
       const id = getPathId(path, /^\/v1\/customers\/(\d+)$/, "id");
-      const r = await pool.query("UPDATE customers SET is_active = 0 WHERE id = $1", [id]);
-      return ok(200, { deleted: r.rowCount > 0 }, requestId);
+      const data = await withTx(async (client) => {
+        const debtCheck = await client.query(
+          "SELECT COUNT(*) AS active_debt_count FROM credits WHERE customer_id = $1 AND status != 'paid'",
+          [id]
+        );
+        const activeDebtCount = parseInt(debtCheck.rows[0].active_debt_count, 10);
+        if (activeDebtCount > 0) {
+          throw new HttpError(
+            409,
+            "conflict",
+            `Cannot delete customer with ${activeDebtCount} unpaid credit(s). Please settle all debts first.`
+          );
+        }
+        const r = await client.query("UPDATE customers SET is_active = 0 WHERE id = $1", [id]);
+        return { deleted: r.rowCount > 0 };
+      });
+      return ok(200, data, requestId);
     }
     if (method === "GET" && path === "/v1/categories") {
       const r = await pool.query("SELECT * FROM categories ORDER BY name ASC");

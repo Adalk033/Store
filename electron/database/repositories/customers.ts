@@ -71,6 +71,18 @@ export function updateCustomer(id: number, data: UpdateCustomerData): Customer |
 
 export function deleteCustomer(id: number): boolean {
   const db = getDatabase();
+
+  // Check if customer has active debts (unpaid credits)
+  const debtCheck = db.prepare(`
+    SELECT COUNT(*) AS active_debt_count
+    FROM credits
+    WHERE customer_id = ? AND status != 'paid'
+  `).get(id) as { active_debt_count: number };
+
+  if (debtCheck.active_debt_count > 0) {
+    throw new Error(`No se puede eliminar el cliente. Tiene ${debtCheck.active_debt_count} crédito(s) pendiente(s) de pago.`);
+  }
+
   const result = db.prepare('UPDATE customers SET is_active = 0 WHERE id = ?').run(id);
   if (result.changes > 0) incrementVersion('customers');
   return result.changes > 0;

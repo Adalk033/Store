@@ -65,6 +65,8 @@ export const IPC_CHANNELS = {
   CASH_REGISTER_GET_CURRENT: 'cashRegister:getCurrent',
   CASH_REGISTER_GET_ALL: 'cashRegister:getAll',
   CASH_REGISTER_ADD_MOVEMENT: 'cashRegister:addMovement',
+  CASH_REGISTER_UPDATE_MOVEMENT: 'cashRegister:updateMovement',
+  CASH_REGISTER_DELETE_MOVEMENT: 'cashRegister:deleteMovement',
   CASH_REGISTER_GET_MOVEMENTS: 'cashRegister:getMovements',
   CASH_REGISTER_GET_SALES_SUMMARY: 'cashRegister:getSalesSummary',
   CASH_REGISTER_GET_SALES: 'cashRegister:getSales',

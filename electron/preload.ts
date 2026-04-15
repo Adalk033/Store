@@ -159,6 +159,13 @@ const electronAPI = {
       description?: string | null;
       idempotency_key?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_ADD_MOVEMENT, data),
+    updateMovement: (id: number, data: {
+      type?: 'expense' | 'withdrawal' | 'deposit';
+      amount?: number;
+      description?: string | null;
+    }) => ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_UPDATE_MOVEMENT, id, data),
+    deleteMovement: (id: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_DELETE_MOVEMENT, id),
     getMovements: (cashRegisterId: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, cashRegisterId),
     getSalesSummary: (cashRegisterId: number) =>

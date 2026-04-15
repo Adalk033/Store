@@ -999,6 +999,18 @@ function registerIpcHandlers(): void {
     const result = cashRegisterRepo.addCashMovement(data);
     return result.data;
   });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_UPDATE_MOVEMENT, (_, id: number, data: any) => {
+    if (canUseCloudApi()) {
+      return cloudApi.updateCashMovement(id, data);
+    }
+    return cashRegisterRepo.updateCashMovement(id, data);
+  });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_DELETE_MOVEMENT, (_, id: number) => {
+    if (canUseCloudApi()) {
+      return cloudApi.deleteCashMovement(id);
+    }
+    return cashRegisterRepo.deleteCashMovement(id);
+  });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS, (_, cashRegisterId: number) => {
     if (canUseCloudApi()) {
       return cloudApi.getCashMovements(cashRegisterId);

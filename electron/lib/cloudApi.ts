@@ -747,6 +747,20 @@ export class CloudApi {
       .then((rows) => rows.map(normalizeCashMovementRow));
   }
 
+  updateCashMovement(id: number, data: {
+    type?: 'expense' | 'withdrawal' | 'deposit';
+    amount?: number;
+    description?: string | null;
+  }): Promise<CashMovement> {
+    return this.request<CashMovement>('PUT', `/v1/cash-register/movements/${id}`, data)
+      .then(normalizeCashMovementRow);
+  }
+
+  deleteCashMovement(id: number): Promise<boolean> {
+    return this.request<{ deleted: boolean }>('DELETE', `/v1/cash-register/movements/${id}`)
+      .then((r) => r.deleted);
+  }
+
   getCashRegisterSales(cashRegisterId: number): Promise<SaleListItem[]> {
     return this.request<SaleListItem[]>('GET', `/v1/cash-register/${cashRegisterId}/sales`)
       .then((rows) => rows.map(normalizeSaleListRow));
