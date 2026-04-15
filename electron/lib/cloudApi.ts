@@ -670,6 +670,25 @@ export class CloudApi {
     return this.request<CashRegisterPeriod[]>('GET', '/v1/cash-register/periods');
   }
 
+  async getCashRegisterPeriodsPaginated(
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CashRegisterPeriod>> {
+    const all = await this.getCashRegisterPeriods();
+    const filtered = (query.status && query.status.trim())
+      ? all.filter((p) => p.status === query.status)
+      : all;
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
+    return {
+      items: slice,
+      page,
+      pageSize,
+      total,
+      hasMore,
+      sort: query.sort ?? { field: 'created_at', direction: 'DESC' },
+    };
+  }
+
   addCashMovement(data: {
     cash_register_id: number;
     type: 'expense' | 'withdrawal' | 'deposit';
@@ -707,6 +726,78 @@ export class CloudApi {
       total_credit_sales: number;
       total_credit_collected: number;
     }>('GET', `/v1/cash-register/${cashRegisterId}/sales-summary`);
+  }
+
+  async getCashRegisterSalesPaginated(
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<SaleListItem>> {
+    const all = await this.getCashRegisterSales(cashRegisterId);
+    const search = (query.search || '').trim().toLowerCase();
+    const filtered = search
+      ? all.filter((s) => {
+          const customer = (s.customer_name || '').toLowerCase();
+          return customer.includes(search) || String(s.id).includes(search);
+        })
+      : all;
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
+    return {
+      items: slice,
+      page,
+      pageSize,
+      total,
+      hasMore,
+      sort: query.sort ?? { field: 'created_at', direction: 'DESC' },
+    };
+  }
+
+  async getCashRegisterCreditPaymentsPaginated(
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CreditPaymentListItem>> {
+    const all = await this.getCashRegisterCreditPayments(cashRegisterId);
+    const search = (query.search || '').trim().toLowerCase();
+    const filtered = search
+      ? all.filter((cp) => {
+          const customer = (cp.customer_name || '').toLowerCase();
+          return customer.includes(search) || String(cp.id).includes(search);
+        })
+      : all;
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
+    return {
+      items: slice,
+      page,
+      pageSize,
+      total,
+      hasMore,
+      sort: query.sort ?? { field: 'created_at', direction: 'DESC' },
+    };
+  }
+
+  async getCashMovementsPaginated(
+    cashRegisterId: number,
+    query: PaginatedQuery
+  ): Promise<PaginatedResponse<CashMovement>> {
+    const all = await this.getCashMovements(cashRegisterId);
+    const search = (query.search || '').trim().toLowerCase();
+    const filtered = search
+      ? all.filter((m) => {
+          const desc = (m.description || '').toLowerCase();
+          return desc.includes(search) || String(m.id).includes(search);
+        })
+      : all;
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
+    return {
+      items: slice,
+      page,
+      pageSize,
+      total,
+      hasMore,
+      sort: query.sort ?? { field: 'created_at', direction: 'DESC' },
+    };
   }
 
   // Sales

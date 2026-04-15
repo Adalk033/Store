@@ -273,7 +273,18 @@ export function deleteProductPermanently(id: number): boolean {
     throw new Error('No se puede eliminar permanentemente: el producto tiene ventas asociadas.');
   }
 
-  const result = db.prepare('DELETE FROM products WHERE id = ?').run(id);
-  if (result.changes > 0) incrementVersion('products');
-  return result.changes > 0;
+  const transaction = db.transaction(() => {
+    // Remove inventory movements referencing this product (safe because no sales exist)
+    db.prepare('DELETE FROM inventory_movements WHERE product_id = ?').run(id);
+
+    const result = db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    return result.changes > 0;
+  });
+
+  const deleted = transaction();
+  if (deleted) {
+    incrementVersion('products');
+    incrementVersion('inventory');
+  }
+  return deleted;
 }
