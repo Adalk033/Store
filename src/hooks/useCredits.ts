@@ -111,9 +111,15 @@ export function useCredits() {
     query: PaginatedQuery
   ): Promise<PaginatedResponse<CreditListItem> | null> => {
     try {
+      const normalizedCustomerId = Number(customerId);
+      if (!Number.isInteger(normalizedCustomerId) || normalizedCustomerId < 1) {
+        console.warn('useCredits.fetchCreditsByCustomerPaginated: invalid customerId', customerId);
+        return null;
+      }
+
       setLoading(true);
       setError(null);
-      return await window.electronAPI.credits.getByCustomerPaginated(customerId, query);
+      return await window.electronAPI.credits.getByCustomerPaginated(normalizedCustomerId, query);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar creditos del cliente';
       setError(message);

@@ -143,6 +143,35 @@ export function useCashRegister() {
     }
   }, []);
 
+  const updateMovement = useCallback(async (id: number, data: {
+    type?: 'expense' | 'withdrawal' | 'deposit';
+    amount?: number;
+    description?: string | null;
+  }): Promise<CashMovement> => {
+    try {
+      const movement = await window.electronAPI.cashRegister.updateMovement(id, data);
+      setMovements(prev => prev.map(m => m.id === id ? movement : m));
+      return movement;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar movimiento';
+      console.error('useCashRegister.updateMovement:', err);
+      throw new Error(message);
+    }
+  }, []);
+
+  const deleteMovement = useCallback(async (id: number): Promise<void> => {
+    try {
+      const success = await window.electronAPI.cashRegister.deleteMovement(id);
+      if (success) {
+        setMovements(prev => prev.filter(m => m.id !== id));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar movimiento';
+      console.error('useCashRegister.deleteMovement:', err);
+      throw new Error(message);
+    }
+  }, []);
+
   const fetchSalesPaginated = useCallback(async (
     cashRegisterId: number,
     query: PaginatedQuery
@@ -203,5 +232,7 @@ export function useCashRegister() {
     openPeriod,
     closePeriod,
     addMovement,
+    updateMovement,
+    deleteMovement,
   };
 }

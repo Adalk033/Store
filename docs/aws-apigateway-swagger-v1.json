@@ -25,6 +25,10 @@
 		"/v1/cash-register/periods": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/movements": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddCashMovementRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/{id}/movements": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/movements/{id}": {
+			"put": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }, { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateCashMovementRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } },
+			"delete": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } }
+		},
 		"/v1/cash-register/{id}/sales": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/{id}/credit-payments": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/{id}/sales-summary": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
@@ -143,6 +147,14 @@
 				"amount": { "type": "number" },
 				"description": { "type": "string" },
 				"idempotency_key": { "type": "string" }
+			}
+		},
+		"UpdateCashMovementRequest": {
+			"type": "object",
+			"properties": {
+				"type": { "type": "string", "enum": ["expense", "withdrawal", "deposit"] },
+				"amount": { "type": "number" },
+				"description": { "type": "string" }
 			}
 		},
 		"CreateCategoryRequest": {

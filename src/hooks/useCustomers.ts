@@ -67,6 +67,19 @@ export function useCustomers() {
     }
   }, []);
 
+  const deleteCustomer = useCallback(async (id: number): Promise<void> => {
+    try {
+      const success = await window.electronAPI.customers.delete(id);
+      if (success) {
+        setCustomers(prev => prev.filter(customer => customer.id !== id));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar cliente';
+      console.error('useCustomers.deleteCustomer:', err);
+      throw new Error(message);
+    }
+  }, []);
+
   // --- Paginated methods (Phase 3) ---
 
   const fetchCustomersPaginated = useCallback(async (
@@ -93,6 +106,7 @@ export function useCustomers() {
     fetchCustomers,
     createCustomer,
     updateCustomer,
+    deleteCustomer,
     fetchCustomersPaginated,
   };
 }

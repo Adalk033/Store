@@ -514,6 +514,40 @@
   cursor: not-allowed;
 }
 
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-icon:hover:not(:disabled) {
+  background-color: rgba(26, 43, 60, 0.1);
+  color: var(--color-primary);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon--danger {
+  color: var(--color-error);
+}
+
+.btn-icon--danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+}
+
 /* Movement type badges */
 .movement-type {
   display: inline-block;
