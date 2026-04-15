@@ -72,6 +72,44 @@ function normalizeTimestamp(value: unknown): unknown {
   return value;
 }
 
+function normalizeCashRegisterPeriodRow(raw: unknown): CashRegisterPeriod {
+  const row = raw as Record<string, unknown>;
+  return {
+    ...row,
+    id: toFiniteInteger(row.id) ?? 0,
+    opening_cash: toFiniteNumber(row.opening_cash) ?? 0,
+    total_cash_sales: toFiniteNumber(row.total_cash_sales) ?? 0,
+    total_credit_sales: toFiniteNumber(row.total_credit_sales) ?? 0,
+    total_credit_collected: toFiniteNumber(row.total_credit_collected) ?? 0,
+    total_expenses: toFiniteNumber(row.total_expenses) ?? 0,
+    closing_cash: row.closing_cash != null ? (toFiniteNumber(row.closing_cash) ?? null) : null,
+    version: toFiniteInteger(row.version) ?? 1,
+  } as CashRegisterPeriod;
+}
+
+function normalizeCashMovementRow(raw: unknown): CashMovement {
+  const row = raw as Record<string, unknown>;
+  return {
+    ...row,
+    id: toFiniteInteger(row.id) ?? 0,
+    cash_register_id: toFiniteInteger(row.cash_register_id) ?? 0,
+    amount: toFiniteNumber(row.amount) ?? 0,
+  } as CashMovement;
+}
+
+function normalizeCreditPaymentListItemRow(raw: unknown): CreditPaymentListItem {
+  const row = raw as Record<string, unknown>;
+  return {
+    ...row,
+    id: toFiniteInteger(row.id) ?? 0,
+    credit_id: toFiniteInteger(row.credit_id) ?? 0,
+    amount: toFiniteNumber(row.amount) ?? 0,
+    cash_register_id: row.cash_register_id != null ? (toFiniteInteger(row.cash_register_id) ?? null) : null,
+    sale_id: toFiniteInteger(row.sale_id) ?? 0,
+    customer_id: toFiniteInteger(row.customer_id) ?? 0,
+  } as CreditPaymentListItem;
+}
+
 function normalizeProductRow(raw: unknown): Product {
   if (typeof raw !== 'object' || raw === null) {
     return raw as Product;
@@ -655,19 +693,23 @@ export class CloudApi {
 
   // Cash register
   getCurrentCashRegister(): Promise<CashRegisterPeriod | null> {
-    return this.request<CashRegisterPeriod | null>('GET', '/v1/cash-register/current');
+    return this.request<CashRegisterPeriod | null>('GET', '/v1/cash-register/current')
+      .then((row) => row ? normalizeCashRegisterPeriodRow(row) : null);
   }
 
   openCashRegister(data: { period_name: string; start_date: string; opening_cash: number }): Promise<CashRegisterPeriod> {
-    return this.request<CashRegisterPeriod>('POST', '/v1/cash-register/open', data);
+    return this.request<CashRegisterPeriod>('POST', '/v1/cash-register/open', data)
+      .then(normalizeCashRegisterPeriodRow);
   }
 
   closeCashRegister(data: { id: number; closing_cash: number; end_date: string }): Promise<CashRegisterPeriod> {
-    return this.request<CashRegisterPeriod>('POST', '/v1/cash-register/close', data);
+    return this.request<CashRegisterPeriod>('POST', '/v1/cash-register/close', data)
+      .then(normalizeCashRegisterPeriodRow);
   }
 
   getCashRegisterPeriods(): Promise<CashRegisterPeriod[]> {
-    return this.request<CashRegisterPeriod[]>('GET', '/v1/cash-register/periods');
+    return this.request<CashRegisterPeriod[]>('GET', '/v1/cash-register/periods')
+      .then((rows) => rows.map(normalizeCashRegisterPeriodRow));
   }
 
   async getCashRegisterPeriodsPaginated(
@@ -696,22 +738,25 @@ export class CloudApi {
     description?: string | null;
     idempotency_key?: string;
   }): Promise<CashMovement> {
-    return this.request<CashMovement>('POST', '/v1/cash-register/movements', data);
+    return this.request<CashMovement>('POST', '/v1/cash-register/movements', data)
+      .then(normalizeCashMovementRow);
   }
 
   getCashMovements(cashRegisterId: number): Promise<CashMovement[]> {
-    return this.request<CashMovement[]>('GET', `/v1/cash-register/${cashRegisterId}/movements`);
+    return this.request<CashMovement[]>('GET', `/v1/cash-register/${cashRegisterId}/movements`)
+      .then((rows) => rows.map(normalizeCashMovementRow));
   }
 
   getCashRegisterSales(cashRegisterId: number): Promise<SaleListItem[]> {
-    return this.request<SaleListItem[]>('GET', `/v1/cash-register/${cashRegisterId}/sales`);
+    return this.request<SaleListItem[]>('GET', `/v1/cash-register/${cashRegisterId}/sales`)
+      .then((rows) => rows.map(normalizeSaleListRow));
   }
 
   getCashRegisterCreditPayments(cashRegisterId: number): Promise<CreditPaymentListItem[]> {
     return this.request<CreditPaymentListItem[]>(
       'GET',
       `/v1/cash-register/${cashRegisterId}/credit-payments`
-    );
+    ).then((rows) => rows.map(normalizeCreditPaymentListItemRow));
   }
 
   getCashRegisterSalesSummary(cashRegisterId: number): Promise<{

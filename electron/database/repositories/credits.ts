@@ -143,6 +143,7 @@ export function addCreditPayment(
 
   transaction();
   incrementVersion('credits');
+  incrementVersion('cash');
   return { data: getCreditById(creditId)!, created: true };
 }
 

@@ -856,6 +856,18 @@ export function CashRegisterPage() {
             <span className={styles['close-panel__value']}>{formatCurrency(currentPeriod.opening_cash)}</span>
           </div>
           <div className={styles['close-panel__row']}>
+            <span className={styles['close-panel__label']}>Ventas efectivo</span>
+            <span className={styles['close-panel__value']}>{formatCurrency(salesSummary.total_cash_sales)}</span>
+          </div>
+          <div className={styles['close-panel__row']}>
+            <span className={styles['close-panel__label']}>Ventas credito</span>
+            <span className={styles['close-panel__value']}>{formatCurrency(salesSummary.total_credit_sales)}</span>
+          </div>
+          <div className={styles['close-panel__row']}>
+            <span className={styles['close-panel__label']}>Cobros credito</span>
+            <span className={styles['close-panel__value']}>{formatCurrency(salesSummary.total_credit_collected)}</span>
+          </div>
+          <div className={styles['close-panel__row']}>
             <span className={styles['close-panel__label']}>Total gastos</span>
             <span className={styles['close-panel__value']}>{formatCurrency(movementsSummary.totalExpenses)}</span>
           </div>
@@ -999,6 +1011,12 @@ export function CashRegisterPage() {
           <div className={styles['summary__card']}>
             <span className={styles['summary__label']}>Ventas Credito</span>
             <span className={styles['summary__value']}>{formatCurrency(selectedPeriod.total_credit_sales)}</span>
+          </div>
+          <div className={styles['summary__card']}>
+            <span className={styles['summary__label']}>Cobros Credito</span>
+            <span className={`${styles['summary__value']} ${styles['summary__value--success']}`}>
+              {formatCurrency(selectedPeriod.total_credit_collected)}
+            </span>
           </div>
           <div className={styles['summary__card']}>
             <span className={styles['summary__label']}>Gastos Totales</span>

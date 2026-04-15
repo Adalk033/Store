@@ -16,11 +16,21 @@ export function normalizeCashRegisterSalesSummary(data: unknown): CashRegisterSa
   }
   const obj = data as Record<string, unknown>;
   return {
-    sale_count: typeof obj.sale_count === 'number' ? obj.sale_count : 0,
-    total_cash_sales: typeof obj.total_cash_sales === 'number' ? obj.total_cash_sales : 0,
-    total_credit_sales: typeof obj.total_credit_sales === 'number' ? obj.total_credit_sales : 0,
-    total_credit_collected: typeof obj.total_credit_collected === 'number' ? obj.total_credit_collected : 0,
+    sale_count: toSafeNumber(obj.sale_count),
+    total_cash_sales: toSafeNumber(obj.total_cash_sales),
+    total_credit_sales: toSafeNumber(obj.total_credit_sales),
+    total_credit_collected: toSafeNumber(obj.total_credit_collected),
   };
+}
+
+// Coerce string or number to a finite number, defaulting to 0.
+function toSafeNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 const DEFAULT_SORT: SortSpec = { field: 'created_at', direction: 'DESC' };
