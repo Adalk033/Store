@@ -17,9 +17,9 @@ function getCreateProductErrorMessage(err: unknown): string {
   return 'Error al crear producto';
 }
 
-export function useProducts() {
+export function useProducts(options?: { skipInitialFetch?: boolean }) {
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!options?.skipInitialFetch);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProducts = useCallback(async () => {
@@ -38,8 +38,10 @@ export function useProducts() {
   }, []);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    if (!options?.skipInitialFetch) {
+      fetchProducts();
+    }
+  }, [fetchProducts, options?.skipInitialFetch]);
 
   const searchProducts = useCallback(async (query: string) => {
     try {

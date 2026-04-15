@@ -1043,12 +1043,13 @@ function registerIpcHandlers(): void {
   // Cash Register - Paginated endpoints (Phase 1)
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_SALES_PAGINATED,
-    (_, cashRegisterId: number, query: unknown) => {
-      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+    (_, rawCashRegisterId: unknown, query: unknown) => {
+      const cashRegisterId = Number(rawCashRegisterId);
+      if (!Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
         throw new Error('ID de periodo invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      return cashRegisterRepo.getSalesByPeriodPaginated(cashRegisterId, {
+      const parsedQuery = {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
@@ -1056,58 +1057,76 @@ function registerIpcHandlers(): void {
         dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
         dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
-      });
+      };
+      if (canUseCloudApi()) {
+        return cloudApi.getCashRegisterSalesPaginated(cashRegisterId, parsedQuery);
+      }
+      return cashRegisterRepo.getSalesByPeriodPaginated(cashRegisterId, parsedQuery);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_CREDIT_PAYMENTS_PAGINATED,
-    (_, cashRegisterId: number, query: unknown) => {
-      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+    (_, rawCashRegisterId: unknown, query: unknown) => {
+      const cashRegisterId = Number(rawCashRegisterId);
+      if (!Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
         throw new Error('ID de periodo invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      return cashRegisterRepo.getCreditPaymentsByPeriodPaginated(cashRegisterId, {
+      const parsedQuery = {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
         search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
         dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
         dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
-      });
+      };
+      if (canUseCloudApi()) {
+        return cloudApi.getCashRegisterCreditPaymentsPaginated(cashRegisterId, parsedQuery);
+      }
+      return cashRegisterRepo.getCreditPaymentsByPeriodPaginated(cashRegisterId, parsedQuery);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_MOVEMENTS_PAGINATED,
-    (_, cashRegisterId: number, query: unknown) => {
-      if (typeof cashRegisterId !== 'number' || !Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
+    (_, rawCashRegisterId: unknown, query: unknown) => {
+      const cashRegisterId = Number(rawCashRegisterId);
+      if (!Number.isInteger(cashRegisterId) || cashRegisterId < 1) {
         throw new Error('ID de periodo invalido');
       }
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      return cashRegisterRepo.getMovementsByPeriodPaginated(cashRegisterId, {
+      const parsedQuery = {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
         type: typeof q.type === 'string' ? q.type : undefined,
         dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
         dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
-      });
+      };
+      if (canUseCloudApi()) {
+        return cloudApi.getCashMovementsPaginated(cashRegisterId, parsedQuery);
+      }
+      return cashRegisterRepo.getMovementsByPeriodPaginated(cashRegisterId, parsedQuery);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.CASH_REGISTER_GET_ALL_PAGINATED,
-    (_, query: unknown) => {
+    async (_, query: unknown) => {
       const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
-      return cashRegisterRepo.getAllPeriodsPaginated({
+      const parsedQuery = {
         page: typeof q.page === 'number' ? q.page : 1,
         pageSize: typeof q.pageSize === 'number' ? q.pageSize : 25,
         status: typeof q.status === 'string' ? q.status : undefined,
         dateFrom: typeof q.dateFrom === 'string' ? q.dateFrom : undefined,
         dateTo: typeof q.dateTo === 'string' ? q.dateTo : undefined,
         sort: typeof q.sort === 'object' && q.sort !== null ? q.sort as { field: string; direction: 'ASC' | 'DESC' } : undefined,
-      });
+      };
+      if (canUseCloudApi()) {
+        return cloudApi.getCashRegisterPeriodsPaginated(parsedQuery);
+      }
+      return cashRegisterRepo.getAllPeriodsPaginated(parsedQuery);
     }
   );
 

@@ -73,7 +73,7 @@ function addDaysToDateInput(baseDate: string, days: number): string {
 }
 
 export function POSPage() {
-  const { searchProductsRemote } = useProducts();
+  const { searchProductsRemote } = useProducts({ skipInitialFetch: true });
   const { customers, createCustomer } = useCustomers();
   const { createSale, loading: saleLoading } = useSales();
 
