@@ -280,6 +280,14 @@ export function InventoryPage() {
 
     const qty = parseInt(formQuantity);
     if (isNaN(qty) || qty === 0) {
+      setFormError(
+        activeTab === 'adjustment'
+          ? 'La cantidad del ajuste no puede ser 0'
+          : 'La cantidad debe ser mayor a 0'
+      );
+      return;
+    }
+    if (activeTab === 'restock' && qty < 0) {
       setFormError('La cantidad debe ser mayor a 0');
       return;
     }

@@ -885,11 +885,79 @@ function registerIpcHandlers(): void {
   });
 
   // Inventory
-  ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data) => {
-    if (canUseCloudApi()) {
-      return cloudApi.addInventoryMovement(data);
+  ipcMain.handle(IPC_CHANNELS.INVENTORY_ADD_MOVEMENT, (_, data: unknown) => {
+    const raw = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
+
+    const productId = normalizePositiveIntegerId(raw.product_id, 'producto');
+
+    if (raw.type !== 'in' && raw.type !== 'out' && raw.type !== 'adjustment') {
+      throw new Error('Tipo de movimiento invalido');
     }
-    return inventoryRepo.addInventoryMovement(data);
+    const type: 'in' | 'out' | 'adjustment' = raw.type;
+
+    const quantityRaw = typeof raw.quantity === 'string' ? Number(raw.quantity) : raw.quantity;
+    if (
+      typeof quantityRaw !== 'number'
+      || !Number.isFinite(quantityRaw)
+      || !Number.isInteger(quantityRaw)
+      || quantityRaw === 0
+    ) {
+      throw new Error('La cantidad debe ser un entero distinto de cero');
+    }
+    if ((type === 'in' || type === 'out') && quantityRaw < 0) {
+      throw new Error('La cantidad debe ser positiva para entradas y salidas');
+    }
+
+    let referenceId: number | null = null;
+    if (raw.reference_id !== undefined && raw.reference_id !== null) {
+      const parsedRef = typeof raw.reference_id === 'string' ? Number(raw.reference_id) : raw.reference_id;
+      if (typeof parsedRef !== 'number' || !Number.isInteger(parsedRef) || parsedRef < 1) {
+        throw new Error('Referencia invalida');
+      }
+      referenceId = parsedRef;
+    }
+
+    let notes: string | null = null;
+    if (raw.notes !== undefined && raw.notes !== null) {
+      if (typeof raw.notes !== 'string') {
+        throw new Error('Las notas deben ser texto');
+      }
+      const trimmed = raw.notes.trim();
+      notes = trimmed.length === 0 ? null : trimmed.slice(0, 500);
+    }
+
+    let costPrice: number | undefined;
+    if (raw.cost_price !== undefined) {
+      const parsed = typeof raw.cost_price === 'string' ? Number(raw.cost_price) : raw.cost_price;
+      if (typeof parsed !== 'number' || !Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error('El precio de costo debe ser mayor a 0');
+      }
+      costPrice = parsed;
+    }
+
+    let marginPercent: number | undefined;
+    if (raw.margin_percent !== undefined) {
+      const parsed = typeof raw.margin_percent === 'string' ? Number(raw.margin_percent) : raw.margin_percent;
+      if (typeof parsed !== 'number' || !Number.isFinite(parsed) || parsed < 0) {
+        throw new Error('El porcentaje de utilidad no puede ser negativo');
+      }
+      marginPercent = parsed;
+    }
+
+    const sanitized = {
+      product_id: productId,
+      type,
+      quantity: quantityRaw,
+      reference_id: referenceId,
+      notes,
+      cost_price: costPrice,
+      margin_percent: marginPercent,
+    };
+
+    if (canUseCloudApi()) {
+      return cloudApi.addInventoryMovement(sanitized);
+    }
+    return inventoryRepo.addInventoryMovement(sanitized);
   });
   ipcMain.handle(IPC_CHANNELS.INVENTORY_GET_BY_PRODUCT, (_, productId: number) => {
     if (canUseCloudApi()) {
