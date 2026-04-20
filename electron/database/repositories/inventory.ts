@@ -16,7 +16,31 @@ interface AddMovementData {
 export function addInventoryMovement(data: AddMovementData): InventoryMovement {
   const db = getDatabase();
 
+  if (!Number.isInteger(data.product_id) || data.product_id < 1) {
+    throw new Error('ID de producto invalido');
+  }
+
+  if (data.type !== 'in' && data.type !== 'out' && data.type !== 'adjustment') {
+    throw new Error('Tipo de movimiento invalido');
+  }
+
+  if (!Number.isFinite(data.quantity) || !Number.isInteger(data.quantity) || data.quantity === 0) {
+    throw new Error('La cantidad debe ser un entero distinto de cero');
+  }
+
+  if ((data.type === 'in' || data.type === 'out') && data.quantity < 0) {
+    throw new Error('La cantidad debe ser positiva para entradas y salidas');
+  }
+
   const transaction = db.transaction(() => {
+    const product = db
+      .prepare('SELECT id, stock FROM products WHERE id = ?')
+      .get(data.product_id) as { id: number; stock: number } | undefined;
+
+    if (!product) {
+      throw new Error('El producto no existe');
+    }
+
     if (data.type === 'in' && (data.cost_price !== undefined || data.margin_percent !== undefined)) {
       if (data.cost_price !== undefined && (!Number.isFinite(data.cost_price) || data.cost_price <= 0)) {
         throw new Error('El precio de costo debe ser mayor a 0');
@@ -45,6 +69,20 @@ export function addInventoryMovement(data: AddMovementData): InventoryMovement {
       }
     }
 
+    // Compute resulting stock and block adjustments that would leave it negative
+    let nextStock = product.stock;
+    if (data.type === 'in') {
+      nextStock = product.stock + Math.abs(data.quantity);
+    } else if (data.type === 'out') {
+      nextStock = product.stock - Math.abs(data.quantity);
+    } else {
+      nextStock = product.stock + data.quantity;
+    }
+
+    if (nextStock < 0) {
+      throw new Error('El ajuste dejaria el stock en negativo');
+    }
+
     const result = db.prepare(`
       INSERT INTO inventory_movements (product_id, type, quantity, reference_id, notes)
       VALUES (?, ?, ?, ?, ?)
@@ -56,18 +94,8 @@ export function addInventoryMovement(data: AddMovementData): InventoryMovement {
       data.notes ?? null
     );
 
-    // Update product stock based on movement type
-    if (data.type === 'in') {
-      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?')
-        .run(Math.abs(data.quantity), data.product_id);
-    } else if (data.type === 'out') {
-      db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?')
-        .run(Math.abs(data.quantity), data.product_id);
-    } else {
-      // adjustment: quantity is the new absolute value to set
-      db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?')
-        .run(data.quantity, data.product_id);
-    }
+    db.prepare('UPDATE products SET stock = ? WHERE id = ?')
+      .run(nextStock, data.product_id);
 
     return Number(result.lastInsertRowid);
   });

@@ -120,6 +120,36 @@ export function addCreditPayment(
   }
 
   const transaction = db.transaction(() => {
+    // If the payment date falls after due_date and the surcharge has not been
+    // applied yet, apply it now so the payment is settled against the correct
+    // total_due. Using the payment date (not today) so backdated payments
+    // within the grace period keep the original amount.
+    const existingCredit = getCreditById(creditId);
+    if (!existingCredit) {
+      throw new Error('El credito no existe');
+    }
+
+    const paymentDatePart = paymentCreatedAt.slice(0, 10);
+    if (
+      existingCredit.status !== 'paid'
+      && existingCredit.surcharge_applied === 0
+      && existingCredit.surcharge_percent > 0
+      && paymentDatePart > existingCredit.due_date
+    ) {
+      const newTotalDue = roundMoney(
+        existingCredit.original_amount * (1 + existingCredit.surcharge_percent / 100)
+      );
+      const surchargeAmount = roundMoney(newTotalDue - existingCredit.original_amount);
+
+      db.prepare(
+        "UPDATE credits SET total_due = ?, surcharge_applied = 1, status = 'overdue' WHERE id = ?"
+      ).run(newTotalDue, creditId);
+
+      db.prepare(
+        'UPDATE sales SET surcharge = ?, total = subtotal + ? WHERE id = ?'
+      ).run(surchargeAmount, surchargeAmount, existingCredit.sale_id);
+    }
+
     // Insert payment record
     db.prepare(
       'INSERT INTO credit_payments (credit_id, amount, cash_register_id, idempotency_key, created_at) VALUES (?, ?, ?, ?, ?)'
