@@ -150,6 +150,11 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
 
   // Load paginated credits
   const loadCredits = useCallback(async () => {
+    // Apply any pending overdue surcharges before displaying the list so the
+    // totals and statuses always reflect the current business day, even if the
+    // app has been open since before a due_date passed.
+    await checkOverdue();
+
     const query: PaginatedQuery = {
       page: currentPage,
       pageSize: rowsPerPage,
@@ -175,7 +180,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     if (summaryResult) {
       setSummary(summaryResult);
     }
-  }, [currentPage, rowsPerPage, debouncedSearch, activeTab, effectiveDates, fetchCreditsPaginated, fetchSummary]);
+  }, [currentPage, rowsPerPage, debouncedSearch, activeTab, effectiveDates, fetchCreditsPaginated, fetchSummary, checkOverdue]);
 
   useEffect(() => {
     if (viewMode === 'list') {
@@ -255,14 +260,31 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   }, [initialCreditId, viewMode]);
 
   const openDetail = useCallback(async (credit: Credit) => {
-    setSelectedCredit(credit);
+    // If the credit could have become overdue since the last check, run the
+    // overdue check and refetch so the detail view shows the updated total_due
+    // with surcharge already applied.
+    let current = credit;
+    const todayStr = getTodayLocalDateInput();
+    const mightBeOverdue =
+      credit.status !== 'paid'
+      && credit.surcharge_applied === 0
+      && credit.surcharge_percent > 0
+      && credit.due_date < todayStr;
+
+    if (mightBeOverdue) {
+      await checkOverdue();
+      const refreshed = await getCreditById(credit.id);
+      if (refreshed) current = refreshed;
+    }
+
+    setSelectedCredit(current);
     setPaymentAmount('');
     setPaymentDate(getTodayLocalDateInput());
     setPaymentError(null);
-    const payments = await getPayments(credit.id);
+    const payments = await getPayments(current.id);
     setCreditPayments(payments);
     setViewMode('detail');
-  }, [getPayments]);
+  }, [getPayments, checkOverdue, getCreditById]);
 
   async function openCustomerView(customer: Customer) {
     setSelectedCustomer(customer);
@@ -395,7 +417,11 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     setSubmitting(true);
     try {
       const updated = await updateCredit(selectedCredit.id, updateData);
-      setSelectedCredit(updated);
+      // Re-run overdue check in case due_date was moved to a past date, so the
+      // surcharge is applied immediately and reflected on screen.
+      await checkOverdue();
+      const refreshed = await getCreditById(selectedCredit.id);
+      setSelectedCredit(refreshed ?? updated);
       setShowEditModal(false);
       showNotification('success', 'Credito actualizado');
     } catch (err) {
