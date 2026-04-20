@@ -1407,7 +1407,16 @@ const handler = async (event) => {
       if (!Number.isInteger(productId) || productId < 1) {
         throw new HttpError(422, "validation_error", "product_id must be integer >= 1");
       }
-      const qty = requirePositiveNumber(body.quantity, "quantity");
+      let qty;
+      if (body.type === "adjustment") {
+        const n = Number(body.quantity);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n === 0) {
+          throw new HttpError(422, "validation_error", "quantity must be a non-zero integer");
+        }
+        qty = n;
+      } else {
+        qty = requirePositiveNumber(body.quantity, "quantity");
+      }
       const data = await withTx(async (client) => {
         const p = await client.query("SELECT id, stock FROM products WHERE id = $1 LIMIT 1", [productId]);
         if (p.rowCount === 0) {
@@ -1448,6 +1457,10 @@ const handler = async (event) => {
           }
           await client.query("UPDATE products SET stock = stock - $1 WHERE id = $2", [Math.abs(qty), productId]);
         } else {
+          const stock = Number(p.rows[0].stock);
+          if (stock + qty < 0) {
+            throw new HttpError(409, "business_conflict", "Adjustment would leave stock negative");
+          }
           await client.query("UPDATE products SET stock = stock + $1 WHERE id = $2", [qty, productId]);
         }
         return ins.rows[0];
