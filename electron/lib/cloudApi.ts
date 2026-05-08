@@ -976,13 +976,32 @@ export class CloudApi {
   }
 
   async getCreditsPaginated(query: PaginatedQuery): Promise<PaginatedResponse<CreditListItem>> {
-    const all = await this.getCredits(query.status);
+    const all = (await this.getCredits(query.status)) as CreditListItem[];
     const search = (query.search || '').trim().toLowerCase();
-    const filtered = search
-      ? all.filter((c) => String(c.id).includes(search) || String(c.sale_id).includes(search))
-      : all;
+    const dateFrom = typeof query.dateFrom === 'string' ? query.dateFrom : undefined;
+    const dateTo = typeof query.dateTo === 'string' ? query.dateTo : undefined;
 
-    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered as CreditListItem[], query.page, query.pageSize);
+    const filtered = all.filter((c) => {
+      if (search) {
+        const customerName = (c.customer_name ?? '').toLowerCase();
+        const matchesSearch =
+          customerName.includes(search) ||
+          String(c.id).includes(search) ||
+          String(c.sale_id).includes(search);
+        if (!matchesSearch) return false;
+      }
+      if (dateFrom) {
+        const createdDate = (c.created_at ?? '').slice(0, 10);
+        if (createdDate < dateFrom) return false;
+      }
+      if (dateTo) {
+        const createdDate = (c.created_at ?? '').slice(0, 10);
+        if (createdDate > dateTo) return false;
+      }
+      return true;
+    });
+
+    const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
     return {
       items: slice,
       page,
@@ -991,6 +1010,13 @@ export class CloudApi {
       hasMore,
       sort: query.sort ?? { field: 'created_at', direction: 'DESC' },
     };
+  }
+
+  updateCredit(
+    id: number,
+    data: { due_date?: string; surcharge_percent?: number },
+  ): Promise<Credit> {
+    return this.request<Credit>('PUT', `/v1/credits/${id}`, data);
   }
 
   async getCreditsByCustomerPaginated(customerId: number, query: PaginatedQuery): Promise<PaginatedResponse<CreditListItem>> {

@@ -55,7 +55,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
 
   const [searchQuery, setSearchQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState<CustomerFilter>('all');
-  const [contactForm, setContactForm] = useState({ phone: '', email: '', notes: '' });
+  const [contactForm, setContactForm] = useState({ name: '', phone: '', email: '', notes: '' });
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [contactFeedback, setContactFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -127,6 +127,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     setSelectedCredit(null);
     setCreditPayments([]);
     setContactForm({
+      name: customer.name ?? '',
       phone: customer.phone ?? '',
       email: customer.email ?? '',
       notes: customer.notes ?? '',
@@ -185,6 +186,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     if (!selectedCustomer) return;
 
     setContactForm({
+      name: selectedCustomer.name ?? '',
       phone: selectedCustomer.phone ?? '',
       email: selectedCustomer.email ?? '',
       notes: selectedCustomer.notes ?? '',
@@ -197,6 +199,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
     if (!selectedCustomer) return;
 
     setContactForm({
+      name: selectedCustomer.name ?? '',
       phone: selectedCustomer.phone ?? '',
       email: selectedCustomer.email ?? '',
       notes: selectedCustomer.notes ?? '',
@@ -210,15 +213,22 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
 
     if (!selectedCustomer) return;
 
+    const name = contactForm.name.trim();
     const phone = contactForm.phone.trim();
     const email = contactForm.email.trim();
     const notes = contactForm.notes.trim();
+
+    if (!name) {
+      setContactFeedback({ type: 'error', message: 'El nombre del cliente es obligatorio' });
+      return;
+    }
 
     setSavingContact(true);
     setContactFeedback(null);
 
     try {
       const updated = await updateCustomer(selectedCustomer.id, {
+        name,
         phone: phone || null,
         email: email || null,
         notes: notes || null,
@@ -226,6 +236,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
 
       setSelectedCustomer(updated);
       setContactForm({
+        name: updated.name ?? '',
         phone: updated.phone ?? '',
         email: updated.email ?? '',
         notes: updated.notes ?? '',
@@ -341,6 +352,20 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
               {isEditingContact ? (
                 <form className={styles['contact-form__editor']} onSubmit={handleSaveContact}>
                   <div className={styles['contact-form__field']}>
+                    <label className={styles['contact-form__label']} htmlFor="customer-name">Nombre *</label>
+                    <input
+                      id="customer-name"
+                      className={styles['contact-form__input']}
+                      type="text"
+                      value={contactForm.name}
+                      onChange={(event) => setContactForm(prev => ({ ...prev, name: event.target.value }))}
+                      placeholder="Nombre completo del cliente"
+                      required
+                      maxLength={150}
+                    />
+                  </div>
+
+                  <div className={styles['contact-form__field']}>
                     <label className={styles['contact-form__label']} htmlFor="customer-phone">Telefono</label>
                     <input
                       id="customer-phone"
@@ -393,6 +418,10 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                 </form>
               ) : (
                 <div className={styles['contact-form__summary']}>
+                  <div className={styles['contact-form__row']}>
+                    <span className={styles['contact-form__row-label']}>Nombre</span>
+                    <span className={styles['contact-form__row-value']}>{selectedCustomer.name}</span>
+                  </div>
                   <div className={styles['contact-form__row']}>
                     <span className={styles['contact-form__row-label']}>Telefono</span>
                     <span className={styles['contact-form__row-value']}>{selectedCustomer.phone ?? 'Sin telefono'}</span>
