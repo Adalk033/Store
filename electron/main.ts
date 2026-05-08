@@ -529,7 +529,56 @@ function registerIpcHandlers(): void {
     }
     return customersRepo.createCustomer(data);
   });
-  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, id: number, data) => {
+  ipcMain.handle(IPC_CHANNELS.CUSTOMERS_UPDATE, (_, idInput: unknown, dataInput: unknown) => {
+    const id = normalizePositiveIntegerId(idInput, 'cliente');
+    const raw = (typeof dataInput === 'object' && dataInput !== null ? dataInput : {}) as Record<string, unknown>;
+    const data: {
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      notes?: string | null;
+      is_active?: number;
+    } = {};
+
+    if (raw.name !== undefined) {
+      if (typeof raw.name !== 'string') {
+        throw new Error('El nombre del cliente es invalido');
+      }
+      const trimmed = raw.name.trim();
+      if (!trimmed) {
+        throw new Error('El nombre del cliente es obligatorio');
+      }
+      if (trimmed.length > 150) {
+        throw new Error('El nombre del cliente no puede exceder 150 caracteres');
+      }
+      data.name = trimmed;
+    }
+    if (raw.phone !== undefined) {
+      if (raw.phone !== null && typeof raw.phone !== 'string') {
+        throw new Error('Telefono invalido');
+      }
+      data.phone = raw.phone === null ? null : (raw.phone as string).trim().slice(0, 50) || null;
+    }
+    if (raw.email !== undefined) {
+      if (raw.email !== null && typeof raw.email !== 'string') {
+        throw new Error('Correo invalido');
+      }
+      data.email = raw.email === null ? null : (raw.email as string).trim().slice(0, 150) || null;
+    }
+    if (raw.notes !== undefined) {
+      if (raw.notes !== null && typeof raw.notes !== 'string') {
+        throw new Error('Notas invalidas');
+      }
+      data.notes = raw.notes === null ? null : (raw.notes as string).slice(0, 2000);
+    }
+    if (raw.is_active !== undefined) {
+      const v = Number(raw.is_active);
+      if (v !== 0 && v !== 1) {
+        throw new Error('Estado de cliente invalido');
+      }
+      data.is_active = v;
+    }
+
     if (canUseCloudApi()) {
       return cloudApi.updateCustomer(id, data);
     }
@@ -875,12 +924,22 @@ function registerIpcHandlers(): void {
     const updateData: { due_date?: string; surcharge_percent?: number } = {};
 
     if (typeof d.due_date === 'string') {
-      updateData.due_date = d.due_date.slice(0, 10);
+      const trimmedDate = d.due_date.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+        throw new Error('La fecha limite no tiene un formato valido');
+      }
+      updateData.due_date = trimmedDate;
     }
     if (typeof d.surcharge_percent === 'number') {
+      if (!Number.isFinite(d.surcharge_percent) || d.surcharge_percent < 0 || d.surcharge_percent > 100) {
+        throw new Error('El porcentaje de recargo debe estar entre 0 y 100');
+      }
       updateData.surcharge_percent = d.surcharge_percent;
     }
 
+    if (canUseCloudApi()) {
+      return cloudApi.updateCredit(parsedId, updateData);
+    }
     return creditsRepo.updateCredit(parsedId, updateData);
   });
 

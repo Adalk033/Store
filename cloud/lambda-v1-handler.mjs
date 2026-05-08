@@ -1367,6 +1367,80 @@ const handler = async (event) => {
       );
       return ok(200, r.rows[0], requestId);
     }
+    if (method === "PUT" && /^\/v1\/credits\/\d+$/.test(path)) {
+      const creditId = getPathId(path, /^\/v1\/credits\/(\d+)$/, "id");
+      const body = parseBody(event);
+      const setParts = [];
+      const values = [];
+      let idx = 1;
+      let nextSurchargePercent;
+      let nextDueDate;
+
+      if (body.due_date !== void 0) {
+        if (typeof body.due_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.due_date)) {
+          throw new HttpError(422, "validation_error", "due_date must be YYYY-MM-DD");
+        }
+        nextDueDate = body.due_date;
+        setParts.push(`due_date = $${idx++}`);
+        values.push(nextDueDate);
+      }
+
+      if (body.surcharge_percent !== void 0) {
+        const percent = Number(body.surcharge_percent);
+        if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+          throw new HttpError(422, "validation_error", "surcharge_percent must be between 0 and 100");
+        }
+        nextSurchargePercent = percent;
+        setParts.push(`surcharge_percent = $${idx++}`);
+        values.push(percent);
+      }
+
+      if (setParts.length === 0) {
+        throw new HttpError(400, "bad_request", "No fields to update");
+      }
+
+      const data = await withTx(async (client) => {
+        const existing = await client.query(
+          "SELECT * FROM credits WHERE id = $1 LIMIT 1",
+          [creditId]
+        );
+        if (existing.rowCount === 0) {
+          throw new HttpError(404, "not_found", "Credit not found");
+        }
+        const credit = existing.rows[0];
+        if (credit.status === "paid") {
+          throw new HttpError(409, "business_conflict", "No se puede editar un credito ya pagado");
+        }
+
+        if (
+          nextSurchargePercent !== undefined &&
+          Number(credit.surcharge_applied) === 1
+        ) {
+          const newTotalDue = Math.round(
+            Number(credit.original_amount) * (1 + nextSurchargePercent / 100) * 100
+          ) / 100;
+          setParts.push(`total_due = $${idx++}`);
+          values.push(newTotalDue);
+
+          const surchargeDiff = Math.round(
+            (newTotalDue - Number(credit.original_amount)) * 100
+          ) / 100;
+          await client.query(
+            "UPDATE sales SET surcharge = $1, total = subtotal + $1 WHERE id = $2",
+            [surchargeDiff, credit.sale_id]
+          );
+        }
+
+        values.push(creditId);
+        const updated = await client.query(
+          `UPDATE credits SET ${setParts.join(", ")} WHERE id = $${idx} RETURNING *`,
+          values
+        );
+        return updated.rows[0];
+      });
+
+      return ok(200, data, requestId);
+    }
     if (method === "POST" && path === "/v1/credits/recalculate-overdue") {
       const data = await withTx(async (client) => {
         const upd = await client.query(

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, DollarSign, Edit3, RefreshCw, Search, Trash2, User } from 'lucide-react';
+import { ArrowLeft, DollarSign, Edit3, Package, RefreshCw, Search, Trash2, User } from 'lucide-react';
 import { useCredits } from '../hooks/useCredits';
 import { useCustomers } from '../hooks/useCustomers';
+import { useSales } from '../hooks/useSales';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
-import type { Credit, CreditPayment, CreditListItem, CreditsSummary, Customer, PaginatedQuery } from '../types';
+import type { Credit, CreditPayment, CreditListItem, CreditsSummary, Customer, PaginatedQuery, SaleDetailItem } from '../types';
 import styles from './CreditsPage.module.css';
 
 type ViewMode = 'list' | 'detail' | 'customer';
@@ -52,6 +53,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     deleteCredit, updateCredit,
   } = useCredits();
   const { customers } = useCustomers();
+  const { getSaleDetailById } = useSales();
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
@@ -71,6 +73,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
   // Detail view state
   const [selectedCredit, setSelectedCredit] = useState<Credit | null>(null);
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>([]);
+  const [creditSaleItems, setCreditSaleItems] = useState<SaleDetailItem[]>([]);
 
   // Customer view state
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -281,10 +284,14 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     setPaymentAmount('');
     setPaymentDate(getTodayLocalDateInput());
     setPaymentError(null);
-    const payments = await getPayments(current.id);
+    const [payments, saleDetail] = await Promise.all([
+      getPayments(current.id),
+      getSaleDetailById(current.sale_id),
+    ]);
     setCreditPayments(payments);
+    setCreditSaleItems(saleDetail?.items ?? []);
     setViewMode('detail');
-  }, [getPayments, checkOverdue, getCreditById]);
+  }, [getPayments, getSaleDetailById, checkOverdue, getCreditById]);
 
   async function openCustomerView(customer: Customer) {
     setSelectedCustomer(customer);
@@ -310,6 +317,7 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
     setViewMode('list');
     setSelectedCredit(null);
     setSelectedCustomer(null);
+    setCreditSaleItems([]);
   }
 
   async function handlePayment(e: React.FormEvent) {
@@ -614,6 +622,40 @@ export function CreditsPage({ initialCreditId, onInitialCreditHandled }: Credits
                 </button>
               </form>
             )}
+          </div>
+
+          {/* Sale items (products in this credit sale) */}
+          <div className={`${styles['detail__card']} ${styles['detail__card--full']}`}>
+            <h2 className={styles['detail__title']}>
+              <Package size={18} strokeWidth={1.5} />
+              Productos vendidos
+            </h2>
+            <div className={styles['table-card']}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th style={{ textAlign: 'right' }}>Cantidad</th>
+                    <th style={{ textAlign: 'right' }}>Precio unitario</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditSaleItems.length === 0 ? (
+                    <tr><td colSpan={4} className={styles['table__empty']}>Sin productos registrados</td></tr>
+                  ) : (
+                    creditSaleItems.map(item => (
+                      <tr key={item.id}>
+                        <td>{item.product_name}</td>
+                        <td style={{ textAlign: 'right' }}>{item.quantity}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatCurrency(item.line_total)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Payment history */}
