@@ -32,7 +32,7 @@ jobs:
           Select-String -Path package-lock.json -Pattern '"@emnapi/core"|"@emnapi/runtime"|"@emnapi/wasi-threads"' | Select-Object -First 20
 
       - name: Install dependencies
-        run: npm ci --include=dev --include=optional --include=peer
+        run: npm ci --include=dev --omit=optional
 
       - name: Build Windows x64 package
         run: npm run electron:build -- --win --x64 --publish never
