@@ -151,6 +151,17 @@ export function formatDate(dateString: string | null | undefined): string {
   return formatPartsInTimeZone(parsed.date, 'UTC', false);
 }
 
+// Period boundaries are calendar dates, even when an older API serialized DATE as a timestamp.
+export function getCalendarDate(value: string | null | undefined): string {
+  if (!value || !parseDateString(value)) return '';
+  const dateOnly = value.trim().slice(0, 10);
+  return parseDateOnlyParts(dateOnly) ? dateOnly : '';
+}
+
+export function formatCalendarDate(value: string | null | undefined): string {
+  return formatDate(getCalendarDate(value));
+}
+
 export function formatDateTime(dateString: string | null | undefined): string {
   const parsed = parseDateString(dateString);
   if (!parsed) {

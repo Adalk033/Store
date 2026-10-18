@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getCalendarDate } from '../../src/lib/formatters.ts';
 import type {
   CashMovement,
   CashRegisterPeriod,
@@ -77,6 +78,8 @@ function normalizeCashRegisterPeriodRow(raw: unknown): CashRegisterPeriod {
   return {
     ...row,
     id: toFiniteInteger(row.id) ?? 0,
+    start_date: getCalendarDate(typeof row.start_date === 'string' ? row.start_date : null),
+    end_date: row.end_date == null ? null : getCalendarDate(typeof row.end_date === 'string' ? row.end_date : null),
     opening_cash: toFiniteNumber(row.opening_cash) ?? 0,
     total_cash_sales: toFiniteNumber(row.total_cash_sales) ?? 0,
     total_credit_sales: toFiniteNumber(row.total_credit_sales) ?? 0,

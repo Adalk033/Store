@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Plus, Lock, DollarSign, Edit2, Trash2 } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
-import { formatCurrency, formatDate, formatDateTime, getBusinessTodayDate } from '../lib/formatters';
+import { formatCurrency, formatCalendarDate, formatDateTime, getBusinessTodayDate, getCalendarDate } from '../lib/formatters';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
 import styles from './CashRegisterPage.module.css';
 
@@ -462,28 +462,6 @@ export function CashRegisterPage() {
     setTimeout(() => setNotification(null), 3000);
   }
 
-  function getDateOnly(value: string | null | undefined): string {
-    if (!value) {
-      return '';
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return value;
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value.slice(0, 10);
-    }
-
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Mexico_City',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(parsed);
-  }
-
   function parseDateOnly(value: string): number | null {
     const trimmed = value.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
@@ -573,7 +551,7 @@ export function CashRegisterPage() {
       setMovementError('Seleccione la fecha del movimiento');
       return;
     }
-    const periodStartDate = getDateOnly(currentPeriod.start_date);
+    const periodStartDate = getCalendarDate(currentPeriod.start_date);
     const movementTime = parseDateOnly(movementDate);
     const periodStartTime = parseDateOnly(periodStartDate);
 
@@ -691,7 +669,7 @@ export function CashRegisterPage() {
       return;
     }
 
-    const periodStartDate = getDateOnly(currentPeriod.start_date);
+    const periodStartDate = getCalendarDate(currentPeriod.start_date);
     const closingTime = parseDateOnly(closingDate);
     const periodStartTime = parseDateOnly(periodStartDate);
 
@@ -824,7 +802,7 @@ export function CashRegisterPage() {
               <span className={`${styles.badge} ${styles['badge--open']}`} style={{ marginLeft: 8 }}>Abierto</span>
             </div>
             <div className={styles['status-banner__meta']}>
-              Inicio: {formatDate(currentPeriod.start_date)} | Efectivo inicial: {formatCurrency(currentPeriod.opening_cash)}
+              Inicio: {formatCalendarDate(currentPeriod.start_date)} | Efectivo inicial: {formatCurrency(currentPeriod.opening_cash)}
             </div>
           </div>
         </div>
@@ -921,7 +899,7 @@ export function CashRegisterPage() {
                   className={styles['form-field__input']}
                   value={movementDate}
                   onChange={e => setMovementDate(e.target.value)}
-                  min={getDateOnly(currentPeriod.start_date)}
+                  min={getCalendarDate(currentPeriod.start_date)}
                   max={getBusinessTodayDate()}
                 />
               </div>
@@ -1069,7 +1047,7 @@ export function CashRegisterPage() {
               className={styles['form-field__input']}
               value={closingDate}
               onChange={e => setClosingDate(e.target.value)}
-              min={getDateOnly(currentPeriod.start_date)}
+              min={getCalendarDate(currentPeriod.start_date)}
             />
           </div>
           <div className={styles['form-field']}>
@@ -1128,8 +1106,8 @@ export function CashRegisterPage() {
                   onClick={() => handleViewPeriodDetail(p)}
                 >
                   <td style={{ fontWeight: 500 }}>{p.period_name}</td>
-                  <td>{formatDate(p.start_date)}</td>
-                  <td>{p.end_date ? formatDate(p.end_date) : '-'}</td>
+                  <td>{formatCalendarDate(p.start_date)}</td>
+                  <td>{p.end_date ? formatCalendarDate(p.end_date) : '-'}</td>
                   <td>{formatCurrency(p.total_cash_sales)}</td>
                   <td>{formatCurrency(p.total_credit_sales)}</td>
                   <td>{formatCurrency(p.total_expenses)}</td>
@@ -1232,12 +1210,12 @@ export function CashRegisterPage() {
           </div>
           <div className={styles['close-panel__row']}>
             <span className={styles['close-panel__label']}>Fecha inicio</span>
-            <span className={styles['close-panel__value']}>{formatDate(selectedPeriod.start_date)}</span>
+            <span className={styles['close-panel__value']}>{formatCalendarDate(selectedPeriod.start_date)}</span>
           </div>
           <div className={styles['close-panel__row']}>
             <span className={styles['close-panel__label']}>Fecha cierre</span>
             <span className={styles['close-panel__value']}>
-              {selectedPeriod.end_date ? formatDateTime(selectedPeriod.end_date) : '-'}
+              {selectedPeriod.end_date ? formatCalendarDate(selectedPeriod.end_date) : '-'}
             </span>
           </div>
         </div>

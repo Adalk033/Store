@@ -29,3 +29,8 @@ overrides:
   undici@<6.28.0: ^6.28.0
 minimumReleaseAgeExclude:
   - esbuild@0.28.1
+  - fast-uri@3.1.8
+  - brace-expansion@1.1.19 || 1.1.20 || 1.1.21 || 2.1.5 || 2.1.6 || 2.1.7 || 5.0.10 || 5.0.11 || 5.0.12
+  - http-cache-semantics@4.2.1
+  - sprintf-js@1.1.4
+  - source-map-js@1.2.2
