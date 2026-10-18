@@ -1,0 +1,36 @@
+ignoreScripts: true
+enablePrePostScripts: false
+strictDepBuilds: true
+verifyDepsBeforeRun: error
+pmOnFail: error
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+trustLockfile: false
+trustPolicyExclude:
+  # Required by the locked Babel and electron-builder toolchain; do not widen.
+  - semver@5.7.2
+  - semver@6.3.1
+blockExoticSubdeps: true
+verifyStoreIntegrity: true
+strictStorePkgContentCheck: true
+sideEffectsCache: false
+overrides:
+  '@xmldom/xmldom@>=0.7.0 <=0.8.14': ^0.8.15
+  brace-expansion@>=2.0.0 <2.1.3: ^2.1.3
+  brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
+  fast-uri@>=3.0.0 <3.1.5: ^3.1.5
+  fast-uri@>=3.0.0 <3.1.6: ^3.1.6
+  fast-uri@>=3.0.0 <=3.1.3: ^3.1.4
+  fast-uri@>=3.1.2 <3.1.6: ^3.1.6
+  fast-uri@>=3.1.3 <3.1.6: ^3.1.6
+  tar@<=7.5.20: ^7.5.21
+  undici@<6.28.0: ^6.28.0
+minimumReleaseAgeExclude:
+  - esbuild@0.28.1
+  - fast-uri@3.1.8
+  - brace-expansion@1.1.19 || 1.1.20 || 1.1.21 || 2.1.5 || 2.1.6 || 2.1.7 || 5.0.10 || 5.0.11 || 5.0.12
+  - http-cache-semantics@4.2.1
+  - sprintf-js@1.1.4
+  - source-map-js@1.2.2

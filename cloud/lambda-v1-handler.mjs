@@ -396,7 +396,8 @@ const handler = async (event) => {
       );
     }
     if (method === "GET" && path === "/v1/cash-register/current") {
-      const r = await pool.query("SELECT * FROM cash_register_periods WHERE status='open' LIMIT 1");
+      // Cast DATE columns before pg can turn calendar boundaries into UTC timestamps.
+      const r = await pool.query("SELECT *, start_date::text AS start_date, end_date::text AS end_date FROM cash_register_periods WHERE status='open' LIMIT 1");
       return ok(200, r.rows[0] || null, requestId);
     }
     if (method === "POST" && path === "/v1/cash-register/open") {
@@ -412,7 +413,7 @@ const handler = async (event) => {
         const ins = await client.query(
           `INSERT INTO cash_register_periods (period_name, start_date, opening_cash, version, status)
            VALUES ($1, $2, $3, 1, 'open')
-           RETURNING *`,
+           RETURNING *, start_date::text AS start_date, end_date::text AS end_date`,
           [periodName, startDate, openingCash]
         );
         return ins.rows[0];
@@ -462,7 +463,7 @@ const handler = async (event) => {
                status='closed',
                version=version+1
            WHERE id=$7 AND status='open'
-           RETURNING *`,
+           RETURNING *, start_date::text AS start_date, end_date::text AS end_date`,
           [
             endDate,
             Number(cashSales.rows[0].total),
@@ -478,7 +479,7 @@ const handler = async (event) => {
       return ok(200, data, requestId);
     }
     if (method === "GET" && path === "/v1/cash-register/periods") {
-      const r = await pool.query("SELECT * FROM cash_register_periods ORDER BY created_at DESC");
+      const r = await pool.query("SELECT *, start_date::text AS start_date, end_date::text AS end_date FROM cash_register_periods ORDER BY created_at DESC");
       return ok(200, r.rows, requestId);
     }
     if (method === "POST" && path === "/v1/cash-register/movements") {

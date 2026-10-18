@@ -19,26 +19,41 @@ Aplicacion de punto de venta (POS) local para papeleria, construida con Electron
 
 ## Requisitos
 
-- Node.js 20+
-- npm 10+
+- Node.js 24.12+
+- pnpm 11.15.0
+
+El proyecto usa pnpm como unico gestor de paquetes. `pnpm-lock.yaml` es el
+archivo de bloqueo oficial; no se usan `package-lock.json`, Yarn ni npm para
+instalar o ejecutar scripts.
 
 ## Instalacion
 
 ```bash
-npm install
+pnpm install --frozen-lockfile
 ```
+
+La instalacion no ejecuta scripts `preinstall`, `install` ni `postinstall` de
+dependencias. Si se requiere reconstruir una dependencia nativa para Electron,
+hagalo de forma consciente y manual:
+
+```bash
+pnpm run rebuild:native
+```
+
+Los comandos de pnpm fallan, en lugar de instalar dependencias automaticamente,
+si `node_modules` no coincide con el lockfile.
 
 ## Desarrollo
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ## Build
 
 ```bash
-npm run build
-npm run electron:build
+pnpm run build
+pnpm run electron:build
 ```
 
 ## Estructura principal

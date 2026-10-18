@@ -21,13 +21,41 @@ store-internal is a fully local, offline desktop POS (point-of-sale) application
 - **Runtime**: Electron
 - **Frontend**: React 18+ with TypeScript (strict mode)
 - **Bundler/Compiler**: Vite (no Babel needed)
-- **Database**: SQLite via sqlite3 package
+- **Database**: SQLite via better-sqlite3 package
 - **Styling**: CSS Modules + BEM naming + global CSS custom properties
 - **Barcode**: JsBarcode
 - **Charts**: Recharts or Chart.js
 - **Tickets**: electron-pos-printer or jsPDF
 
 Do NOT introduce: Tailwind, styled-components, shadcn/ui, any ORM, any additional styling framework.
+
+### Package Management
+
+- pnpm is the only package manager allowed in this project. Use the version
+  pinned in `package.json`.
+- For project commands, use only `pnpm run <script>` and `pnpm exec <command>`.
+- Do not run `pnpm install`; dependency installation or synchronization is the
+  user's responsibility.
+- Do not run `npm`, `npx`, or `yarn`, and do not generate lockfiles for other
+  package managers. `pnpm-lock.yaml` is the only lockfile.
+- Keep `ignoreScripts: true`, `enablePrePostScripts: false`, and
+  `strictDepBuilds: true` in `pnpm-workspace.yaml`. No project or dependency
+  lifecycle script may run automatically.
+- Keep `verifyDepsBeforeRun: error`: `pnpm run` and `pnpm exec` must fail when
+  `node_modules` is stale and must never trigger an implicit installation.
+- Keep `pmOnFail: error` and the exact `packageManager` version pin. A command
+  must fail rather than downloading another package-manager version.
+- Keep the supply-chain controls enabled: a 24-hour `minimumReleaseAge` with
+  strict missing-time handling, `trustPolicy: no-downgrade`,
+  `blockExoticSubdeps: true`, lockfile verification, and store-integrity
+  verification.
+- A `trustPolicyExclude` entry is allowed only after review and only for an
+  exact version with a documented dependency chain. Never exclude an entire
+  package or a version range.
+- Do not add `allowBuilds`, `onlyBuiltDependencies`, or
+  `dangerouslyAllowAllBuilds`. Do not approve dependency build scripts.
+- Electron native rebuilding may only be started manually with
+  `pnpm run rebuild:native` and with the user's explicit authorization.
 
 ## Design System
 
@@ -175,7 +203,8 @@ store-internal/
 - try/catch around all IPC calls and database operations.
 - Always notify the user on error (toast or notification). Never fail silently.
 - Error Boundaries at route/page level.
-- Console.log errors with context (operation name, relevant data).
+- Log technical context only; never log customer, credit, payment, or other
+  sensitive financial data.
 
 ### Database
 
@@ -240,7 +269,7 @@ store-internal/
 - **Parameterize all SQL queries.** Never concatenate values directly into SQL strings. Use prepared statements in every query without exception.
 - **Do not store sensitive data in plain text.** If admin credentials are stored (app access password), use secure hashing (bcrypt or argon2). Never store passwords in plain text in SQLite or configuration files.
 - **Restrict IPC channels.** Only expose strictly necessary methods in the preload. Do not expose direct access to the database, `fs`, `child_process`, or dangerous OS APIs.
-- **Disable Node.js integration in the renderer.** Use `contextIsolation: true` and `nodeIntegration: false` in the BrowserWindow configuration. All communication must go through the preload.
+- **Keep Electron protections enabled.** Use `contextIsolation: true`, `nodeIntegration: false`, `webSecurity: true`, and `sandbox: true` in the BrowserWindow configuration. All communication must go through the preload.
 - **Validate data on both sides.** Validate in the renderer (UX) and in the main process (real security). Renderer validation is cosmetic only; the main process validation is what actually protects.
 - **Do not trust renderer content.** Treat IPC messages from the renderer as untrusted input. Validate types, ranges, and formats in every main process handler.
 - **Protect the database.** Consider SQLite encryption (SQLCipher) if the business handles sensitive financial information. At minimum, ensure the `.db` file is not accessible by other OS users (restrictive file permissions).
@@ -258,6 +287,10 @@ After every implementation (feature, fix, or significant change), a security ana
 - [ ]  **Renderer permissions:** Confirm that `nodeIntegration` was not enabled, `contextIsolation` was not disabled, and `webSecurity: false` was not added.
 - [ ]  **Sensitive data:** Verify that sensitive data (passwords, credit amounts with personal data) is not being logged to console or log files.
 - [ ]  **Financial data integrity:** Confirm that price, credit, and cash register calculations cannot be manipulated from the renderer. All financial logic must run in the main process.
+- [ ]  **Dependency scripts:** Confirm that pnpm blocks dependency lifecycle
+  scripts and no build approvals were added.
+- [ ]  **Supply chain:** Confirm that the lockfile remains the only lockfile,
+  package-manager pinning is intact, and no unreviewed exotic sources were added.
 - [ ]  **Error handling:** Verify that error messages exposed to the user do not reveal internal structure (table names, system paths, stack traces).
 - [ ]  **Dependencies:** If any dependency was added or updated, verify it has no known vulnerabilities (`npm audit`).
 
