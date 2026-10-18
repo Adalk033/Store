@@ -30,7 +30,10 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build Windows x64 package
-        run: pnpm run electron:build --win --x64 --publish never
+        run: |
+          pnpm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec electron-builder --config electron-builder.yml --win --x64 --publish never
 
       - name: Create release tag
         id: release_tag
