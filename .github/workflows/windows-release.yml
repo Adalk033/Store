@@ -20,22 +20,17 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
         with:
           node-version: 24.15.0
-          cache: npm
 
-      - name: Debug install context
-        shell: pwsh
-        run: |
-          Write-Host "Commit: $env:GITHUB_SHA"
-          node -v
-          npm -v
-          npm config list
-          Select-String -Path package-lock.json -Pattern '"@emnapi/core"|"@emnapi/runtime"|"@emnapi/wasi-threads"' | Select-Object -First 20
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
 
       - name: Install dependencies
-        run: npm ci --include=dev --include=optional --include=peer
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build Windows x64 package
-        run: npm run electron:build -- --win --x64 --publish never
+        run: pnpm run electron:build --win --x64 --publish never
 
       - name: Create release tag
         id: release_tag
