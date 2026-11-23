@@ -20,7 +20,7 @@ Aplicacion de punto de venta (POS) local para papeleria, construida con Electron
 ## Requisitos
 
 - Node.js 24.12+
-- pnpm 11.15.0
+- pnpm 12.21.0
 
 El proyecto usa pnpm como unico gestor de paquetes. `pnpm-lock.yaml` es el
 archivo de bloqueo oficial; no se usan `package-lock.json`, Yarn ni npm para
