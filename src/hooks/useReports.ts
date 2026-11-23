@@ -6,7 +6,7 @@ import type {
   InventoryValueRow,
   InventorySummary,
   CreditsOverviewRow,
-} from '../../electron/database/repositories/reports';
+} from '../types/database';
 import type { PaginatedResponse } from '../types';
 
 export function useReports() {

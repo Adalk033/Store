@@ -1,6 +1,6 @@
 # store-internal POS
 
-Aplicacion de punto de venta (POS) local para papeleria, construida con Electron + React + TypeScript + SQLite.
+Aplicación de punto de venta (POS) para papelería. El cliente Electron consulta y registra las operaciones mediante la API de AWS.
 
 ## Caracteristicas
 
@@ -15,12 +15,13 @@ Aplicacion de punto de venta (POS) local para papeleria, construida con Electron
 - Electron
 - React 19 + TypeScript
 - Vite
-- SQLite (better-sqlite3)
+- AWS API Gateway, Lambda y PostgreSQL
 
 ## Requisitos
 
-- Node.js 24.12+
-- pnpm 11.15.0
+- Node.js 24.x desde 24.12.0 o 26.x desde 26.13.1
+- pnpm 12.21.0
+- Conexión a la API de AWS y credenciales del servicio
 
 El proyecto usa pnpm como unico gestor de paquetes. `pnpm-lock.yaml` es el
 archivo de bloqueo oficial; no se usan `package-lock.json`, Yarn ni npm para
@@ -33,12 +34,7 @@ pnpm install --frozen-lockfile
 ```
 
 La instalacion no ejecuta scripts `preinstall`, `install` ni `postinstall` de
-dependencias. Si se requiere reconstruir una dependencia nativa para Electron,
-hagalo de forma consciente y manual:
-
-```bash
-pnpm run rebuild:native
-```
+dependencias.
 
 Los comandos de pnpm fallan, en lugar de instalar dependencias automaticamente,
 si `node_modules` no coincide con el lockfile.
@@ -58,7 +54,8 @@ pnpm run electron:build
 
 ## Estructura principal
 
-- electron/: proceso principal, preload y base de datos
+- electron/: proceso principal, preload y cliente de la API
+- cloud/: backend Lambda y esquema PostgreSQL
 - src/: interfaz React, hooks, componentes y paginas
 - docs/: documentacion funcional y de diseno
 

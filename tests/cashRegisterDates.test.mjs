@@ -27,7 +27,7 @@ test('real transaction timestamps still use the business timezone', () => {
 });
 
 test('cloud period responses normalize boundaries without modifying transaction timestamps', async (t) => {
-  const api = new CloudApi(() => ({
+  const api = new CloudApi(async () => ({
     baseUrl: 'https://example.invalid', apiKey: 'test-only', timeoutMs: 1000, retryMax: 0,
   }));
   const timestamp = '2026-05-01T00:00:00.000Z';

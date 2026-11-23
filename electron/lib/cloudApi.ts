@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getCalendarDate } from '../../src/lib/formatters.ts';
+import type { PeriodCorrection, SaleTransfer } from '../../src/types/database';
 import type {
   CashMovement,
   CashRegisterPeriod,
@@ -84,6 +85,8 @@ function normalizeCashRegisterPeriodRow(raw: unknown): CashRegisterPeriod {
     total_cash_sales: toFiniteNumber(row.total_cash_sales) ?? 0,
     total_credit_sales: toFiniteNumber(row.total_credit_sales) ?? 0,
     total_credit_collected: toFiniteNumber(row.total_credit_collected) ?? 0,
+    total_deposits: toFiniteNumber(row.total_deposits) ?? 0,
+    total_withdrawals: toFiniteNumber(row.total_withdrawals) ?? 0,
     total_expenses: toFiniteNumber(row.total_expenses) ?? 0,
     closing_cash: row.closing_cash != null ? (toFiniteNumber(row.closing_cash) ?? null) : null,
     version: toFiniteInteger(row.version) ?? 1,
@@ -344,9 +347,9 @@ function wait(ms: number): Promise<void> {
 }
 
 export class CloudApi {
-  private readonly getConfig: () => CloudConfig;
+  private readonly getConfig: () => CloudConfig | Promise<CloudConfig>;
 
-  constructor(getConfig: () => CloudConfig) {
+  constructor(getConfig: () => CloudConfig | Promise<CloudConfig>) {
     this.getConfig = getConfig;
   }
 
@@ -356,7 +359,7 @@ export class CloudApi {
     body?: unknown,
     query?: Record<string, string | number | boolean | undefined>
   ): Promise<T> {
-    const config = this.getConfig();
+    const config = await this.getConfig();
     const url = toUrl(config.baseUrl, path, query);
 
     let attempt = 0;
@@ -705,6 +708,14 @@ export class CloudApi {
       .then(normalizeCashRegisterPeriodRow);
   }
 
+  async correctCashRegister(data: PeriodCorrection): Promise<void> {
+    await this.request('POST', '/v1/cash-register/correct', { ...data, operation_id: crypto.randomUUID() });
+  }
+
+  async transferSale(data: SaleTransfer): Promise<void> {
+    await this.request('POST', '/v1/cash-register/transfer', { ...data, operation_id: crypto.randomUUID() });
+  }
+
   closeCashRegister(data: { id: number; closing_cash: number; end_date: string }): Promise<CashRegisterPeriod> {
     return this.request<CashRegisterPeriod>('POST', '/v1/cash-register/close', data)
       .then(normalizeCashRegisterPeriodRow);
@@ -878,7 +889,9 @@ export class CloudApi {
     cash_change?: number;
     idempotency_key?: string;
   }): Promise<Sale> {
-    return this.request<{ sale: Sale; created: boolean }>('POST', '/v1/sales', data).then((r) => r.sale);
+    // Older servers ignore the period on /sales. A distinct route makes historical checkout fail safely during upgrades.
+    const route = data.cash_register_id == null ? '/v1/sales' : '/v1/cash-register/historical-sale';
+    return this.request<{ sale: Sale; created: boolean }>('POST', route, { ...data, idempotency_key: data.idempotency_key ?? crypto.randomUUID() }).then((r) => r.sale);
   }
 
   async getSales(query?: { type?: string; date_from?: string; date_to?: string }): Promise<SaleListItem[]> {

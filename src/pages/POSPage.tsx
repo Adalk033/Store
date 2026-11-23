@@ -15,8 +15,8 @@ import { useProducts } from '../hooks/useProducts';
 import { useCustomers } from '../hooks/useCustomers';
 import { useSales } from '../hooks/useSales';
 import type { CartItem } from '../hooks/useSales';
-import type { Product, Sale, Customer } from '../types';
-import { formatCurrency, formatDate, formatDateTime, formatInteger } from '../lib/formatters';
+import type { Product, Sale, Customer, CashRegisterPeriod } from '../types';
+import { formatCurrency, formatDate, formatDateTime, formatInteger, getBusinessTodayDate, getCalendarDate } from '../lib/formatters';
 import styles from './POSPage.module.css';
 
 const SEARCH_RESULT_LIMIT = 20;
@@ -41,30 +41,6 @@ function padDatePart(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-function getTodayLocalDateInput(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${padDatePart(now.getMonth() + 1)}-${padDatePart(now.getDate())}`;
-}
-
-function isFutureDateInput(value: string): boolean {
-  if (!value) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-  if (
-    Number.isNaN(selectedDate.getTime()) ||
-    selectedDate.getFullYear() !== year ||
-    selectedDate.getMonth() !== month - 1 ||
-    selectedDate.getDate() !== day
-  ) {
-    return true;
-  }
-
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return selectedDate.getTime() > todayStart.getTime();
-}
-
 function addDaysToDateInput(baseDate: string, days: number): string {
   const [year, month, day] = baseDate.split('-').map(Number);
   const date = new Date(year, month - 1, day);
@@ -83,7 +59,10 @@ export function POSPage() {
 
   // Credit sale modal
   const [showCreditModal, setShowCreditModal] = useState(false);
-  const [saleDateInput, setSaleDateInput] = useState(getTodayLocalDateInput());
+  const checkoutKey = useRef('');
+  const [salePeriods, setSalePeriods] = useState<CashRegisterPeriod[]>([]);
+  const [salePeriodId, setSalePeriodId] = useState('');
+  const [saleDateInput, setSaleDateInput] = useState(getBusinessTodayDate());
   const [creditCustomerId, setCreditCustomerId] = useState<number | ''>('');
   const [creditDays, setCreditDays] = useState(5);
   const [creditSurcharge, setCreditSurcharge] = useState(10);
@@ -245,7 +224,35 @@ export function POSPage() {
     [cartSubtotal, creditInitialPaymentValue]
   );
 
-  const isSaleDateInvalid = saleDateInput.trim() === '' || isFutureDateInput(saleDateInput);
+  const salePeriod = salePeriods.find(period => salePeriodId ? String(period.id) === salePeriodId : period.status === 'open');
+  const isSaleDateInvalid = !salePeriod || !saleDateInput || (getCalendarDate(saleDateInput) !== saleDateInput || saleDateInput > getBusinessTodayDate()) ||
+    Boolean(salePeriod && (saleDateInput < salePeriod.start_date || (salePeriod.end_date && saleDateInput > salePeriod.end_date)));
+
+  async function prepareSalePeriod() {
+    try {
+      setSalePeriods(await window.electronAPI.cashRegister.getAll());
+      checkoutKey.current = crypto.randomUUID();
+      setSalePeriodId('');
+      setSaleDateInput(getBusinessTodayDate());
+      return true;
+    } catch {
+      showNotification('error', 'No se pudieron cargar las cajas. Intenta nuevamente.');
+      return false;
+    }
+  }
+
+  function renderSalePeriod() {
+    return <label className={styles['modal__field']}>Caja de la venta
+      <select className={styles['modal__input']} value={salePeriodId} onChange={e => {
+        setSalePeriodId(e.target.value);
+        setSaleDateInput(e.target.value ? '' : getBusinessTodayDate());
+      }}>
+        <option value="">Caja abierta</option>
+        {salePeriods.filter(period => period.status === 'closed').map(period =>
+          <option key={period.id} value={period.id}>{period.period_name} ({period.start_date} al {period.end_date})</option>)}
+      </select>
+    </label>;
+  }
 
   // Add product to cart
   const addToCart = useCallback(
@@ -333,10 +340,10 @@ export function POSPage() {
     setCashReceivedInput('');
   }
 
-  function handleCashSaleStart() {
+  async function handleCashSaleStart() {
     if (cart.length === 0 || saleLoading) return;
+    if (!await prepareSalePeriod()) return;
     setCashReceivedInput(roundMoney(cartSubtotal).toFixed(2));
-    setSaleDateInput(getTodayLocalDateInput());
     setShowCashModal(true);
   }
 
@@ -356,6 +363,8 @@ export function POSPage() {
       const sale = await createSale({
         sale_type: 'cash',
         sale_date: saleDateInput,
+        idempotency_key: checkoutKey.current,
+        cash_register_id: salePeriodId ? salePeriod?.id : undefined,
         items: cart.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -388,8 +397,9 @@ export function POSPage() {
   }
 
   // Open credit modal
-  function handleCreditSaleStart() {
+  async function handleCreditSaleStart() {
     if (cart.length === 0) return;
+    if (!await prepareSalePeriod()) return;
     setCreditCustomerId('');
     setCreditInitialPayment('0');
     setShowNewCustomer(false);
@@ -414,6 +424,8 @@ export function POSPage() {
       const sale = await createSale({
         sale_type: 'credit',
         sale_date: saleDateInput,
+        idempotency_key: checkoutKey.current,
+        cash_register_id: salePeriodId ? salePeriod?.id : undefined,
         customer_id: Number(creditCustomerId),
         items: cart.map(item => ({
           product_id: item.product_id,
@@ -650,19 +662,21 @@ export function POSPage() {
             </div>
             <div className={styles['modal__body']}>
               {/* Customer selection */}
+              {renderSalePeriod()}
               <div className={styles['modal__field']}>
                 <label className={styles['modal__label']}>Fecha de venta</label>
                 <input
                   className={styles['modal__input']}
                   type="date"
                   value={saleDateInput}
-                  max={getTodayLocalDateInput()}
+                  min={salePeriod?.start_date}
+                  max={salePeriod?.end_date && salePeriod.end_date < getBusinessTodayDate() ? salePeriod.end_date : getBusinessTodayDate()}
                   required
                   onChange={e => setSaleDateInput(e.target.value)}
                 />
                 {isSaleDateInvalid && (
                   <div className={styles['modal__error']}>
-                    Selecciona una fecha valida sin futuro.
+                    {salePeriod ? 'Selecciona una fecha dentro de la caja y hasta el día de hoy.' : 'Selecciona una caja cerrada o abre una caja.'}
                   </div>
                 )}
               </div>
@@ -833,19 +847,21 @@ export function POSPage() {
                 <strong>{formatCurrency(cartSubtotal)}</strong>
               </div>
 
+              {renderSalePeriod()}
               <div className={styles['modal__field']}>
                 <label className={styles['modal__label']}>Fecha de venta</label>
                 <input
                   className={styles['modal__input']}
                   type="date"
                   value={saleDateInput}
-                  max={getTodayLocalDateInput()}
+                  min={salePeriod?.start_date}
+                  max={salePeriod?.end_date && salePeriod.end_date < getBusinessTodayDate() ? salePeriod.end_date : getBusinessTodayDate()}
                   required
                   onChange={e => setSaleDateInput(e.target.value)}
                 />
                 {isSaleDateInvalid && (
                   <div className={styles['modal__error']}>
-                    Selecciona una fecha valida sin futuro.
+                    {salePeriod ? 'Selecciona una fecha dentro de la caja y hasta el día de hoy.' : 'Selecciona una caja cerrada o abre una caja.'}
                   </div>
                 )}
               </div>

@@ -21,7 +21,10 @@
 
 		"/v1/cash-register/current": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/open": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/OpenCashRegisterRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/historical-sale": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreateSaleRequest" } }], "responses": { "201": { "description": "Created" }, "200": { "description": "Idempotent replay" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/close": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CloseCashRegisterRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/correct": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CorrectCashRegisterRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
+		"/v1/cash-register/transfer": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/TransferSaleRequest" } }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/periods": { "get": { "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/movements": { "post": { "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/AddCashMovementRequest" } }], "responses": { "201": { "description": "Created" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
 		"/v1/cash-register/{id}/movements": { "get": { "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }], "responses": { "200": { "description": "OK" } }, "x-amazon-apigateway-integration": { "uri": "arn:aws:apigateway:${stageVariables.awsRegion}:lambda:path/2015-03-31/functions/${stageVariables.lambdaArn}/invocations", "passthroughBehavior": "when_no_match", "httpMethod": "POST", "type": "aws_proxy" } } },
@@ -129,6 +132,8 @@
 				"opening_cash": { "type": "number" }
 			}
 		},
+		"CorrectCashRegisterRequest": {"type": "object", "required": ["id", "version", "opening_cash", "closing_cash", "start_date", "end_date", "operation_id"], "properties": {"id": {"type": "integer"}, "version": {"type": "integer"}, "opening_cash": {"type": "number"}, "closing_cash": {"type": "number"}, "start_date": {"type": "string"}, "end_date": {"type": "string"}, "operation_id": {"type": "string", "format": "uuid"}}},
+		"TransferSaleRequest": {"type": "object", "required": ["sale_id", "source_id", "target_id", "source_version", "target_version", "sale_date", "operation_id"], "properties": {"sale_id": {"type": "integer"}, "source_id": {"type": "integer"}, "target_id": {"type": "integer"}, "source_version": {"type": "integer"}, "target_version": {"type": "integer"}, "sale_date": {"type": "string"}, "operation_id": {"type": "string", "format": "uuid"}}},
 		"CloseCashRegisterRequest": {
 			"type": "object",
 			"required": ["id", "closing_cash", "end_date"],
@@ -223,6 +228,8 @@
 			"required": ["sale_type", "items"],
 			"properties": {
 				"sale_type": { "type": "string", "enum": ["cash", "credit"] },
+				"cash_register_id": { "type": "integer" },
+				"sale_date": { "type": "string", "format": "date" },
 				"customer_id": { "type": "integer" },
 				"items": { "type": "array", "items": { "$ref": "#/definitions/SaleItemRequest" } },
 				"credit_days": { "type": "integer" },

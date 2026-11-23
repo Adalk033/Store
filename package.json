@@ -1,8 +1,8 @@
 {
   "name": "store-internal",
   "private": true,
-  "version": "0.8.21",
-  "packageManager": "pnpm@11.15.0",
+  "version": "0.8.22",
+  "packageManager": "pnpm@12.21.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist-electron/main.js",
@@ -11,48 +11,45 @@
     "email": "adal_garcia1999@hotmail.com"
   },
   "engines": {
-    "node": ">=24.12.0 <25",
-    "pnpm": "11.15.0"
+    "node": "^24.12.0 || ^26.13.1",
+    "pnpm": "12.21.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:build": "pnpm run build && electron-builder --config electron-builder.yml --publish never",
-    "rebuild:native": "electron-builder install-app-deps"
+    "electron:build": "pnpm run build && electron-builder --config electron-builder.yml --publish never"
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
     "jsbarcode": "^3.12.3",
-    "lucide-react": "^1.41.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "recharts": "^3.10.1"
+    "lucide-react": "^1.77.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.7",
-    "@eslint/js": "^9.39.5",
-    "@rolldown/plugin-babel": "^0.2.3",
+    "@babel/core": "^8.1.3",
+    "@eslint/js": "^10.0.1",
+    "@rolldown/plugin-babel": "^0.3.1",
     "@types/babel__core": "^7.20.5",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/jsbarcode": "^3.11.4",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "babel-plugin-react-compiler": "^1.0.0",
-    "electron": "^41.10.7",
-    "electron-builder": "^26.15.3",
-    "esbuild": "^0.27.7",
-    "eslint": "^9.39.5",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.6",
-    "globals": "^17.12.0",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.69.0",
-    "vite": "^8.2.2",
-    "vite-plugin-electron": "^0.29.1",
-    "vite-plugin-electron-renderer": "^0.14.7"
+    "eslint-plugin-react-refresh": "^0.5.8",
+    "globals": "^17.14.0",
+    "typescript": "~7.0.2",
+    "typescript-eslint": "^8.73.0",
+    "vite": "^8.3.8",
+    "vite-plugin-electron": "^1.2.0",
+    "vite-plugin-electron-renderer": "^1.0.0"
   }
 }

@@ -4,7 +4,7 @@ Este documento define las reglas de negocio y de asociación entre **Caja (perio
 
 ## Objetivo
 
-- Asegurar que **toda venta** quede asociada a un **periodo de caja abierto**.
+- Asegurar que **toda venta** quede asociada a un **periodo de caja correspondiente a la fecha de venta**.
 - Separar correctamente:
   - **Ventas a crédito (devengadas)**: se registran cuando se vende, aunque el dinero no entre en ese momento.
   - **Abonos / cobros de crédito (caja real)**: se registran cuando se cobra y deben impactar la caja del momento.
@@ -33,20 +33,18 @@ Este documento define las reglas de negocio y de asociación entre **Caja (perio
 1. **Un solo periodo abierto**
    - No se puede abrir un nuevo periodo si ya existe uno `open`.
 
-2. **Sin caja abierta no hay operación**
-   - No se permite registrar:
-     - Ventas (contado o crédito).
-     - Abonos/cobros de crédito.
+2. **Fechas del periodo**
+   - Inicio y cierre son inclusivos. La apertura y las correcciones comprueban los demás periodos, incluida la caja abierta.
+   - Un cambio de fechas debe conservar dentro del periodo todas sus ventas, abonos y movimientos.
 
-## Reglas de Ventas
+## Reglas de ventas y correcciones
 
-### Regla base (obligatoria)
-
-- **Toda venta requiere una caja abierta.**
-- Al registrar una venta, el sistema asigna automáticamente:
-  - `sales.cash_register_id = id` del **periodo de caja abierto**.
-
-Esto garantiza que el corte de caja pueda calcular sus totales por periodo.
+- El punto de venta usa la caja abierta por defecto. Para capturar una venta pasada se elige la caja cerrada y se indica la fecha de venta. La fecha debe pertenecer al periodo y ser anterior o igual al día de hoy.
+- La venta conserva la fecha efectiva en `created_at` y la fecha de captura en `captured_at`. La fecha de captura de ventas anteriores a esta función puede ser desconocida.
+- En **Caja → Historial de Cortes → Editar corte** se corrigen fechas, efectivo inicial y contado. El periodo conserva su estado cerrado.
+- **Mover venta** permite elegir otra caja y la fecha efectiva. Se recalculan ambas cajas en la misma transacción. El inventario, el vencimiento del crédito y la caja donde se recibió cada abono conservan su registro original.
+- PostgreSQL guarda los valores anteriores y los solicitados para cada corrección en `cash_register_corrections`. La versión del periodo protege los cambios concurrentes y la clave de operación identifica reintentos.
+- El efectivo esperado se calcula como efectivo inicial + ventas en efectivo + cobros + depósitos − gastos − retiros. La diferencia es el efectivo contado menos el esperado.
 
 ### Venta de contado (`sale_type = 'cash'`)
 
@@ -61,7 +59,7 @@ Esto garantiza que el corte de caja pueda calcular sus totales por periodo.
 - Se crea un registro en `credits`:
   - `original_amount = subtotal`
   - `total_due` inicia en el subtotal (el recargo se aplicará si vence)
-  - `due_date` = fecha actual + `credit_days`
+  - `due_date` = fecha de venta + `credit_days`
   - `status`:
     - `paid` si el abono inicial cubre el total
     - `pending` si queda saldo
@@ -92,7 +90,7 @@ Esto garantiza que el corte de caja pueda calcular sus totales por periodo.
 
 - Si una venta a crédito incluye `initial_payment > 0`:
   - se crea un registro en `credit_payments`.
-  - ese pago queda asociado a la **caja abierta** del momento (`cash_register_id` del periodo abierto).
+  - el abono inicial queda en la caja elegida al capturar la venta, con la misma fecha de operación.
 
 ## Reglas de recargo por vencimiento (créditos)
 
@@ -121,4 +119,4 @@ Mientras el periodo está abierto, la pantalla de Caja consulta periódicamente 
 ## Notas de datos existentes (antes de esta regla)
 
 - Si existían abonos antiguos antes de agregar `credit_payments.cash_register_id`, pueden quedar con `NULL`.
-- A partir de estas reglas, los nuevos abonos siempre quedan asociados al periodo abierto.
+- A partir de estas reglas, los abonos posteriores a la venta quedan asociados al periodo abierto en el que se reciben.

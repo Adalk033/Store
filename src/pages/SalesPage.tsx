@@ -182,17 +182,11 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
   useEffect(() => {
     async function loadStoreSettings() {
       try {
-        const [storeName, storeAddress, footerText, persistedRows] = await Promise.all([
+        const [storeName, storeAddress, footerText] = await Promise.all([
           window.electronAPI.settings.get('store_name'),
           window.electronAPI.settings.get('store_address'),
           window.electronAPI.settings.get('ticket_footer_text'),
-          window.electronAPI.settings.get('sales_rows_per_page'),
         ]);
-
-        const parsedRows = Number(persistedRows);
-        if (Number.isInteger(parsedRows) && ROWS_OPTIONS.includes(parsedRows as (typeof ROWS_OPTIONS)[number])) {
-          setRowsPerPage(parsedRows);
-        }
 
         setStoreSettings({
           storeName: storeName ?? 'Mi Papeleria',
@@ -257,15 +251,9 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
     }
   }, [currentPage, totalPages]);
 
-  async function handleRowsPerPageChange(value: number) {
+  function handleRowsPerPageChange(value: number) {
     setRowsPerPage(value);
     setCurrentPage(1);
-    try {
-      await window.electronAPI.settings.set('sales_rows_per_page', String(value));
-    } catch (error) {
-      console.error('SalesPage.handleRowsPerPageChange:', error);
-      showNotification('error', 'No se pudo guardar la configuracion de filas');
-    }
   }
 
   const openSaleDetail = useCallback(async (saleId: number): Promise<boolean> => {

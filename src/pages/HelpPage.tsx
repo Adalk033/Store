@@ -221,35 +221,6 @@ export function HelpPage() {
           </div>
         </details>
 
-        <details className={styles.card}>
-          <summary className={styles['card__summary']}>
-            <div className={styles['card__header']}>
-              <h2 className={styles['card__title']}>Respaldo y datos</h2>
-              <p className={styles['card__subtitle']}>
-                Cómo crear un respaldo y por qué conviene hacerlo.
-              </p>
-            </div>
-            <ChevronDown size={18} strokeWidth={1.75} className={styles['card__chevron']} />
-          </summary>
-
-          <div className={styles['card__content']}>
-            <div className={styles.section}>
-              <h3 className={styles['section__title']}>Crear un respaldo</h3>
-              <ul className={styles.list}>
-                <li>Ve a <strong>Configuración</strong> y usa la sección <strong>Respaldo de datos</strong>.</li>
-                <li>El sistema crea una copia de la base de datos en una carpeta llamada <strong>backups</strong>.</li>
-              </ul>
-            </div>
-
-            <div className={styles.section}>
-              <h3 className={styles['section__title']}>Recomendación</h3>
-              <ul className={styles.list}>
-                <li>Haz un respaldo al final del día o antes de actualizar la app.</li>
-                <li>Si puedes, copia el archivo de respaldo a una USB para tenerlo fuera de la PC.</li>
-              </ul>
-            </div>
-          </div>
-        </details>
       </section>
     </div>
   );

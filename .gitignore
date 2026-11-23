@@ -14,8 +14,9 @@ dist-ssr
 release
 *.local
 
-# SQLite database files (runtime data, not source)
+# Archived local database and SQLite sidecar files
 *.db
+/store-internal.db
 *.db-shm
 *.db-wal
 

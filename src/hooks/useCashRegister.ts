@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse } from '../types';
-import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
+import type { CashRegisterSalesSummary } from '../types/database';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
   const [periods, setPeriods] = useState<CashRegisterPeriod[]>([]);
@@ -39,6 +39,7 @@ export function useCashRegister() {
       setError(null);
       const data = await window.electronAPI.cashRegister.getAll();
       setPeriods(data);
+      return data as CashRegisterPeriod[];
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar periodos';
       setError(message);
