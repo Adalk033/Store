@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedQuery, PaginatedResponse } from '../types';
-import type { CashRegisterSalesSummary } from '../../electron/database/repositories/cashRegister';
+import type { CashRegisterSalesSummary } from '../types/database';
 export function useCashRegister() {
   const [currentPeriod, setCurrentPeriod] = useState<CashRegisterPeriod | null>(null);
   const [periods, setPeriods] = useState<CashRegisterPeriod[]>([]);

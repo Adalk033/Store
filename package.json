@@ -11,7 +11,7 @@
     "email": "adal_garcia1999@hotmail.com"
   },
   "engines": {
-    "node": ">=24.12.0 <25",
+    "node": "^24.12.0 || ^26.13.1",
     "pnpm": "12.21.0"
   },
   "scripts": {
@@ -19,11 +19,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:build": "pnpm run build && electron-builder --config electron-builder.yml --publish never",
-    "rebuild:native": "electron-builder install-app-deps"
+    "electron:build": "pnpm run build && electron-builder --config electron-builder.yml --publish never"
   },
   "dependencies": {
-    "better-sqlite3": "^13.2.0",
     "jsbarcode": "^3.12.3",
     "lucide-react": "^1.77.0",
     "react": "^19.3.1",
@@ -35,7 +33,6 @@
     "@eslint/js": "^10.0.1",
     "@rolldown/plugin-babel": "^0.3.1",
     "@types/babel__core": "^7.20.5",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/jsbarcode": "^3.11.4",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

@@ -168,7 +168,6 @@ INSERT INTO settings (key, value) VALUES
     ('default_credit_days', '5'),
     ('default_surcharge_percent', '10'),
     ('default_margin_percent', '50'),
-    ('aws_enabled', '1'),
     ('aws_env', 'prod'),
     ('aws_region', ''),
     ('aws_api_base_url', ''),

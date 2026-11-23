@@ -162,31 +162,6 @@
   cursor: not-allowed;
 }
 
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--color-primary);
-  background-color: transparent;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: rgba(26, 43, 60, 0.05);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .btn-danger {
   display: inline-flex;
   align-items: center;
@@ -205,32 +180,6 @@
 
 .btn-danger:hover:not(:disabled) {
   background-color: rgba(239, 68, 68, 0.05);
-}
-
-/* Backup section */
-.backup__info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.backup__details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.backup__path {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.backup__last {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 /* Shortcuts table */

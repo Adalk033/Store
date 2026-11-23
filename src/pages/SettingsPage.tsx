@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Save, Download, Keyboard } from 'lucide-react';
+import { Save, Keyboard } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
+import type { AwsConnectionConfig } from '../types/database';
 import styles from './SettingsPage.module.css';
 
 interface SettingsPageProps {
@@ -10,7 +11,7 @@ interface SettingsPageProps {
 type SettingsSection = 'aws' | 'store' | 'products' | 'credits';
 
 export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
-  const { settings, loading, fetchSettings, saveMultiple, saveSection: saveSettingsSection, setCloudApiKey, hasCloudApiKey } = useSettings();
+  const { settings, loading, error, fetchSettings, saveSection: saveSettingsSection, setCloudApiKey, hasCloudApiKey } = useSettings();
 
   const [form, setForm] = useState({
     store_name: '',
@@ -21,18 +22,17 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     default_surcharge_percent: '10',
     default_margin_percent: '50',
     business_timezone: 'America/Mexico_City',
-    aws_enabled: '1',
     aws_env: 'prod',
     aws_region: '',
     aws_api_base_url: '',
     aws_timeout_ms: '5000',
     aws_retry_max: '2',
   });
+  const [savedAws, setSavedAws] = useState<AwsConnectionConfig | null>(null);
   const [cloudApiKey, setCloudApiKeyInput] = useState('');
   const [cloudApiKeyDirty, setCloudApiKeyDirty] = useState(false);
   const [hasStoredCloudApiKey, setHasStoredCloudApiKey] = useState(false);
   const [savingSection, setSavingSection] = useState<SettingsSection | null>(null);
-  const [backingUp, setBackingUp] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -41,14 +41,24 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
 
   useEffect(() => {
     void (async () => {
-      const exists = await hasCloudApiKey();
-      setHasStoredCloudApiKey(exists);
+      try {
+        const [config, exists] = await Promise.all([
+          window.electronAPI.settings.getAwsRecovery(),
+          hasCloudApiKey(),
+        ]);
+        setSavedAws(config);
+        setForm(previous => ({ ...previous, ...config }));
+        setHasStoredCloudApiKey(exists);
+      } catch {
+        showNotification('error', 'No se pudo cargar la configuración de conexión AWS.');
+      }
     })();
   }, [hasCloudApiKey]);
 
   // Sync form with loaded settings
   useEffect(() => {
-    setForm({
+    setForm(previous => ({
+      ...previous,
       store_name: settings.store_name || '',
       store_address: settings.store_address || '',
       store_phone: settings.store_phone || '',
@@ -57,13 +67,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
       default_surcharge_percent: settings.default_surcharge_percent || '10',
       default_margin_percent: settings.default_margin_percent || '50',
       business_timezone: settings.business_timezone || 'America/Mexico_City',
-      aws_enabled: settings.aws_enabled || '0',
-      aws_env: settings.aws_env || 'prod',
-      aws_region: settings.aws_region || '',
-      aws_api_base_url: settings.aws_api_base_url || '',
-      aws_timeout_ms: settings.aws_timeout_ms || '5000',
-      aws_retry_max: settings.aws_retry_max || '2',
-    });
+    }));
   }, [settings]);
 
   function showNotification(type: 'success' | 'error', message: string) {
@@ -84,20 +88,15 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     if (key === 'default_surcharge_percent') return settings.default_surcharge_percent || '10';
     if (key === 'default_margin_percent') return settings.default_margin_percent || '50';
     if (key === 'business_timezone') return settings.business_timezone || 'America/Mexico_City';
-    if (key === 'aws_enabled') return settings.aws_enabled || '0';
-    if (key === 'aws_env') return settings.aws_env || 'prod';
-    if (key === 'aws_timeout_ms') return settings.aws_timeout_ms || '5000';
-    if (key === 'aws_retry_max') return settings.aws_retry_max || '2';
     return settings[key] || '';
   }
 
   const awsSectionDirty =
-    form.aws_enabled !== getStoredValue('aws_enabled') ||
-    form.aws_env !== getStoredValue('aws_env') ||
-    form.aws_region !== getStoredValue('aws_region') ||
-    form.aws_api_base_url !== getStoredValue('aws_api_base_url') ||
-    form.aws_timeout_ms !== getStoredValue('aws_timeout_ms') ||
-    form.aws_retry_max !== getStoredValue('aws_retry_max') ||
+    form.aws_env !== savedAws?.aws_env ||
+    form.aws_region !== savedAws?.aws_region ||
+    form.aws_api_base_url !== savedAws?.aws_api_base_url ||
+    form.aws_timeout_ms !== savedAws?.aws_timeout_ms ||
+    form.aws_retry_max !== savedAws?.aws_retry_max ||
     cloudApiKeyDirty;
 
   const storeSectionDirty =
@@ -133,38 +132,38 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
   }
 
   async function handleSaveAws() {
-    if (form.aws_enabled === '1') {
-      if (!form.aws_api_base_url.trim()) {
-        showNotification('error', 'La URL base de API es obligatoria cuando AWS esta habilitado');
-        return;
-      }
-      if (!form.aws_region.trim()) {
-        showNotification('error', 'La region AWS es obligatoria cuando AWS esta habilitado');
-        return;
-      }
+    if (!form.aws_api_base_url.trim()) {
+      showNotification('error', 'La URL base de API es obligatoria');
+      return;
+    }
+    if (!form.aws_region.trim()) {
+      showNotification('error', 'La region AWS es obligatoria');
+      return;
+    }
 
-      const timeout = Number(form.aws_timeout_ms);
-      const retries = Number(form.aws_retry_max);
-      if (isNaN(timeout) || timeout < 1000) {
-        showNotification('error', 'El timeout AWS debe ser de al menos 1000 ms');
-        return;
-      }
-      if (isNaN(retries) || retries < 0 || retries > 5) {
-        showNotification('error', 'Los reintentos AWS deben estar entre 0 y 5');
-        return;
-      }
+    const timeout = Number(form.aws_timeout_ms);
+    const retries = Number(form.aws_retry_max);
+    if (!Number.isInteger(timeout) || timeout < 1000) {
+      showNotification('error', 'El timeout AWS debe ser de al menos 1000 ms');
+      return;
+    }
+    if (!Number.isInteger(retries) || retries < 0 || retries > 5) {
+      showNotification('error', 'Los reintentos AWS deben estar entre 0 y 5');
+      return;
     }
 
     setSavingSection('aws');
     try {
-      await saveMultiple([
-        { key: 'aws_enabled', value: form.aws_enabled },
-        { key: 'aws_env', value: form.aws_env },
-        { key: 'aws_region', value: form.aws_region },
-        { key: 'aws_api_base_url', value: form.aws_api_base_url },
-        { key: 'aws_timeout_ms', value: form.aws_timeout_ms },
-        { key: 'aws_retry_max', value: form.aws_retry_max },
-      ]);
+      const config = {
+        aws_env: form.aws_env,
+        aws_region: form.aws_region,
+        aws_api_base_url: form.aws_api_base_url.trim(),
+        aws_timeout_ms: form.aws_timeout_ms,
+        aws_retry_max: form.aws_retry_max,
+      };
+      await window.electronAPI.settings.setAwsRecovery(config);
+      setSavedAws(config);
+      setForm(previous => ({ ...previous, ...config }));
 
       if (cloudApiKeyDirty) {
         await setCloudApiKey(cloudApiKey);
@@ -250,24 +249,13 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
     }
   }
 
-  async function handleBackup() {
-    setBackingUp(true);
-    try {
-      const result = await window.electronAPI.settings.backupDatabase();
-      showNotification('success', `Respaldo creado: ${result}`);
-    } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Error al crear respaldo');
-    } finally {
-      setBackingUp(false);
-    }
-  }
-
   if (loading && !form.store_name) {
     return <div className={styles.page}><p>Cargando configuracion...</p></div>;
   }
 
   return (
     <div className={styles.page}>
+      {error && <p role="alert" className={styles['notification--error']}>{error}</p>}
       {/* Notification */}
       {notification && (
         <div className={`${styles.notification} ${notification.type === 'success' ? styles['notification--success'] : styles['notification--error']}`}>
@@ -286,7 +274,7 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
           <button
             className={styles['btn-primary']}
             onClick={handleSaveAws}
-            disabled={isSectionSaving('aws') || !awsSectionDirty}
+            disabled={!savedAws || isSectionSaving('aws') || !awsSectionDirty}
           >
             <Save size={16} strokeWidth={1.5} />
             {isSectionSaving('aws') ? 'Guardando...' : 'Guardar seccion'}
@@ -295,18 +283,6 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
         <p className={styles['section__description']}>
           Configura la API cloud (Lambda + API Gateway). La API key se guarda cifrada localmente.
         </p>
-
-        <div className={styles.field}>
-          <label className={styles['field__label']}>Habilitar modo AWS</label>
-          <select
-            className={styles['field__input']}
-            value={form.aws_enabled}
-            onChange={e => handleChange('aws_enabled', e.target.value)}
-          >
-            <option value="0">No</option>
-            <option value="1">Si</option>
-          </select>
-        </div>
 
         <div className={styles['field-row']}>
           <div className={styles.field}>
@@ -549,30 +525,6 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
           <span className={styles['field__hint']}>
             Ejemplos: America/Mexico_City, America/Cancun, America/Tijuana
           </span>
-        </div>
-      </div>
-
-      {/* Backup */}
-      <div className={styles.section}>
-        <h2 className={styles['section__title']}>Respaldo de datos</h2>
-        <p className={styles['section__description']}>
-          Crea una copia de la base de datos en la carpeta de respaldos
-        </p>
-
-        <div className={styles['backup__info']}>
-          <div className={styles['backup__details']}>
-            <span className={styles['backup__last']}>
-              Se guarda en la carpeta &quot;backups&quot; junto a la base de datos
-            </span>
-          </div>
-          <button
-            className={styles['btn-secondary']}
-            onClick={handleBackup}
-            disabled={backingUp}
-          >
-            <Download size={16} strokeWidth={1.5} />
-            {backingUp ? 'Creando respaldo...' : 'Crear respaldo ahora'}
-          </button>
         </div>
       </div>
 

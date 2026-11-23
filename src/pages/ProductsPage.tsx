@@ -202,30 +202,9 @@ export function ProductsPage() {
     };
   }, [searchQuery]);
 
-  // Load persisted rows per page
-  useEffect(() => {
-    async function loadPersistedRows() {
-      try {
-        const persisted = await window.electronAPI.settings.get('products_rows_per_page');
-        const parsed = Number(persisted);
-        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
-          setRowsPerPage(parsed);
-        }
-      } catch (err) {
-        console.error('ProductsPage.loadPersistedRows:', err);
-      }
-    }
-    void loadPersistedRows();
-  }, []);
-
-  async function handleRowsPerPageChange(value: number) {
+  function handleRowsPerPageChange(value: number) {
     setRowsPerPage(value);
     setCurrentPage(1);
-    try {
-      await window.electronAPI.settings.set('products_rows_per_page', String(value));
-    } catch (err) {
-      console.error('ProductsPage.handleRowsPerPageChange:', err);
-    }
   }
 
   const displayedProducts = paginatedData?.items ?? [];

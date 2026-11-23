@@ -12,7 +12,7 @@ import type {
   InventoryValueRow,
   InventorySummary,
   CreditsOverviewRow,
-} from '../../electron/database/repositories/reports';
+} from '../types/database';
 import type { PieLabelRenderProps } from 'recharts';
 import type { PaginatedResponse } from '../types';
 import styles from './ReportsPage.module.css';
@@ -28,36 +28,6 @@ const CREDIT_STATUS_LABELS: Record<string, string> = {
   overdue: 'Vencido',
   paid: 'Pagado',
 };
-
-function usePersistedRowsPerPage(tableId: string, defaultValue: number): [number, (value: number) => void] {
-  const storageKey = `reports.table.rowsPerPage.${tableId}`;
-  const [rowsPerPage, setRowsPerPage] = useState<number>(defaultValue);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = Number(raw);
-      if (!Number.isFinite(parsed)) return;
-      if (!TABLE_ROWS_OPTIONS.includes(parsed as (typeof TABLE_ROWS_OPTIONS)[number])) return;
-      setRowsPerPage(parsed);
-    } catch (err) {
-      console.log('Failed to read table rowsPerPage from localStorage', { storageKey, err });
-    }
-  }, [storageKey]);
-
-  const setPersistedRowsPerPage = useCallback((value: number) => {
-    const next = TABLE_ROWS_OPTIONS.includes(value as (typeof TABLE_ROWS_OPTIONS)[number]) ? value : defaultValue;
-    setRowsPerPage(next);
-    try {
-      localStorage.setItem(storageKey, String(next));
-    } catch (err) {
-      console.log('Failed to write table rowsPerPage to localStorage', { storageKey, err });
-    }
-  }, [defaultValue, storageKey]);
-
-  return [rowsPerPage, setPersistedRowsPerPage];
-}
 
 // Date helpers
 function toISODate(date: Date): string {
@@ -131,27 +101,27 @@ export function ReportsPage() {
   // Per-table UI state (search + pagination) - server-side paginated
   const [salesTopSearch, setSalesTopSearch] = useState('');
   const [salesTopPage, setSalesTopPage] = useState(1);
-  const [salesTopRowsPerPage, setSalesTopRowsPerPage] = usePersistedRowsPerPage('sales.topProducts', 25);
+  const [salesTopRowsPerPage, setSalesTopRowsPerPage] = useState(25);
   const [salesTopPaginatedData, setSalesTopPaginatedData] = useState<PaginatedResponse<TopProductRow> | null>(null);
 
   const [productsDetailSearch, setProductsDetailSearch] = useState('');
   const [productsDetailPage, setProductsDetailPage] = useState(1);
-  const [productsDetailRowsPerPage, setProductsDetailRowsPerPage] = usePersistedRowsPerPage('products.detailTopProducts', 25);
+  const [productsDetailRowsPerPage, setProductsDetailRowsPerPage] = useState(25);
   const [productsDetailPaginatedData, setProductsDetailPaginatedData] = useState<PaginatedResponse<TopProductRow> | null>(null);
 
   const [profitDetailSearch, setProfitDetailSearch] = useState('');
   const [profitDetailPage, setProfitDetailPage] = useState(1);
-  const [profitDetailRowsPerPage, setProfitDetailRowsPerPage] = usePersistedRowsPerPage('profit.detail', 25);
+  const [profitDetailRowsPerPage, setProfitDetailRowsPerPage] = useState(25);
   const [profitDetailPaginatedData, setProfitDetailPaginatedData] = useState<PaginatedResponse<ProfitRow> | null>(null);
 
   const [inventoryDetailSearch, setInventoryDetailSearch] = useState('');
   const [inventoryDetailPage, setInventoryDetailPage] = useState(1);
-  const [inventoryDetailRowsPerPage, setInventoryDetailRowsPerPage] = usePersistedRowsPerPage('inventory.detail', 25);
+  const [inventoryDetailRowsPerPage, setInventoryDetailRowsPerPage] = useState(25);
   const [inventoryDetailPaginatedData, setInventoryDetailPaginatedData] = useState<PaginatedResponse<InventoryValueRow> | null>(null);
 
   const [creditsSummarySearch, setCreditsSummarySearch] = useState('');
   const [creditsSummaryPage, setCreditsSummaryPage] = useState(1);
-  const [creditsSummaryRowsPerPage, setCreditsSummaryRowsPerPage] = usePersistedRowsPerPage('credits.summaryByStatus', 5);
+  const [creditsSummaryRowsPerPage, setCreditsSummaryRowsPerPage] = useState(5);
   const [creditsSummaryPaginatedData, setCreditsSummaryPaginatedData] = useState<PaginatedResponse<CreditsOverviewRow> | null>(null);
 
   // Debounce refs for paginated table searches

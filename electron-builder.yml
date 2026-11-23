@@ -6,7 +6,6 @@ directories:
 files:
   - dist
   - dist-electron
-  - node_modules/better-sqlite3/**
 asar: true
 mac:
   target:

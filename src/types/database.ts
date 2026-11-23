@@ -1,4 +1,4 @@
-// Database entity types matching the SQLite schema
+// Entity types returned by the cloud API
 
 export interface Category {
   id: number;
@@ -243,55 +243,6 @@ export type FeatureFlagModule =
   | 'products'
   | 'reports';
 
-// --- Cursor/keyset pagination (Phase 5 - Hardening cloud) ---
-
-/**
- * Cursor for keyset pagination.
- * Encodes the (created_at, id) pair as an opaque string: "created_at|id"
- */
-export type CursorToken = string;
-
-/**
- * Request for cursor-based pagination.
- * Use `cursor` to fetch the next page after a known position.
- * On first request, omit `cursor` to start from the beginning.
- */
-export interface CursorPaginatedQuery extends QueryFilters {
-  pageSize: number;
-  cursor?: CursorToken;
-  sort?: SortSpec;
-}
-
-/**
- * Response for cursor-based pagination.
- * `nextCursor` is null when there are no more results.
- */
-export interface CursorPaginatedResponse<T> {
-  items: T[];
-  pageSize: number;
-  nextCursor: CursorToken | null;
-  hasMore: boolean;
-  sort: SortSpec;
-}
-
-// --- Data versioning (Phase 5 - Hardening cloud) ---
-
-/**
- * Tracks the version number per module for cache invalidation.
- * Renderer polls versions and refreshes data only when version changes.
- */
-export interface DataVersion {
-  module: string;
-  version: number;
-  updated_at: string;
-}
-
-/**
- * Map of module name -> current version number.
- * Returned by the data versions check endpoint.
- */
-export type DataVersionMap = Record<string, number>;
-
 // --- Idempotency (Phase 5 - Hardening cloud) ---
 
 /**
@@ -336,4 +287,72 @@ export interface MetricsSummary {
   totalCalls: number;
   totalErrors: number;
   uptimeMs: number;
+}
+
+export interface DailySalesRow {
+  date: string;
+  count: number;
+  total_cash: number;
+  total_credit: number;
+  total: number;
+}
+
+export interface TopProductRow {
+  product_id: number;
+  product_name: string;
+  total_quantity: number;
+  total_revenue: number;
+}
+
+export interface ProfitRow {
+  product_id: number;
+  product_name: string;
+  total_quantity: number;
+  total_revenue: number;
+  total_cost: number;
+  profit: number;
+  margin: number;
+}
+
+export interface InventoryValueRow {
+  product_id: number;
+  product_name: string;
+  stock: number;
+  min_stock: number;
+  cost_price: number;
+  sale_price: number;
+  stock_value_cost: number;
+  stock_value_sale: number;
+}
+
+export interface CreditsOverviewRow {
+  status: string;
+  count: number;
+  total_due: number;
+  total_paid: number;
+  total_remaining: number;
+}
+
+export interface InventorySummary {
+  total_products: number;
+  total_active: number;
+  total_stock_units: number;
+  total_value_cost: number;
+  total_value_sale: number;
+  low_stock_count: number;
+}
+
+export interface CashRegisterSalesSummary {
+  sale_count: number;
+  total_cash_sales: number;
+  total_credit_sales: number;
+  total_credit_collected: number;
+}
+
+export interface AwsConnectionConfig {
+  aws_env: string;
+  aws_region: string;
+  aws_api_base_url: string;
+  aws_timeout_ms: string;
+  aws_retry_max: string;
 }

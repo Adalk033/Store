@@ -78,30 +78,9 @@ export function InventoryPage() {
     };
   }, [searchQuery]);
 
-  // Load persisted rows per page
-  useEffect(() => {
-    async function loadPersistedRows() {
-      try {
-        const persisted = await window.electronAPI.settings.get('inventory_rows_per_page');
-        const parsed = Number(persisted);
-        if (Number.isInteger(parsed) && ROWS_OPTIONS.includes(parsed as (typeof ROWS_OPTIONS)[number])) {
-          setRowsPerPage(parsed);
-        }
-      } catch (err) {
-        console.error('InventoryPage.loadPersistedRows:', err);
-      }
-    }
-    void loadPersistedRows();
-  }, []);
-
-  async function handleRowsPerPageChange(value: number) {
+  function handleRowsPerPageChange(value: number) {
     setRowsPerPage(value);
     setCurrentPage(1);
-    try {
-      await window.electronAPI.settings.set('inventory_rows_per_page', String(value));
-    } catch (err) {
-      console.error('InventoryPage.handleRowsPerPageChange:', err);
-    }
   }
 
   const hasInvalidDateRange = Boolean(

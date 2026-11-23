@@ -15,22 +15,12 @@ import { ReportsPage } from './pages/ReportsPage';
 import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
+import type { AwsConnectionConfig } from './types/database';
 
-const PAGE_IDS: PageId[] = ['products', 'inventory', 'pos', 'sales', 'credits', 'customers', 'cashRegister', 'reports', 'barcodeLabels', 'settings', 'help'];
 const PAGE_TRANSITION_MS = 280;
 const CLOUD_HEALTH_CHECK_INTERVAL_MS = 15000;
 
-type AwsRecoveryForm = {
-  aws_enabled: string;
-  aws_env: string;
-  aws_region: string;
-  aws_api_base_url: string;
-  aws_timeout_ms: string;
-  aws_retry_max: string;
-};
-
-const DEFAULT_AWS_RECOVERY_FORM: AwsRecoveryForm = {
-  aws_enabled: '1',
+const DEFAULT_AWS_RECOVERY_FORM: AwsConnectionConfig = {
   aws_env: 'prod',
   aws_region: '',
   aws_api_base_url: '',
@@ -38,42 +28,29 @@ const DEFAULT_AWS_RECOVERY_FORM: AwsRecoveryForm = {
   aws_retry_max: '2',
 };
 
-function isPageId(value: string): value is PageId {
-  return PAGE_IDS.includes(value as PageId);
-}
-
 export function App() {
-  const [dbStatus, setDbStatus] = useState<'loading' | 'connected' | 'error'>('loading');
-  const [cloudStatus, setCloudStatus] = useState<'loading' | 'ready' | 'missing-key' | 'disabled' | 'error'>('loading');
-  const [startupMode, setStartupMode] = useState<'loading' | 'local' | 'cloud' | 'recovery'>('loading');
+  const [cloudStatus, setCloudStatus] = useState<'loading' | 'ready' | 'missing-key' | 'error'>('loading');
+  const [startupMode, setStartupMode] = useState<'loading' | 'cloud' | 'recovery'>('loading');
   const [currentPage, setCurrentPage] = useState<PageId>('products');
   const [isNavigating, setIsNavigating] = useState(false);
   const [storeName, setStoreName] = useState('store-internal');
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [initialCreditId, setInitialCreditId] = useState<number | null>(null);
-  const [awsRecoveryForm, setAwsRecoveryForm] = useState<AwsRecoveryForm>(DEFAULT_AWS_RECOVERY_FORM);
+  const [awsRecoveryForm, setAwsRecoveryForm] = useState<AwsConnectionConfig>(DEFAULT_AWS_RECOVERY_FORM);
   const [awsRecoveryApiKey, setAwsRecoveryApiKey] = useState('');
   const [awsRecoveryHasApiKey, setAwsRecoveryHasApiKey] = useState(false);
   const [awsRecoveryLoading, setAwsRecoveryLoading] = useState(false);
   const [awsRecoverySaving, setAwsRecoverySaving] = useState(false);
-  const [awsRecoveryMessage, setAwsRecoveryMessage] = useState<string | null>(null);
   const [awsRecoveryError, setAwsRecoveryError] = useState<string | null>(null);
 
   const connectionItems: ConnectionStatusItem[] = [
-    dbStatus === 'loading'
-      ? { label: 'Local', value: 'Conectando...', tone: 'info' }
-      : dbStatus === 'connected'
-        ? { label: 'Local', value: 'Conectado', tone: 'success' }
-        : { label: 'Local', value: 'Sin conexion', tone: 'error' },
     cloudStatus === 'loading'
       ? { label: 'Cloud', value: 'Verificando...', tone: 'info' }
       : cloudStatus === 'ready'
         ? { label: 'Cloud', value: 'Listo', tone: 'success' }
         : cloudStatus === 'missing-key'
           ? { label: 'Cloud', value: 'Sin API key', tone: 'warning' }
-          : cloudStatus === 'disabled'
-            ? { label: 'Cloud', value: 'Deshabilitado', tone: 'neutral' }
-            : { label: 'Cloud', value: 'No disponible', tone: 'error' },
+          : { label: 'Cloud', value: 'No disponible', tone: 'error' },
   ];
 
   function navigateToPage(page: PageId) {
@@ -93,74 +70,6 @@ export function App() {
   }
 
   useEffect(() => {
-    async function checkConnection() {
-      try {
-        const [configuredStoreNameResult, lastActivePageResult] =
-          await Promise.allSettled([
-          window.electronAPI.settings.get('store_name'),
-          window.electronAPI.settings.get('last_active_page'),
-        ] as const);
-        const configuredStoreName =
-          configuredStoreNameResult.status === 'fulfilled'
-            ? (configuredStoreNameResult.value as string | null | undefined)
-            : undefined;
-        const lastActivePage =
-          lastActivePageResult.status === 'fulfilled'
-            ? (lastActivePageResult.value as string | null | undefined)
-            : undefined;
-        const localSettingsAvailable =
-          configuredStoreNameResult.status === 'fulfilled' && lastActivePageResult.status === 'fulfilled';
-
-        const cloudStatusResult = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
-        setCloudStatus(cloudStatusResult);
-        const cloudReady = cloudStatusResult === 'ready';
-
-        if (configuredStoreName?.trim()) {
-          setStoreName(configuredStoreName.trim());
-        }
-
-        if (lastActivePage && isPageId(lastActivePage)) {
-          setCurrentPage(lastActivePage);
-        }
-
-        if (localSettingsAvailable) {
-          setDbStatus('connected');
-          setStartupMode('local');
-          return;
-        }
-
-        if (cloudReady) {
-          setDbStatus('error');
-          setStartupMode('cloud');
-          return;
-        }
-
-        throw new Error('No se pudo inicializar la configuracion local ni la cloud');
-      } catch (error) {
-        console.error('Error connecting to database:', error);
-        setCloudStatus('error');
-        setDbStatus('error');
-        setStartupMode('recovery');
-      }
-    }
-    checkConnection();
-  }, []);
-
-  useEffect(() => {
-    if (dbStatus !== 'connected') return;
-
-    async function persistCurrentPage() {
-      try {
-        await window.electronAPI.settings.set('last_active_page', currentPage);
-      } catch (error) {
-        console.error('Error saving last active page:', error);
-      }
-    }
-
-    void persistCurrentPage();
-  }, [currentPage, dbStatus]);
-
-  useEffect(() => {
     let disposed = false;
     let inFlight = false;
 
@@ -171,14 +80,16 @@ export function App() {
 
       inFlight = true;
       try {
-        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        const status = await window.electronAPI.settings.checkCloudHealth();
         if (!disposed) {
           setCloudStatus(status);
+          setStartupMode(previous => status === 'ready' || previous === 'cloud' ? 'cloud' : 'recovery');
         }
       } catch (error) {
         console.error('Error checking cloud health:', error);
         if (!disposed) {
           setCloudStatus('error');
+          setStartupMode(previous => previous === 'cloud' ? 'cloud' : 'recovery');
         }
       } finally {
         inFlight = false;
@@ -205,21 +116,19 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (dbStatus !== 'error' || startupMode !== 'recovery') {
+    if (startupMode !== 'recovery') {
       return;
     }
 
     async function loadAwsRecovery() {
       setAwsRecoveryLoading(true);
       setAwsRecoveryError(null);
-      setAwsRecoveryMessage(null);
       try {
         const [config, hasApiKey] = await Promise.all([
           window.electronAPI.settings.getAwsRecovery(),
           window.electronAPI.settings.hasCloudApiKey(),
         ]);
         setAwsRecoveryForm({
-          aws_enabled: config.aws_enabled || '1',
           aws_env: config.aws_env || 'prod',
           aws_region: config.aws_region || '',
           aws_api_base_url: config.aws_api_base_url || '',
@@ -227,8 +136,6 @@ export function App() {
           aws_retry_max: config.aws_retry_max || '2',
         });
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
-        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
-        setCloudStatus(status);
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo cargar configuracion AWS de recuperacion');
       } finally {
@@ -237,10 +144,10 @@ export function App() {
     }
 
     void loadAwsRecovery();
-  }, [dbStatus, startupMode]);
+  }, [startupMode]);
 
   useEffect(() => {
-    if (dbStatus !== 'connected') return;
+    if (startupMode !== 'cloud') return;
 
     async function refreshStoreName() {
       try {
@@ -252,7 +159,7 @@ export function App() {
     }
 
     void refreshStoreName();
-  }, [currentPage, dbStatus]);
+  }, [startupMode]);
 
   useEffect(() => {
     if (!isNavigating) return;
@@ -264,22 +171,21 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [currentPage, isNavigating]);
 
-  if (dbStatus === 'loading') {
+  if (startupMode === 'loading') {
     return (
       <div className={styles['centered-state--compact']}>
         <div className={styles['centered-state__stack']}>
           <ConnectionStatusLegend items={connectionItems} />
-          <p>Conectando a la base de datos...</p>
+          <p>Verificando la conexión con AWS...</p>
         </div>
       </div>
     );
   }
 
-  if (dbStatus === 'error' && startupMode === 'recovery') {
+  if (startupMode === 'recovery') {
     async function handleSaveAwsRecovery() {
       setAwsRecoverySaving(true);
       setAwsRecoveryError(null);
-      setAwsRecoveryMessage(null);
 
       try {
         await window.electronAPI.settings.setAwsRecovery(awsRecoveryForm);
@@ -291,9 +197,13 @@ export function App() {
 
         const hasApiKey = await window.electronAPI.settings.hasCloudApiKey();
         setAwsRecoveryHasApiKey(Boolean(hasApiKey));
-        const status = await window.electronAPI.settings.checkCloudHealth() as typeof cloudStatus;
+        const status = await window.electronAPI.settings.checkCloudHealth();
         setCloudStatus(status);
-        setAwsRecoveryMessage('Configuracion AWS guardada. Reinicia la app para reintentar la conexion.');
+        if (status === 'ready') {
+          setStartupMode('cloud');
+        } else {
+          setAwsRecoveryError('Configuración guardada. Verifica la URL, la API key y la conexión a internet.');
+        }
       } catch (error) {
         setAwsRecoveryError(error instanceof Error ? error.message : 'No se pudo guardar la configuracion AWS');
       } finally {
@@ -301,7 +211,7 @@ export function App() {
       }
     }
 
-    function handleAwsRecoveryChange(key: keyof AwsRecoveryForm, value: string) {
+    function handleAwsRecoveryChange(key: keyof AwsConnectionConfig, value: string) {
       setAwsRecoveryForm(prev => ({ ...prev, [key]: value }));
     }
 
@@ -312,7 +222,7 @@ export function App() {
           <div className={styles['recovery-card']}>
             <h2 className={styles['recovery-title']}>No fue posible iniciar la aplicacion</h2>
             <p className={styles['recovery-subtitle']}>
-              Se bloqueo el acceso al sistema hasta corregir la conexion AWS. Solo esta habilitada esta seccion de recuperacion.
+              Verifica la conexión a internet y la configuración de AWS para entrar al punto de venta.
             </p>
 
             {awsRecoveryLoading ? (
@@ -320,18 +230,6 @@ export function App() {
             ) : (
               <>
                 <div className={styles['recovery-grid']}>
-                  <label className={styles['recovery-field']}>
-                    <span className={styles['recovery-label']}>Habilitar modo AWS</span>
-                    <select
-                      value={awsRecoveryForm.aws_enabled}
-                      onChange={(e) => handleAwsRecoveryChange('aws_enabled', e.target.value)}
-                      className={styles['recovery-input']}
-                    >
-                      <option value="0">No</option>
-                      <option value="1">Si</option>
-                    </select>
-                  </label>
-
                   <label className={styles['recovery-field']}>
                     <span className={styles['recovery-label']}>Entorno</span>
                     <select
@@ -411,10 +309,6 @@ export function App() {
                 {awsRecoveryError ? (
                   <p className={`${styles['recovery-message']} ${styles['recovery-message--error']}`}>{awsRecoveryError}</p>
                 ) : null}
-                {awsRecoveryMessage ? (
-                  <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>{awsRecoveryMessage}</p>
-                ) : null}
-
                 <div className={styles['recovery-actions']}>
                   <button
                     onClick={() => void handleSaveAwsRecovery()}

@@ -10,13 +10,6 @@ export interface SettingsMap {
   default_surcharge_percent: string;
   default_margin_percent: string;
   business_timezone: string;
-  aws_enabled: string;
-  aws_env: string;
-  aws_region: string;
-  aws_api_base_url: string;
-  aws_timeout_ms: string;
-  aws_retry_max: string;
-  last_active_page: string;
   [key: string]: string;
 }
 
@@ -31,13 +24,6 @@ const DEFAULT_SETTINGS: SettingsMap = {
   default_surcharge_percent: '10',
   default_margin_percent: '50',
   business_timezone: 'America/Mexico_City',
-  aws_enabled: '1',
-  aws_env: 'prod',
-  aws_region: '',
-  aws_api_base_url: '',
-  aws_timeout_ms: '5000',
-  aws_retry_max: '2',
-  last_active_page: 'products',
 };
 
 export function useSettings() {
@@ -61,40 +47,6 @@ export function useSettings() {
       console.error('useSettings.fetchSettings:', err);
     } finally {
       setLoading(false);
-    }
-  }, []);
-
-  const saveSetting = useCallback(async (key: string, value: string) => {
-    try {
-      setError(null);
-      await window.electronAPI.settings.set(key, value);
-      setSettings(prev => ({ ...prev, [key]: value }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al guardar configuracion';
-      setError(message);
-      console.error('useSettings.saveSetting:', err);
-      throw err;
-    }
-  }, []);
-
-  const saveMultiple = useCallback(async (entries: Array<{ key: string; value: string }>) => {
-    try {
-      setError(null);
-      for (const entry of entries) {
-        await window.electronAPI.settings.set(entry.key, entry.value);
-      }
-      setSettings(prev => {
-        const updated = { ...prev };
-        for (const entry of entries) {
-          updated[entry.key] = entry.value;
-        }
-        return updated;
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al guardar configuracion';
-      setError(message);
-      console.error('useSettings.saveMultiple:', err);
-      throw err;
     }
   }, []);
 
@@ -146,8 +98,6 @@ export function useSettings() {
     loading,
     error,
     fetchSettings,
-    saveSetting,
-    saveMultiple,
     saveSection,
     setCloudApiKey,
     hasCloudApiKey,

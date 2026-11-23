@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-store-internal is a fully local, single-PC point-of-sale (POS) desktop application for a stationery store (papeleria). It runs entirely offline with no server or cloud dependency. Single store, single admin user.
+store-internal is a desktop POS for a stationery store. The Electron main process calls the AWS API. Lambda handles business data in PostgreSQL.
 
 ### Core Features
 
@@ -23,7 +23,7 @@ store-internal is a fully local, single-PC point-of-sale (POS) desktop applicati
 | Runtime | Electron |
 | Frontend | React 18+ with TypeScript |
 | Bundler | Vite (handles all compilation) |
-| Database | SQLite via sqlite3 (Node.js native) |
+| Database | PostgreSQL through API Gateway and Lambda |
 | Styling | CSS Modules with BEM naming + global CSS variables |
 | Barcode | JsBarcode (generation), quagga2 (future scanning) |
 | Tickets | electron-pos-printer or jsPDF |
@@ -77,27 +77,13 @@ store-internal/
 
 │   ├── preload.ts
 
-│   └── database/
+│   └── lib/cloudApi.ts
 
-│       ├── connection.ts
+├── cloud/
 
-│       ├── migrations/
+│   ├── lambda-v1-handler.mjs
 
-│       └── repositories/
-
-│           ├── products.ts
-
-│           ├── categories.ts
-
-│           ├── sales.ts
-
-│           ├── credits.ts
-
-│           ├── inventory.ts
-
-│           ├── cashRegister.ts
-
-│           └── settings.ts
+│   └── postgres_schema.sql
 
 ├── src/
 
@@ -158,14 +144,14 @@ Security is a priority in every phase of development. Every implementation must 
 
 ### Security Principles
 
-- **Always validate user input.** Even though the app is local, all user-entered data must be sanitized and validated before processing. Do not assume that offline data is trustworthy.
+- **Always validate user input.** Validate IPC inputs in the main process and API requests in Lambda.
 - **Parameterize all SQL queries.** Never concatenate values directly into SQL strings. Use prepared statements in every query without exception.
-- **Do not store sensitive data in plain text.** If admin credentials are stored (app access password), use secure hashing (bcrypt or argon2). Never store passwords in plain text in SQLite or configuration files.
+- **Do not store sensitive data in plain text.** If admin credentials are stored (app access password), use secure hashing (bcrypt or argon2). Never store passwords in plain text in the database or configuration files.
 - **Restrict IPC channels.** Only expose strictly necessary methods in the preload. Do not expose direct access to the database, `fs`, `child_process`, or dangerous OS APIs.
 - **Disable Node.js integration in the renderer.** Use `contextIsolation: true` and `nodeIntegration: false` in the BrowserWindow configuration. All communication must go through the preload.
 - **Validate data on both sides.** Validate in the renderer (UX) and in the main process (real security). Renderer validation is cosmetic only; the main process validation is what actually protects.
 - **Do not trust renderer content.** Treat IPC messages from the renderer as untrusted input. Validate types, ranges, and formats in every main process handler.
-- **Protect the database.** Consider SQLite encryption (SQLCipher) if the business handles sensitive financial information. At minimum, ensure the `.db` file is not accessible by other OS users (restrictive file permissions).
+- **Protect the database.** Keep database credentials in the cloud backend.
 - **Content Security Policy (CSP).** Configure a strict CSP in the renderer HTML to prevent script injection. Do not use `unsafe-inline` or `unsafe-eval` unless absolutely necessary.
 
 ### Post-Implementation Security Analysis
@@ -174,12 +160,12 @@ After every implementation (feature, fix, or significant change), a security ana
 
 **Mandatory checklist after every implementation:**
 
-- [ ]  **SQL Injection:** Verify that all new or modified queries use parameterized values (`?`). Look for string concatenations in SQL.
+- [ ]  **SQL Injection:** Verify that all new or modified queries use PostgreSQL parameters (`$1`, `$2`, ...). Look for string concatenations in SQL.
 - [ ]  **Input validation:** Confirm that all user input is validated in the main process (types, ranges, max lengths, allowed characters).
 - [ ]  **IPC channels:** Review that no unnecessary new channels were exposed. Verify that handlers validate their arguments.
 - [ ]  **Renderer permissions:** Confirm that `nodeIntegration` was not enabled, `contextIsolation` was not disabled, and `webSecurity: false` was not added.
 - [ ]  **Sensitive data:** Verify that sensitive data (passwords, credit amounts with personal data) is not being logged to console or log files.
-- [ ]  **Financial data integrity:** Confirm that price, credit, and cash register calculations cannot be manipulated from the renderer. All financial logic must run in the main process.
+- [ ]  **Financial data integrity:** Confirm that price, credit, and cash register calculations cannot be manipulated from the renderer. The cloud backend must validate financial operations.
 - [ ]  **Error handling:** Verify that error messages exposed to the user do not reveal internal structure (table names, system paths, stack traces).
 - [ ]  **Dependencies:** If any dependency was added or updated, verify it has no known vulnerabilities (`npm audit`).
 
@@ -187,7 +173,7 @@ After every implementation (feature, fix, or significant change), a security ana
 
 1. **Never disable Electron protections.** Do not suggest or implement `nodeIntegration: true`, `contextIsolation: false`, or `webSecurity: false` under any circumstances.
 2. **Never concatenate input in SQL.** If the proposed solution concatenates any value into a SQL string, the solution is incorrect. Period.
-3. **Always validate in the main process.** If an IPC handler receives data and passes it directly to the database without validation, the solution is incorrect.
+3. **Always validate in the main process.** If an IPC handler receives data and forwards it directly to the cloud API without validation, the solution is incorrect.
 4. **Report security risks.** If an insecure pattern is detected in existing code during an implementation, report it as a comment even if fixing it was not requested.
 5. **Security analysis is mandatory.** After completing any implementation, include a brief security analysis at the end stating: what was reviewed, what risks were identified (if any), and confirming that the security checklist was followed.
 
@@ -212,32 +198,30 @@ After every implementation (feature, fix, or significant change), a security ana
 ### Error Handling
 
 - Wrap all IPC calls (renderer -> main) in try/catch.
-- Wrap all database operations in try/catch in the repository layer.
+- Handle API failures in the main process and database errors in Lambda.
 - Always surface errors to the user via toast/notification. Never fail silently.
 - Use React Error Boundaries at the page/route level to catch rendering crashes.
 - Log errors to console with enough context to debug (include operation name + relevant IDs).
 
 ### IPC Communication (Electron)
 
-- All database access happens in the main process via repositories.
+- The main process accesses POS data via the configured AWS API.
 - The renderer communicates with main through typed IPC channels.
 - Define channel names as constants in a shared file.
 - The preload script exposes a typed API object to the renderer.
 
-### Database (SQLite)
+### Database (PostgreSQL)
 
-- All queries live in repository files under `electron/database/repositories/`.
-- Use parameterized queries always. Never concatenate user input into SQL strings.
-- The migration script creates all tables on first run.
-- Use WAL journal mode and enforce foreign keys (`PRAGMA foreign_keys = ON`).
-- `sale_price` on products is a GENERATED STORED column: `ROUND(cost_price * (1 + margin_percent / 100.0), 2)`. Do not try to INSERT/UPDATE it directly.
+- The AWS Lambda handler uses parameterized PostgreSQL queries.
+- The schema is defined in `cloud/postgres_schema.sql`.
+- PostgreSQL generates `sale_price` from the cost and margin.
 
 ## Business Logic Rules
 
 ### Pricing
 
 - Each product has `cost_price` (what we paid) and `margin_percent` (desired profit %).
-- `sale_price` is auto-calculated by SQLite: `cost_price * (1 + margin_percent / 100)`.
+- `sale_price` is auto-calculated by PostgreSQL: `cost_price * (1 + margin_percent / 100)`.
 - When recording a sale, snapshot the `unit_price` at the moment of sale into `sale_items.unit_price`. Do not reference `products.sale_price` later for historical sales.
 
 ### Credit System
@@ -270,7 +254,7 @@ After every implementation (feature, fix, or significant change), a security ana
 1. **No emojis** in code, comments, or commit messages. Ever.
 2. **No new libraries** without explicit approval. If you think a library would help, ask first.
 3. **No unsolicited refactoring**. Only change what was requested. If you see something that could be improved, mention it in a comment but do not change it.
-4. **No over-engineering**. Keep it simple. No abstract factory patterns, no dependency injection containers, no complex generics unless truly needed. This is a small local app.
+4. **No over-engineering**. Keep it simple. No abstract factory patterns, no dependency injection containers, no complex generics unless truly needed. This is a small desktop app.
 5. **Output complete files**. When creating or modifying a file, output the entire file content, not diffs or fragments.
 6. **Respect existing patterns**. If the codebase already does something a certain way, follow that pattern unless explicitly asked to change it.
 7. **Do not add features that were not requested**. Stick to the task at hand.

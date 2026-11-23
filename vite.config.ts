@@ -12,7 +12,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(
       (() => {
         try {
-          const pkgRaw = fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')
+          const pkgRaw = fs.readFileSync(path.resolve(import.meta.dirname, 'package.json'), 'utf-8')
           const pkg = JSON.parse(pkgRaw) as { version?: string }
           return pkg.version ?? '0.0.0'
         } catch {
@@ -35,9 +35,6 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-            },
           },
         },
       },
@@ -46,9 +43,6 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['better-sqlite3'],
-            },
           },
         },
       },
@@ -57,7 +51,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
 })

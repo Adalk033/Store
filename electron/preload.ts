@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../src/lib/ipcChannels';
-import type { PaginatedQuery, CursorPaginatedQuery, CustomersPaginatedQuery } from '../src/types/database';
+import type { AwsConnectionConfig, PaginatedQuery, CustomersPaginatedQuery } from '../src/types/database';
 
 // Typed API exposed to the renderer process
 const electronAPI = {
@@ -94,8 +94,6 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_PAGINATED, query),
     getSummary: (query: { search?: string; type?: string; dateFrom?: string; dateTo?: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_SUMMARY, query),
-    getAllCursor: (query: CursorPaginatedQuery) =>
-      ipcRenderer.invoke(IPC_CHANNELS.SALES_GET_ALL_CURSOR, query),
   },
 
   // Credits
@@ -213,32 +211,17 @@ const electronAPI = {
   settings: {
     get: (key: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET, key),
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_ALL),
-    set: (key: string, value: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, key, value),
     setSection: (section: 'store' | 'products' | 'credits', entries: Array<{ key: string; value: string }>) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_SECTION, section, entries),
     setCloudApiKey: (value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, value),
     hasCloudApiKey: () =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY),
-    checkCloudHealth: () =>
+    checkCloudHealth: (): Promise<'ready' | 'missing-key' | 'error'> =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CHECK_CLOUD_HEALTH),
-    getAwsRecovery: () =>
+    getAwsRecovery: (): Promise<AwsConnectionConfig> =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_AWS_RECOVERY),
-    setAwsRecovery: (config: {
-      aws_enabled: string;
-      aws_env: string;
-      aws_region: string;
-      aws_api_base_url: string;
-      aws_timeout_ms: string;
-      aws_retry_max: string;
-    }) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, config),
-    backupDatabase: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_BACKUP_DB),
-  },
-
-  // Data Versions (Phase 5)
-  dataVersions: {
-    getAll: () => ipcRenderer.invoke(IPC_CHANNELS.DATA_VERSIONS_GET_ALL),
+    setAwsRecovery: (config: AwsConnectionConfig) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_AWS_RECOVERY, config),
   },
 
   // Metrics (Phase 5)
