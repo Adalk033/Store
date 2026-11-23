@@ -123,8 +123,9 @@ function saveAwsRecoveryConfig(input: Partial<AwsRecoveryConfig>): AwsRecoveryCo
   return normalized;
 }
 
-function setCloudApiKeySecret(value: string): void {
-  lastCloudHealthStatus = null;
+let cloudKeyWrite: Promise<void> = Promise.resolve();
+
+async function setCloudApiKeySecret(value: string): Promise<void> {
   const trimmed = value.trim();
   const secretPath = getCloudApiKeyPath();
 
@@ -135,11 +136,11 @@ function setCloudApiKeySecret(value: string): void {
     return;
   }
 
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     throw new Error('El cifrado seguro local no esta disponible en este sistema');
   }
 
-  const encrypted = safeStorage.encryptString(trimmed);
+  const encrypted = await safeStorage.encryptStringAsync(trimmed);
   fs.writeFileSync(secretPath, encrypted);
 }
 
@@ -148,18 +149,20 @@ function hasCloudApiKeySecret(): boolean {
   return fs.existsSync(secretPath) && fs.statSync(secretPath).size > 0;
 }
 
-function getCloudApiKeySecret(): string {
+async function getCloudApiKeySecret(): Promise<string> {
+  await cloudKeyWrite;
   const secretPath = getCloudApiKeyPath();
   if (!fs.existsSync(secretPath)) {
     return '';
   }
 
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!(await safeStorage.isAsyncEncryptionAvailable())) {
     throw new Error('El cifrado seguro local no esta disponible en este sistema');
   }
 
   const encrypted = fs.readFileSync(secretPath);
-  return safeStorage.decryptString(encrypted).trim();
+  const { result } = await safeStorage.decryptStringAsync(encrypted);
+  return result.trim();
 }
 
 function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
@@ -185,13 +188,13 @@ function normalizeCloudBaseUrl(rawBaseUrl: string, awsEnv: string): string {
   return parsed.toString().replace(/\/+$/, '');
 }
 
-function getCloudApiConfig() {
+async function getCloudApiConfig() {
   const awsConfig = getAwsRecoveryConfig();
   const baseUrl = awsConfig.aws_api_base_url.trim();
   const awsEnv = awsConfig.aws_env.trim();
   const timeoutMs = Number(awsConfig.aws_timeout_ms || '5000');
   const retryMax = Number(awsConfig.aws_retry_max || '2');
-  const apiKey = getCloudApiKeySecret();
+  const apiKey = await getCloudApiKeySecret();
 
   if (!baseUrl) {
     throw new Error('Falta configurar AWS API Base URL en Configuracion');
@@ -1100,11 +1103,15 @@ function registerIpcHandlers(): void {
       await cloudApi.updateSettingsSection(section, values);
     }
   );
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, (_, value: string) => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_CLOUD_API_KEY, async (_, value: string) => {
     if (typeof value !== 'string') {
       throw new Error('La API key debe ser texto');
     }
-    setCloudApiKeySecret(value);
+    const write = cloudKeyWrite.then(() => setCloudApiKeySecret(value));
+    // Keep subsequent writes ordered even if this caller receives an error.
+    cloudKeyWrite = write.catch(() => {});
+    await write;
+    lastCloudHealthStatus = null;
     return true;
   });
   ipcMain.handle(IPC_CHANNELS.SETTINGS_HAS_CLOUD_API_KEY, () => hasCloudApiKeySecret());

@@ -344,9 +344,9 @@ function wait(ms: number): Promise<void> {
 }
 
 export class CloudApi {
-  private readonly getConfig: () => CloudConfig;
+  private readonly getConfig: () => CloudConfig | Promise<CloudConfig>;
 
-  constructor(getConfig: () => CloudConfig) {
+  constructor(getConfig: () => CloudConfig | Promise<CloudConfig>) {
     this.getConfig = getConfig;
   }
 
@@ -356,7 +356,7 @@ export class CloudApi {
     body?: unknown,
     query?: Record<string, string | number | boolean | undefined>
   ): Promise<T> {
-    const config = this.getConfig();
+    const config = await this.getConfig();
     const url = toUrl(config.baseUrl, path, query);
 
     let attempt = 0;
