@@ -1,21 +1,22 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { ConnectionStatusLegend, type ConnectionStatusItem } from './components/layout/ConnectionStatusLegend';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import type { PageId } from './components/layout/Sidebar';
 import styles from './App.module.css';
 import { ProductsPage } from './pages/ProductsPage';
-import { InventoryPage } from './pages/InventoryPage';
-import { POSPage } from './pages/POSPage';
-import { SalesPage } from './pages/SalesPage.tsx';
-import { CreditsPage } from './pages/CreditsPage';
-import { CustomersPage } from './pages/CustomersPage.tsx';
-import { CashRegisterPage } from './pages/CashRegisterPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { BarcodeLabelPage } from './pages/BarcodeLabelPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { HelpPage } from './pages/HelpPage';
 import type { AwsConnectionConfig } from './types/database';
+
+const InventoryPage = lazy(() => import('./pages/InventoryPage').then(module => ({ default: module.InventoryPage })));
+const POSPage = lazy(() => import('./pages/POSPage').then(module => ({ default: module.POSPage })));
+const SalesPage = lazy(() => import('./pages/SalesPage').then(module => ({ default: module.SalesPage })));
+const CreditsPage = lazy(() => import('./pages/CreditsPage').then(module => ({ default: module.CreditsPage })));
+const CustomersPage = lazy(() => import('./pages/CustomersPage').then(module => ({ default: module.CustomersPage })));
+const CashRegisterPage = lazy(() => import('./pages/CashRegisterPage').then(module => ({ default: module.CashRegisterPage })));
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then(module => ({ default: module.ReportsPage })));
+const BarcodeLabelPage = lazy(() => import('./pages/BarcodeLabelPage').then(module => ({ default: module.BarcodeLabelPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const HelpPage = lazy(() => import('./pages/HelpPage').then(module => ({ default: module.HelpPage })));
 
 const PAGE_TRANSITION_MS = 280;
 const CLOUD_HEALTH_CHECK_INTERVAL_MS = 15000;
@@ -386,7 +387,9 @@ export function App() {
       connectionItems={connectionItems}
       isNavigating={isNavigating}
     >
-      {renderPage()}
+      <Suspense fallback={<p role="status">Cargando pantalla…</p>}>
+        {renderPage()}
+      </Suspense>
     </MainLayout>
   );
 }
