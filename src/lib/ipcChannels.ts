@@ -60,6 +60,8 @@ export const IPC_CHANNELS = {
 
   // Cash Register
   CASH_REGISTER_OPEN: 'cashRegister:open',
+  CASH_REGISTER_CORRECT: 'cashRegister:correct',
+  CASH_REGISTER_TRANSFER: 'cashRegister:transfer',
   CASH_REGISTER_CLOSE: 'cashRegister:close',
   CASH_REGISTER_GET_CURRENT: 'cashRegister:getCurrent',
   CASH_REGISTER_GET_ALL: 'cashRegister:getAll',

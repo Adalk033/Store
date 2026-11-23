@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS cash_register_periods (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Corrections are committed alongside the affected periods. Keys identify client retries.
+CREATE TABLE IF NOT EXISTS cash_register_corrections (
+    operation_id UUID PRIMARY KEY,
+    action TEXT NOT NULL CHECK (action IN ('correct', 'transfer')),
+    request JSONB NOT NULL,
+    previous_values JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 5. Sales
 CREATE TABLE IF NOT EXISTS sales (
     id                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -75,6 +84,11 @@ CREATE TABLE IF NOT EXISTS sales (
     idempotency_key   TEXT,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Unknown capture times on legacy sales stay null. Only new inserts receive the database clock.
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS request_hash TEXT;
+ALTER TABLE sales ALTER COLUMN captured_at SET DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_sales_type ON sales(sale_type);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(created_at);

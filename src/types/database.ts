@@ -35,6 +35,7 @@ export interface Customer {
 }
 
 export interface Sale {
+  captured_at?: string | null;
   id: number;
   sale_type: 'cash' | 'credit';
   customer_id: number | null;
@@ -142,6 +143,24 @@ export interface InventoryMovementListItem extends InventoryMovement {
   product_barcode: string;
 }
 
+export interface PeriodCorrection {
+  id: number;
+  version: number;
+  start_date: string;
+  end_date: string;
+  opening_cash: number;
+  closing_cash: number;
+}
+
+export interface SaleTransfer {
+  sale_id: number;
+  source_id: number;
+  source_version: number;
+  target_id: number;
+  target_version: number;
+  sale_date: string;
+}
+
 export interface CashRegisterPeriod {
   id: number;
   period_name: string;
@@ -152,6 +171,8 @@ export interface CashRegisterPeriod {
   total_credit_sales: number;
   total_credit_collected: number;
   total_expenses: number;
+  total_deposits: number;
+  total_withdrawals: number;
   closing_cash: number | null;
   status: 'open' | 'closed';
   version: number;

@@ -3,6 +3,8 @@ import { ArrowLeft, Plus, Lock, DollarSign, Edit2, Trash2 } from 'lucide-react';
 import { useCashRegister } from '../hooks/useCashRegister';
 import { formatCurrency, formatCalendarDate, formatDateTime, getBusinessTodayDate, getCalendarDate } from '../lib/formatters';
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
+import { CashCorrectionForm, type CashCorrectionSelection } from '../components/cashRegister/CashCorrectionForm';
+import { expectedCashInPeriod } from '../lib/cashReconciliation';
 import styles from './CashRegisterPage.module.css';
 
 type ViewMode = 'current' | 'history' | 'detail';
@@ -45,6 +47,7 @@ export function CashRegisterPage() {
     deleteMovement,
   } = useCashRegister();
 
+  const [correction, setCorrection] = useState<CashCorrectionSelection | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('current');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -283,12 +286,13 @@ export function CashRegisterPage() {
               <th>Items</th>
               <th>Total</th>
               <th>Fecha</th>
+              <th>Acción</th>
             </tr>
           </thead>
           <tbody>
             {data.items.length === 0 ? (
               <tr>
-                <td colSpan={6} className={styles['table__empty']}>
+                <td colSpan={7} className={styles['table__empty']}>
                   {searchValue.trim()
                     ? 'Sin resultados para la busqueda'
                     : 'No hay ventas asociadas a este periodo'}
@@ -302,7 +306,15 @@ export function CashRegisterPage() {
                   <td>{s.customer_name || '-'}</td>
                   <td>{s.item_count}</td>
                   <td>{formatCurrency(s.total)}</td>
-                  <td>{formatDateTime(s.created_at)}</td>
+                  <td>
+                    {formatDateTime(s.created_at)}
+                    {s.captured_at && formatDateTime(s.captured_at) !== formatDateTime(s.created_at) &&
+                      <small className={styles['sale-capture']}>Capturada el {formatDateTime(s.captured_at)}</small>}
+                  </td>
+                  <td><button className={styles['btn-secondary']} onClick={() => {
+                    const source = viewMode === 'detail' ? selectedPeriod : currentPeriod;
+                    if (source) setCorrection({ period: source, sale: s });
+                  }}>Mover venta</button></td>
                 </tr>
               ))
             )}
@@ -1127,18 +1139,15 @@ export function CashRegisterPage() {
   function renderDetail() {
     if (!selectedPeriod) return null;
 
-    const expectedCash = selectedPeriod.opening_cash
-      + selectedPeriod.total_cash_sales
-      + selectedPeriod.total_credit_collected
-      - selectedPeriod.total_expenses;
-    const difference = (selectedPeriod.closing_cash ?? 0) - expectedCash;
+    const expectedCash = expectedCashInPeriod(selectedPeriod);
+    const difference = (Math.round((selectedPeriod.closing_cash ?? 0) * 100) - Math.round(expectedCash * 100)) / 100;
 
     let diffClass = styles['close-panel__diff--zero'];
     let diffLabel = 'Cuadre exacto';
-    if (difference > 0.01) {
+    if (difference > 0) {
       diffClass = styles['close-panel__diff--positive'];
       diffLabel = `Sobrante: ${formatCurrency(difference)}`;
-    } else if (difference < -0.01) {
+    } else if (difference < 0) {
       diffClass = styles['close-panel__diff--negative'];
       diffLabel = `Faltante: ${formatCurrency(Math.abs(difference))}`;
     }
@@ -1154,6 +1163,7 @@ export function CashRegisterPage() {
             Volver
           </button>
           <h2>{selectedPeriod.period_name}</h2>
+          <button className={styles['btn-secondary']} onClick={() => setCorrection({ period: selectedPeriod })}>Editar corte</button>
           <span className={`${styles.badge} ${styles['badge--closed']}`}>Cerrado</span>
         </div>
 
@@ -1190,6 +1200,10 @@ export function CashRegisterPage() {
         {/* Close reconciliation */}
         <div className={styles['close-panel']}>
           <h3 className={styles['close-panel__title']}>Resumen de Cierre</h3>
+          <div className={styles['close-panel__row']}>
+            <span className={styles['close-panel__label']}>Depósitos / retiros</span>
+            <span>{formatCurrency(selectedPeriod.total_deposits)} / {formatCurrency(selectedPeriod.total_withdrawals)}</span>
+          </div>
           <div className={styles['close-panel__row']}>
             <span className={styles['close-panel__label']}>Efectivo esperado</span>
             <span className={`${styles['close-panel__value']} ${styles['close-panel__value--large']}`}>
@@ -1297,6 +1311,25 @@ export function CashRegisterPage() {
 
   return (
     <div className={styles.page}>
+      {correction && <CashCorrectionForm selection={correction} periods={periods}
+        onCancel={() => setCorrection(null)}
+        onSaved={async () => {
+          setCorrection(null);
+          const refreshed = await fetchAllPeriods();
+          await fetchCurrentPeriod();
+          if (!refreshed) {
+            showNotification('error', 'Cambio guardado. Vuelve a abrir el historial para actualizar los totales.');
+            return;
+          }
+          if (currentPeriod) {
+            await Promise.all([loadCurrentSales(), fetchSalesSummary(currentPeriod.id)]);
+          }
+          if (viewMode === 'detail') {
+            const updated = refreshed.find(period => period.id === selectedPeriod?.id);
+            if (updated) await handleViewPeriodDetail(updated);
+          }
+          showNotification('success', 'Cambio guardado y caja actualizada');
+        }} />}
       {notification && (
         <div className={`${styles.notification} ${styles[`notification--${notification.type}`]}`}>
           {notification.message}

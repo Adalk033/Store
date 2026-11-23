@@ -231,8 +231,8 @@ function resolveCreatedAtFromDate(dateOnly, field, timeZone) {
 }
 
 function addDaysToDateOnly(dateOnly, days) {
-  const base = new Date(`${dateOnly}T00:00:00`);
-  base.setDate(base.getDate() + days);
+  const base = new Date(`${dateOnly}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + days);
   return base.toISOString().slice(0, 10);
 }
 function normalizePath(rawPath) {
@@ -369,6 +369,88 @@ async function withTx(fn) {
     client.release();
   }
 }
+// All cash writers take this transaction lock before reading period boundaries or totals.
+async function withCashTx(fn) {
+  return withTx(async client => {
+    await client.query("SELECT pg_advisory_xact_lock(6290471)");
+    return fn(client);
+  });
+}
+
+function requireId(value) {
+  if (!Number.isSafeInteger(value) || value < 1) throw new HttpError(422, "validation_error", "Identificador inválido");
+  return value;
+}
+
+function cashAmount(value) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value >= 1e10 ||
+      Number(value.toFixed(2)) !== value) throw new HttpError(422, "validation_error", "Importe inválido");
+  return value;
+}
+
+async function readPeriod(client, id) {
+  const result = await client.query(
+    "SELECT *, start_date::text AS start_date, end_date::text AS end_date FROM cash_register_periods WHERE id=$1", [id]);
+  if (!result.rowCount) throw new HttpError(404, "not_found", "No se encontró la caja");
+  return result.rows[0];
+}
+
+function checkPeriodDate(period, date) {
+  if (date < period.start_date || (period.end_date && date > period.end_date))
+    throw new HttpError(409, "business_conflict", "La fecha está fuera del periodo de caja");
+}
+
+async function checkBoundaries(client, id, start, end) {
+  if (end && end < start) throw new HttpError(422, "validation_error", "El cierre es anterior al inicio");
+  const overlap = await client.query(
+    `SELECT 1 FROM cash_register_periods WHERE id <> $1
+     AND (end_date IS NULL OR end_date >= $2::date) AND ($3::date IS NULL OR start_date <= $3::date) LIMIT 1`,
+    [id, start, end]);
+  if (overlap.rowCount) throw new HttpError(409, "business_conflict", "Las fechas se sobreponen con otra caja");
+  if (!id) return;
+  const outside = await client.query(
+    `SELECT 1 FROM (
+       SELECT created_at FROM sales WHERE cash_register_id=$1
+       UNION ALL SELECT created_at FROM cash_movements WHERE cash_register_id=$1
+       UNION ALL SELECT created_at FROM credit_payments WHERE cash_register_id=$1
+     ) transactions WHERE (created_at AT TIME ZONE $4)::date NOT BETWEEN $2::date AND $3::date LIMIT 1`,
+    [id, start, end, await getBusinessTimeZone(client)]);
+  if (outside.rowCount) throw new HttpError(409, "business_conflict", "El periodo dejaría operaciones fuera de sus fechas");
+}
+
+async function correctionReplay(client, action, body) {
+  if (typeof body.operation_id !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(body.operation_id))
+    throw new HttpError(422, "validation_error", "Identificador de operación inválido");
+  const allowed = action === "correct"
+    ? ["operation_id", "id", "version", "opening_cash", "closing_cash", "start_date", "end_date"]
+    : ["operation_id", "sale_id", "source_id", "target_id", "source_version", "target_version", "sale_date"];
+  if (Object.keys(body).some(key => !allowed.includes(key)))
+    throw new HttpError(422, "validation_error", "Campo de corrección desconocido");
+  const prior = await client.query(
+    "SELECT action=$2 AND request=$3::jsonb AS matches FROM cash_register_corrections WHERE operation_id=$1",
+    [body.operation_id, action, JSON.stringify(body)]);
+  if (prior.rowCount && !prior.rows[0].matches)
+    throw new HttpError(409, "business_conflict", "La operación ya existe con otros datos");
+  return prior.rowCount > 0;
+}
+
+async function recordCorrection(client, action, body, previous) {
+  await client.query(
+    "INSERT INTO cash_register_corrections (operation_id,action,request,previous_values) VALUES ($1,$2,$3,$4)",
+    [body.operation_id, action, JSON.stringify(body), JSON.stringify(previous)]);
+}
+
+async function refreshCashTotals(client, id) {
+  await client.query(
+    `UPDATE cash_register_periods SET
+     (total_cash_sales, total_credit_sales) = (SELECT
+       COALESCE(SUM(total) FILTER (WHERE sale_type='cash'),0),
+       COALESCE(SUM(total) FILTER (WHERE sale_type='credit'),0) FROM sales WHERE cash_register_id=$1),
+     total_credit_collected=(SELECT COALESCE(SUM(amount),0) FROM credit_payments WHERE cash_register_id=$1),
+     total_expenses=(SELECT COALESCE(SUM(amount),0) FROM cash_movements WHERE cash_register_id=$1 AND type='expense'),
+     version=version+1 WHERE id=$1`, [id]);
+}
+
 async function getOpenCashRegisterId(client) {
   const r = await client.query("SELECT id FROM cash_register_periods WHERE status = 'open' LIMIT 1");
   if (r.rowCount === 0) {
@@ -403,13 +485,14 @@ const handler = async (event) => {
     if (method === "POST" && path === "/v1/cash-register/open") {
       const body = parseBody(event);
       const periodName = requireString(body.period_name, "period_name");
-      const startDate = requireString(body.start_date, "start_date");
-      const openingCash = requireNonNegativeNumber(body.opening_cash, "opening_cash");
-      const data = await withTx(async (client) => {
+      const startDate = parseDateOnly(body.start_date, "start_date");
+      const openingCash = cashAmount(body.opening_cash);
+      const data = await withCashTx(async (client) => {
         const existing = await client.query("SELECT id FROM cash_register_periods WHERE status='open' LIMIT 1");
         if (existing.rowCount > 0) {
           throw new HttpError(409, "business_conflict", "There is already an open cash register period");
         }
+        await checkBoundaries(client, 0, startDate, null);
         const ins = await client.query(
           `INSERT INTO cash_register_periods (period_name, start_date, opening_cash, version, status)
            VALUES ($1, $2, $3, 1, 'open')
@@ -420,66 +503,71 @@ const handler = async (event) => {
       });
       return ok(201, data, requestId);
     }
-    if (method === "POST" && path === "/v1/cash-register/close") {
+    if (method === "POST" && (path === "/v1/cash-register/close" || path === "/v1/cash-register/correct")) {
       const body = parseBody(event);
-      const id = Number(body.id);
-      if (!Number.isInteger(id) || id < 1) {
-        throw new HttpError(422, "validation_error", "id must be integer >= 1");
-      }
-      const closingCash = requireNonNegativeNumber(body.closing_cash, "closing_cash");
-      const endDate = requireString(body.end_date, "end_date");
-      const data = await withTx(async (client) => {
-        const open = await client.query(
-          "SELECT * FROM cash_register_periods WHERE id = $1 AND status = 'open' LIMIT 1",
-          [id]
-        );
-        if (open.rowCount === 0) {
-          throw new HttpError(404, "not_found", "Open period not found");
+      const id = requireId(body.id);
+      const closingCash = cashAmount(body.closing_cash);
+      const end = parseDateOnly(body.end_date, "end_date");
+      const correcting = path.endsWith("/correct");
+      const result = await withCashTx(async client => {
+        if (correcting && await correctionReplay(client, "correct", body)) return true;
+        const period = await readPeriod(client, id);
+        if (period.status !== (correcting ? "closed" : "open") ||
+            (correcting && requireId(body.version) !== period.version))
+          throw new HttpError(409, "business_conflict", "La caja cambió. Actualiza el historial antes de guardar");
+        const start = correcting ? parseDateOnly(body.start_date, "start_date") : period.start_date;
+        const opening = correcting ? cashAmount(body.opening_cash) : period.opening_cash;
+        await checkBoundaries(client, id, start, end);
+        await client.query(
+          "UPDATE cash_register_periods SET opening_cash=$2, closing_cash=$3, start_date=$4, end_date=$5, status='closed' WHERE id=$1",
+          [id, opening, closingCash, start, end]);
+        await refreshCashTotals(client, id);
+        if (correcting) {
+          await recordCorrection(client, "correct", body, {
+            start_date: period.start_date, end_date: period.end_date, opening_cash: period.opening_cash, closing_cash: period.closing_cash
+          });
+          return true;
         }
-        const cashSales = await client.query(
-          "SELECT COALESCE(SUM(total),0) AS total FROM sales WHERE cash_register_id=$1 AND sale_type='cash'",
-          [id]
-        );
-        const creditSales = await client.query(
-          "SELECT COALESCE(SUM(total),0) AS total FROM sales WHERE cash_register_id=$1 AND sale_type='credit'",
-          [id]
-        );
-        const creditCollected = await client.query(
-          "SELECT COALESCE(SUM(amount),0) AS total FROM credit_payments WHERE cash_register_id=$1",
-          [id]
-        );
-        const expenses = await client.query(
-          "SELECT COALESCE(SUM(amount),0) AS total FROM cash_movements WHERE cash_register_id=$1 AND type='expense'",
-          [id]
-        );
-        const upd = await client.query(
-          `UPDATE cash_register_periods
-           SET end_date=$1,
-               total_cash_sales=$2,
-               total_credit_sales=$3,
-               total_credit_collected=$4,
-               total_expenses=$5,
-               closing_cash=$6,
-               status='closed',
-               version=version+1
-           WHERE id=$7 AND status='open'
-           RETURNING *, start_date::text AS start_date, end_date::text AS end_date`,
-          [
-            endDate,
-            Number(cashSales.rows[0].total),
-            Number(creditSales.rows[0].total),
-            Number(creditCollected.rows[0].total),
-            Number(expenses.rows[0].total),
-            closingCash,
-            id
-          ]
-        );
-        return upd.rows[0];
+        return readPeriod(client, id);
       });
-      return ok(200, data, requestId);
+      return ok(200, result, requestId);
+    }
+    if (method === "POST" && path === "/v1/cash-register/transfer") {
+      const body = parseBody(event);
+      const saleId = requireId(body.sale_id);
+      const sourceId = requireId(body.source_id);
+      const targetId = requireId(body.target_id);
+      if (sourceId === targetId) throw new HttpError(422, "validation_error", "Selecciona una caja diferente");
+      await withCashTx(async client => {
+        const zone = await getBusinessTimeZone(client);
+        if (await correctionReplay(client, "transfer", body)) return;
+        const source = await readPeriod(client, sourceId);
+        const target = await readPeriod(client, targetId);
+        if (source.version !== requireId(body.source_version) || target.version !== requireId(body.target_version))
+          throw new HttpError(409, "business_conflict", "Las cajas cambiaron. Actualiza la lista antes de mover la venta");
+        const date = parseDateOnly(body.sale_date, "sale_date");
+        resolveCreatedAtFromDate(date, "sale_date", zone);
+        checkPeriodDate(target, date);
+        const original = await client.query("SELECT cash_register_id, created_at FROM sales WHERE id=$1 AND cash_register_id=$2", [saleId, sourceId]);
+        if (!original.rowCount) throw new HttpError(409, "business_conflict", "La venta ya no pertenece a la caja de origen");
+        const moved = await client.query(
+          `UPDATE sales SET cash_register_id=$3, created_at=CASE WHEN (created_at AT TIME ZONE $5)::date=$4::date
+           THEN created_at ELSE ($4::date + (created_at AT TIME ZONE $5)::time) AT TIME ZONE $5 END
+           WHERE id=$1 AND cash_register_id=$2`, [saleId, sourceId, targetId, date, zone]);
+        if (!moved.rowCount) throw new HttpError(409, "business_conflict", "La venta ya no pertenece a la caja de origen");
+        await refreshCashTotals(client, sourceId);
+        await refreshCashTotals(client, targetId);
+        await recordCorrection(client, "transfer", body, original.rows[0]);
+      });
+      return ok(200, true, requestId);
     }
     if (method === "GET" && path === "/v1/cash-register/periods") {
-      const r = await pool.query("SELECT *, start_date::text AS start_date, end_date::text AS end_date FROM cash_register_periods ORDER BY created_at DESC");
+      const r = await pool.query(`SELECT p.*, p.start_date::text AS start_date, p.end_date::text AS end_date,
+        COALESCE(m.deposits,0) AS total_deposits, COALESCE(m.withdrawals,0) AS total_withdrawals
+        FROM cash_register_periods p LEFT JOIN (
+          SELECT cash_register_id, SUM(amount) FILTER (WHERE type='deposit') AS deposits,
+            SUM(amount) FILTER (WHERE type='withdrawal') AS withdrawals FROM cash_movements GROUP BY cash_register_id
+        ) m ON m.cash_register_id=p.id ORDER BY p.created_at DESC`);
       return ok(200, r.rows, requestId);
     }
     if (method === "POST" && path === "/v1/cash-register/movements") {
@@ -493,7 +581,7 @@ const handler = async (event) => {
       }
       const amount = requirePositiveNumber(body.amount, "amount");
       const idempotencyKey = body.idempotency_key?.trim() || null;
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const businessTimeZone = await getBusinessTimeZone(client);
         const movementCreatedAt = resolveCreatedAtFromDate(body.movement_date, "movement_date", businessTimeZone);
 
@@ -506,6 +594,9 @@ const handler = async (event) => {
             return existing.rows[0];
           }
         }
+        const period = await readPeriod(client, cashRegisterId);
+        if (period.status !== "open") throw new HttpError(409, "business_conflict", "La caja está cerrada");
+        checkPeriodDate(period, body.movement_date || todayDateOnlyInTimeZone(businessTimeZone));
         const ins = await client.query(
           `INSERT INTO cash_movements (cash_register_id, type, amount, description, idempotency_key, created_at)
            VALUES ($1, $2, $3, $4, $5, COALESCE(($6::timestamp AT TIME ZONE $7), NOW()))
@@ -548,7 +639,7 @@ const handler = async (event) => {
       if (setParts.length === 0) {
         throw new HttpError(400, "bad_request", "No fields to update");
       }
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const movement = await client.query(
           "SELECT * FROM cash_movements WHERE id = $1 LIMIT 1",
           [movementId]
@@ -574,7 +665,7 @@ const handler = async (event) => {
     }
     if (method === "DELETE" && /^\/v1\/cash-register\/movements\/\d+$/.test(path)) {
       const movementId = getPathId(path, /^\/v1\/cash-register\/movements\/(\d+)$/, "id");
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const movement = await client.query(
           "SELECT * FROM cash_movements WHERE id = $1 LIMIT 1",
           [movementId]
@@ -987,60 +1078,90 @@ const handler = async (event) => {
       const r = await pool.query("UPDATE products SET is_active = 0 WHERE id = $1", [productId]);
       return ok(200, { deleted: r.rowCount > 0 }, requestId);
     }
-    if (method === "POST" && path === "/v1/sales") {
+    if (method === "POST" && (path === "/v1/sales" || path === "/v1/cash-register/historical-sale")) {
       const body = parseBody(event);
+      if (path.endsWith("/historical-sale")) {
+        requireId(body.cash_register_id);
+        parseDateOnly(body.sale_date, "sale_date");
+      }
       if (body.sale_type !== "cash" && body.sale_type !== "credit") {
         throw new HttpError(422, "validation_error", "sale_type must be cash or credit");
       }
+      if (body.customer_id != null) requireId(body.customer_id);
+      if (body.sale_type === "credit") requireId(body.customer_id);
+      if (body.idempotency_key != null && (typeof body.idempotency_key !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(body.idempotency_key)))
+        throw new HttpError(422, "validation_error", "Identificador de venta inválido");
       if (!Array.isArray(body.items) || body.items.length === 0) {
         throw new HttpError(422, "validation_error", "items is required");
       }
       const idempotencyKey = body.idempotency_key?.trim() || null;
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const businessTimeZone = await getBusinessTimeZone(client);
+        // Bind a checkout retry to its original inputs even if a previous response was lost.
+        const requestHash = crypto.createHash("sha256").update(JSON.stringify([
+          body.sale_type, body.cash_register_id, body.sale_date, body.customer_id, body.cash_received,
+          body.credit_days, body.initial_payment, body.surcharge_percent,
+          body.items.map(item => [item?.product_id, item?.quantity, item?.unit_price])
+        ])).digest("hex");
         const saleCreatedAt = resolveCreatedAtFromDate(body.sale_date, "sale_date", businessTimeZone);
         const saleDateOnly = saleCreatedAt ? saleCreatedAt.slice(0, 10) : todayDateOnlyInTimeZone(businessTimeZone);
 
         if (idempotencyKey) {
           const existing = await client.query(
-            "SELECT id FROM sales WHERE idempotency_key = $1 LIMIT 1",
+            "SELECT id, request_hash FROM sales WHERE idempotency_key = $1 LIMIT 1",
             [idempotencyKey]
           );
           if (existing.rowCount > 0) {
+            if (existing.rows[0].request_hash && existing.rows[0].request_hash !== requestHash)
+              throw new HttpError(409, "business_conflict", "El cobro anterior ya fue registrado con otros datos. Revisa las ventas");
             const sale2 = await client.query("SELECT * FROM sales WHERE id = $1", [existing.rows[0].id]);
             return { created: false, sale: sale2.rows[0] };
           }
         }
-        const cashRegisterId = await getOpenCashRegisterId(client);
-        let subtotal = 0;
+        const cashRegisterId = body.cash_register_id == null ? await getOpenCashRegisterId(client) : requireId(body.cash_register_id);
+        const period = await readPeriod(client, cashRegisterId);
+        if (path.endsWith("/historical-sale") && period.status !== "closed")
+          throw new HttpError(409, "business_conflict", "Selecciona una caja cerrada para la captura histórica");
+        if (period.status === "closed") parseDateOnly(body.sale_date, "sale_date");
+        checkPeriodDate(period, saleDateOnly);
+        let subtotalCents = 0;
+        const productIds = new Set();
         for (const item of body.items) {
+          if (!item || typeof item.quantity !== "number") throw new HttpError(422, "validation_error", "Cantidad inválida");
           const qty = requirePositiveNumber(item.quantity, "quantity");
-          const unitPrice = requireNonNegativeNumber(item.unit_price, "unit_price");
-          subtotal += qty * unitPrice;
-          const prod = await client.query("SELECT id, stock FROM products WHERE id = $1 LIMIT 1", [
-            item.product_id
-          ]);
-          if (prod.rowCount === 0) {
-            throw new HttpError(404, "not_found", `Product ${item.product_id} not found`);
-          }
+          const productId = requireId(item.product_id);
+          if (Number(qty.toFixed(3)) !== qty || qty >= 1e9 || productIds.has(productId))
+            throw new HttpError(422, "validation_error", "Cantidad o producto duplicado inválido");
+          productIds.add(productId);
+          const prod = await client.query(
+            "SELECT stock, sale_price, ROUND(sale_price * $2::numeric, 2) AS line_total FROM products WHERE id=$1 AND is_active=1 FOR UPDATE",
+            [productId, qty]);
+          if (!prod.rowCount) throw new HttpError(404, "not_found", "Producto no disponible");
+          if (cashAmount(item.unit_price) !== Number(prod.rows[0].sale_price))
+            throw new HttpError(409, "business_conflict", "El precio cambió. Actualiza el carrito antes de cobrar");
+          subtotalCents += Math.round(Number(prod.rows[0].line_total) * 100);
           if (Number(prod.rows[0].stock) < qty) {
             throw new HttpError(409, "business_conflict", `Insufficient stock for product ${item.product_id}`);
           }
         }
+        const subtotal = cashAmount(subtotalCents / 100);
+        const received = body.sale_type === "cash" ? cashAmount(body.cash_received ?? subtotal) : null;
+        if (received !== null && received < subtotal) throw new HttpError(422, "validation_error", "Efectivo insuficiente");
         const saleIns = await client.query(
-          `INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, idempotency_key, created_at)
-           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7, COALESCE(($8::timestamp AT TIME ZONE $9), NOW()))
+          `INSERT INTO sales (sale_type, customer_id, subtotal, surcharge, total, cash_received, cash_change, cash_register_id, idempotency_key, request_hash, captured_at, created_at)
+           VALUES ($1, $2, $3, 0, $3, $4, $5, $6, $7, $10, NOW(), COALESCE(($8::timestamp AT TIME ZONE $9), NOW()))
            RETURNING *`,
           [
             body.sale_type,
             body.customer_id ?? null,
             subtotal,
-            body.sale_type === "cash" ? body.cash_received ?? subtotal : null,
-            body.sale_type === "cash" ? body.cash_change ?? 0 : null,
+            received,
+            received === null ? null : (Math.round(received * 100) - subtotalCents) / 100,
             cashRegisterId,
             idempotencyKey,
             saleCreatedAt,
-            businessTimeZone
+            businessTimeZone,
+            requestHash
           ]
         );
         const sale = saleIns.rows[0];
@@ -1063,15 +1184,15 @@ const handler = async (event) => {
             throw new HttpError(422, "validation_error", "customer_id is required for credit sale");
           }
           const creditDays = body.credit_days ?? 5;
-          const surchargePercent = body.surcharge_percent ?? 0;
-          const initialPayment = body.initial_payment ?? 0;
-          if (creditDays < 1) {
+          const surchargePercent = cashAmount(body.surcharge_percent ?? 0);
+          const initialPayment = cashAmount(body.initial_payment ?? 0);
+          if (!Number.isSafeInteger(creditDays) || creditDays < 1 || creditDays > 36500) {
             throw new HttpError(422, "validation_error", "credit_days must be >= 1");
           }
-          if (surchargePercent < 0) {
-            throw new HttpError(422, "validation_error", "surcharge_percent must be >= 0");
+          if (surchargePercent > 9999.99) {
+            throw new HttpError(422, "validation_error", "Porcentaje de recargo inválido");
           }
-          if (initialPayment < 0 || initialPayment > subtotal) {
+          if (initialPayment > subtotal) {
             throw new HttpError(422, "validation_error", "initial_payment is out of range");
           }
           const dueDateStr = addDaysToDateOnly(saleDateOnly, creditDays);
@@ -1089,18 +1210,22 @@ const handler = async (event) => {
             );
           }
         }
+        await refreshCashTotals(client, cashRegisterId);
         return { created: true, sale };
       });
       return ok(data.created ? 201 : 200, data, requestId);
     }
     if (method === "DELETE" && /^\/v1\/sales\/\d+$/.test(path)) {
       const saleId = getPathId(path, /^\/v1\/sales\/(\d+)$/, "id");
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const sale = await client.query("SELECT id FROM sales WHERE id = $1 LIMIT 1", [saleId]);
         if (sale.rowCount === 0) {
           return { deleted: false };
         }
 
+        const affected = await client.query(
+          `SELECT cash_register_id FROM sales WHERE id=$1 UNION
+           SELECT p.cash_register_id FROM credit_payments p JOIN credits c ON c.id=p.credit_id WHERE c.sale_id=$1`, [saleId]);
         const items = await client.query(
           "SELECT product_id, quantity FROM sale_items WHERE sale_id = $1",
           [saleId]
@@ -1121,6 +1246,7 @@ const handler = async (event) => {
         await client.query("DELETE FROM credits WHERE sale_id = $1", [saleId]);
         await client.query("DELETE FROM sales WHERE id = $1", [saleId]);
 
+        for (const row of affected.rows) await refreshCashTotals(client, row.cash_register_id);
         return { deleted: true };
       });
 
@@ -1273,7 +1399,7 @@ const handler = async (event) => {
       const body = parseBody(event);
       const amount = requirePositiveNumber(body.amount, "amount");
       const idempotencyKey = body.idempotency_key?.trim() || null;
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const businessTimeZone = await getBusinessTimeZone(client);
         const paymentCreatedAt = resolveCreatedAtFromDate(body.payment_date, "payment_date", businessTimeZone);
 
@@ -1290,6 +1416,7 @@ const handler = async (event) => {
           }
         }
         const cashRegisterId = await getOpenCashRegisterId(client);
+        checkPeriodDate(await readPeriod(client, cashRegisterId), body.payment_date || todayDateOnlyInTimeZone(businessTimeZone));
         const creditQ = await client.query("SELECT * FROM credits WHERE id = $1 LIMIT 1", [creditId]);
         if (creditQ.rowCount === 0) {
           throw new HttpError(404, "not_found", "Credit not found");
@@ -1400,7 +1527,7 @@ const handler = async (event) => {
         throw new HttpError(400, "bad_request", "No fields to update");
       }
 
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const existing = await client.query(
           "SELECT * FROM credits WHERE id = $1 LIMIT 1",
           [creditId]
@@ -1426,10 +1553,11 @@ const handler = async (event) => {
           const surchargeDiff = Math.round(
             (newTotalDue - Number(credit.original_amount)) * 100
           ) / 100;
-          await client.query(
-            "UPDATE sales SET surcharge = $1, total = subtotal + $1 WHERE id = $2",
+          const changed = await client.query(
+            "UPDATE sales SET surcharge = $1, total = subtotal + $1 WHERE id = $2 RETURNING cash_register_id",
             [surchargeDiff, credit.sale_id]
           );
+          if (changed.rows[0]?.cash_register_id) await refreshCashTotals(client, changed.rows[0].cash_register_id);
         }
 
         values.push(creditId);
@@ -1443,7 +1571,7 @@ const handler = async (event) => {
       return ok(200, data, requestId);
     }
     if (method === "POST" && path === "/v1/credits/recalculate-overdue") {
-      const data = await withTx(async (client) => {
+      const data = await withCashTx(async (client) => {
         const upd = await client.query(
           `UPDATE credits
            SET total_due = ROUND(original_amount * (1 + surcharge_percent / 100.0), 2),
@@ -1454,8 +1582,9 @@ const handler = async (event) => {
              AND due_date < CURRENT_DATE
            RETURNING id, sale_id`
         );
+        const affectedPeriods = new Set();
         for (const row of upd.rows) {
-          await client.query(
+          const changed = await client.query(
             `UPDATE sales
              SET surcharge = ROUND(
                    (SELECT original_amount FROM credits WHERE sale_id = sales.id) *
@@ -1465,10 +1594,12 @@ const handler = async (event) => {
                    (SELECT original_amount FROM credits WHERE sale_id = sales.id) *
                    (SELECT surcharge_percent FROM credits WHERE sale_id = sales.id) / 100.0, 2
                  )
-             WHERE id = $1`,
+             WHERE id = $1 RETURNING cash_register_id`,
             [row.sale_id]
           );
+          if (changed.rows[0]?.cash_register_id) affectedPeriods.add(changed.rows[0].cash_register_id);
         }
+        for (const id of affectedPeriods) await refreshCashTotals(client, id);
         return { updated_count: upd.rowCount };
       });
       return ok(200, data, requestId);
@@ -1754,9 +1885,7 @@ const handler = async (event) => {
     }
     console.error("handler_error", {
       request_id: requestId,
-      name: err instanceof Error ? err.name : "UnknownError",
-      message: err instanceof Error ? err.message : "unknown_error",
-      stack: err instanceof Error ? err.stack : void 0
+      name: err instanceof Error ? err.name : "UnknownError"
     });
     return fail(500, "internal_error", "Internal server error", requestId);
   }

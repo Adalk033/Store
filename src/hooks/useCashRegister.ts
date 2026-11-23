@@ -39,6 +39,7 @@ export function useCashRegister() {
       setError(null);
       const data = await window.electronAPI.cashRegister.getAll();
       setPeriods(data);
+      return data as CashRegisterPeriod[];
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar periodos';
       setError(message);

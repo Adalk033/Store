@@ -682,3 +682,8 @@
   justify-content: flex-end;
   gap: var(--spacing-xs);
 }
+
+.sale-capture {
+  display: block;
+  color: var(--color-text-secondary);
+}

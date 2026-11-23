@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { IPC_CHANNELS } from '../src/lib/ipcChannels';
 
+import { validateCorrection, validateTransfer, validateSale, validAmount, validDate, validId } from './lib/cashValidation';
 import { CloudApi } from './lib/cloudApi';
 
 // Phase 5: Data versioning and metrics
@@ -443,6 +444,7 @@ function registerIpcHandlers(): void {
 
   // Sales
   ipcMain.handle(IPC_CHANNELS.SALES_CREATE, (_, data) => {
+    validateSale(data);
     return cloudApi.createSale(data);
   });
   ipcMain.handle(IPC_CHANNELS.SALES_GET_ALL, async (_, limit?: number, offset?: number) => {
@@ -757,12 +759,17 @@ function registerIpcHandlers(): void {
 
   // Cash Register
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_OPEN, (_, data) => {
+    if (!data || typeof data.period_name !== 'string' || !data.period_name.trim() || data.period_name.length > 255 ||
+        !validDate(data.start_date) || !validAmount(data.opening_cash)) throw new Error('Datos de apertura inválidos');
     return cloudApi.openCashRegister(data);
   });
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CLOSE, (_, id: number, closingCash: number, endDate: string, expectedVersion?: number) => {
+    if (!validId(id) || !validAmount(closingCash) || !validDate(endDate)) throw new Error('Datos de cierre inválidos');
     void expectedVersion;
     return cloudApi.closeCashRegister({ id, closing_cash: closingCash, end_date: endDate });
   });
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_CORRECT, (_, data: unknown) => cloudApi.correctCashRegister(validateCorrection(data)));
+  ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_TRANSFER, (_, data: unknown) => cloudApi.transferSale(validateTransfer(data)));
   ipcMain.handle(IPC_CHANNELS.CASH_REGISTER_GET_CURRENT, () => {
     return cloudApi.getCurrentCashRegister();
   });
