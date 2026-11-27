@@ -239,14 +239,13 @@
   padding: var(--spacing-xl) !important;
 }
 
-/* Table controls (search + page size + pager) */
+/* Table search */
 .table-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
-  padding-top: var(--spacing-sm);
   flex-wrap: wrap;
 }
 
@@ -270,15 +269,16 @@
   box-shadow: var(--input-focus-ring);
 }
 
-.table-controls__right {
+.table-pagination {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
+  padding: var(--spacing-xs) 0;
 }
 
-.table-controls__label {
+.table-pagination__label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -287,7 +287,7 @@
   color: var(--color-text-secondary);
 }
 
-.table-controls__select {
+.table-pagination__select {
   padding: 6px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -297,43 +297,10 @@
   background-color: var(--color-card);
 }
 
-.table-controls__select:focus {
+.table-pagination__select:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--input-focus-ring);
-}
-
-.pager {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pager__btn {
-  padding: 6px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-family);
-  cursor: pointer;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.pager__btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.pager__btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.pager__text {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
 }
 
 /* Credit status badge */

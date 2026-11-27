@@ -1,17 +1,15 @@
-.centered-state {
+.centered-state,
+.centered-state--compact {
+  width: 100%;
   min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--screen-padding);
-  background-color: var(--color-bg);
 }
 
-.centered-state--compact {
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.centered-state {
+  padding: var(--screen-padding);
+  background-color: var(--color-bg);
 }
 
 .centered-state__stack {

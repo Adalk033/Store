@@ -13,6 +13,10 @@ import JsBarcode from 'jsbarcode';
 import { useSales } from '../hooks/useSales';
 import { formatCurrency, formatDate, formatDateTime, formatInteger } from '../lib/formatters';
 import type { SaleDetail, SaleListItem, PaginatedQuery } from '../types';
+import { ScrollableTable } from '../components/layout/ScrollableTable';
+import tableStyles from '../components/layout/ScrollableTable.module.css';
+import { TableButton } from '../components/layout/TableButton';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './SalesPage.module.css';
 
 type ViewMode = 'list' | 'detail';
@@ -438,7 +442,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
         <section className={styles['table-card']}>
           <div className={styles['table-card__title']}>Articulos de la venta</div>
-          <table className={styles.table}>
+          <ScrollableTable className={styles.table}>
             <thead>
               <tr>
                 <th>Producto</th>
@@ -467,7 +471,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                 ))
               )}
             </tbody>
-          </table>
+          </ScrollableTable>
         </section>
 
         {showTicket && (
@@ -708,7 +712,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
 
       <section className={styles['table-card']}>
         <div className={styles['table-card__title']}>Historial de ventas</div>
-        <table className={styles.table}>
+        <ScrollableTable className={styles.table}>
           <thead>
             <tr>
               <th>#</th>
@@ -717,7 +721,7 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
               <th>Cliente</th>
               <th>Articulos</th>
               <th>Total</th>
-              <th>Acciones</th>
+              <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -742,10 +746,9 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                   <td>{sale.customer_name ?? 'Mostrador'}</td>
                   <td>{formatInteger(normalizeInteger(sale.item_count))}</td>
                   <td className={styles['table__strong']}>{formatCurrency(sale.total)}</td>
-                  <td>
-                    <div className={styles['table__actions']}>
-                      <button
-                        className={styles['btn-link']}
+                  <td className={tableStyles['scrollable-table__action-cell']}>
+                    <div className={tableStyles['scrollable-table__actions']}>
+                      <TableButton
                         onClick={(event) => {
                           event.stopPropagation();
                           void openTicketFromList(sale.id);
@@ -753,9 +756,9 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                         disabled={loadingDetail}
                       >
                         Recuperar ticket
-                      </button>
-                      <button
-                        className={`${styles['btn-link']} ${styles['btn-link--danger']}`}
+                      </TableButton>
+                      <TableButton
+                        tone="danger"
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleDeleteSale(sale.id);
@@ -763,39 +766,28 @@ export function SalesPage({ onViewCustomerProfile }: SalesPageProps) {
                         disabled={loadingSales}
                       >
                         Eliminar
-                      </button>
+                      </TableButton>
                     </div>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
-        </table>
+        </ScrollableTable>
       </section>
 
       <section className={styles.pagination}>
         <span className={styles['pagination__meta']}>
           Mostrando {sales.length} de {totalSales} ventas
         </span>
-        <div className={styles['pagination__actions']}>
-          <button
-            className={styles['btn-secondary']}
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage <= 1}
-          >
-            Anterior
-          </button>
-          <span className={styles['pagination__page']}>
-            Pagina {currentPage} de {totalPages}
-          </span>
-          <button
-            className={styles['btn-secondary']}
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage >= totalPages}
-          >
-            Siguiente
-          </button>
-        </div>
+        <TablePagination
+          label="Paginación de ventas"
+          className={styles['pagination__actions']}
+          page={currentPage}
+          totalPages={totalPages}
+          onPrevious={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          onNext={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+        />
       </section>
     </div>
   );

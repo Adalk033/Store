@@ -51,7 +51,13 @@ export function CashCorrectionForm({ selection: { period, sale }, periods, onCan
   }
 
   return <div className={styles['confirm-overlay']}>
-    <form className={styles['confirm-dialog']} role="dialog" aria-modal="true" aria-labelledby="correction-title" onSubmit={submit}>
+    <form
+      className={`${styles['confirm-dialog']} ${styles['confirm-dialog--wide']}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="correction-title"
+      onSubmit={submit}
+    >
       <h3 id="correction-title">{sale ? `Mover venta #${sale.id}` : 'Editar corte'} · {period.period_name}</h3>
       {sale ? <>
         <label className={styles['form-field']}>Caja de destino

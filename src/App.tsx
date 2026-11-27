@@ -46,12 +46,12 @@ export function App() {
 
   const connectionItems: ConnectionStatusItem[] = [
     cloudStatus === 'loading'
-      ? { label: 'Cloud', value: 'Verificando...', tone: 'info' }
+      ? { value: 'Verificando...', tone: 'info' }
       : cloudStatus === 'ready'
-        ? { label: 'Cloud', value: 'Listo', tone: 'success' }
+        ? { value: 'Conectado', tone: 'success' }
         : cloudStatus === 'missing-key'
-          ? { label: 'Cloud', value: 'Sin API key', tone: 'warning' }
-          : { label: 'Cloud', value: 'No disponible', tone: 'error' },
+          ? { value: 'No conectado', tone: 'warning' }
+          : { value: 'No conectado', tone: 'error' },
   ];
 
   function navigateToPage(page: PageId) {
@@ -241,9 +241,7 @@ export function App() {
                       <option value="prod">prod</option>
                     </select>
                   </label>
-                </div>
 
-                <div className={styles['recovery-grid']}>
                   <label className={styles['recovery-field']}>
                     <span className={styles['recovery-label']}>Region AWS</span>
                     <input
@@ -253,17 +251,17 @@ export function App() {
                       className={styles['recovery-input']}
                     />
                   </label>
-
-                  <label className={styles['recovery-field']}>
-                    <span className={styles['recovery-label']}>API Base URL</span>
-                    <input
-                      value={awsRecoveryForm.aws_api_base_url}
-                      onChange={(e) => handleAwsRecoveryChange('aws_api_base_url', e.target.value)}
-                      placeholder="https://xxxx.execute-api.mx-central-1.amazonaws.com"
-                      className={styles['recovery-input']}
-                    />
-                  </label>
                 </div>
+
+                <label className={styles['recovery-field']}>
+                  <span className={styles['recovery-label']}>API Base URL</span>
+                  <input
+                    value={awsRecoveryForm.aws_api_base_url}
+                    onChange={(e) => handleAwsRecoveryChange('aws_api_base_url', e.target.value)}
+                    placeholder="https://xxxx.execute-api.mx-central-1.amazonaws.com"
+                    className={styles['recovery-input']}
+                  />
+                </label>
 
                 <div className={styles['recovery-grid']}>
                   <label className={styles['recovery-field']}>
@@ -296,15 +294,18 @@ export function App() {
                     type="password"
                     value={awsRecoveryApiKey}
                     onChange={(e) => setAwsRecoveryApiKey(e.target.value)}
-                    placeholder={awsRecoveryHasApiKey ? 'API key guardada (escribe solo si deseas reemplazar)' : 'Ingresa tu API key'}
+                    aria-describedby="aws-recovery-key-status"
+                    placeholder={awsRecoveryHasApiKey ? 'Nueva API key' : 'Ingresa tu API key'}
                     className={styles['recovery-input']}
                   />
                 </label>
 
                 {awsRecoveryHasApiKey ? (
-                  <p className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>Existe una API key cloud guardada en este equipo.</p>
+                  <p id="aws-recovery-key-status" className={`${styles['recovery-message']} ${styles['recovery-message--success']}`}>
+                    Hay una API key guardada en este equipo. Escribe una nueva solo si deseas reemplazarla.
+                  </p>
                 ) : (
-                  <p className={`${styles['recovery-message']} ${styles['recovery-message--warning']}`}>No hay API key cloud guardada en este equipo.</p>
+                  <p id="aws-recovery-key-status" className={`${styles['recovery-message']} ${styles['recovery-message--warning']}`}>No hay API key cloud guardada en este equipo.</p>
                 )}
 
                 {awsRecoveryError ? (

@@ -1,0 +1,60 @@
+.table-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--spacing-xs) / 2);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-card);
+  color: var(--color-text);
+  font: 500 var(--font-size-sm)/1.25 var(--font-family);
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.table-button:hover:not(:disabled) {
+  background-color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.table-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.table-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-button--icon {
+  width: var(--spacing-lg);
+  height: var(--spacing-lg);
+  padding: 0;
+}
+
+.table-button--danger {
+  color: var(--color-error);
+}
+
+.table-button--danger:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-error) 8%, var(--color-card));
+  border-color: var(--color-error);
+}
+
+.table-button--link {
+  padding: 0;
+  border: none;
+  background-color: transparent;
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.table-button--link:hover:not(:disabled) {
+  background-color: transparent;
+  color: var(--color-primary-hover);
+}

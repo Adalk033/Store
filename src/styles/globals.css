@@ -118,6 +118,24 @@ h2 {
   color: var(--color-text);
 }
 
+:is(input, textarea) {
+  max-inline-size: 100%;
+}
+
+@media (forced-colors: none) {
+  select:not([multiple]):is(:not([size]), [size='1']) {
+    appearance: none;
+    min-inline-size: calc-size(max-content, min(size + var(--spacing-sm), 100%));
+    max-inline-size: 100%;
+    padding-right: calc(var(--spacing-lg) + var(--spacing-xs));
+    background-image: url('/select-chevron.svg');
+    background-position: right var(--spacing-sm) center;
+    background-repeat: no-repeat;
+    background-size: var(--spacing-sm);
+    text-overflow: ellipsis;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

@@ -572,6 +572,7 @@
   justify-content: space-between;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
+  padding: var(--spacing-xs) 0;
 }
 
 .pagination__meta {
@@ -580,17 +581,7 @@
 }
 
 .pagination__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.pagination__page {
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-  font-weight: 500;
-  min-width: 140px;
-  text-align: center;
+  margin-inline-start: auto;
 }
 
 @media (max-width: 1100px) {
@@ -606,14 +597,6 @@
 @media (max-width: 900px) {
   .summary-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .table-card {
-    overflow-x: auto;
-  }
-
-  .table {
-    min-width: 900px;
   }
 }
 

@@ -293,20 +293,6 @@
   color: var(--color-text-secondary);
 }
 
-.pagination__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.pagination__page {
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-  font-weight: 500;
-  min-width: 140px;
-  text-align: center;
-}
-
 /* Movement history table */
 .table-card {
   background-color: var(--color-card);
