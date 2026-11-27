@@ -420,12 +420,12 @@ export class CloudApi {
     return this.request<Category[]>('GET', '/v1/categories');
   }
 
-  private toCategoryWritePayload(data: { name?: string; parent_id?: number | null }): { name?: string; parent_id?: number } {
-    const payload: { name?: string; parent_id?: number } = {};
+  private toCategoryWritePayload(data: { name?: string; parent_id?: number | null }) {
+    const payload: typeof data = {};
     if (typeof data.name === 'string') {
       payload.name = data.name;
     }
-    if (typeof data.parent_id === 'number' && Number.isInteger(data.parent_id) && data.parent_id > 0) {
+    if (data.parent_id === null || (typeof data.parent_id === 'number' && Number.isSafeInteger(data.parent_id) && data.parent_id > 0)) {
       payload.parent_id = data.parent_id;
     }
     return payload;
@@ -441,33 +441,15 @@ export class CloudApi {
     stock?: number;
     min_stock?: number;
     is_active?: number;
-  }): {
-    barcode?: string;
-    name?: string;
-    description?: string;
-    category_id?: number;
-    cost_price?: number;
-    margin_percent?: number;
-    stock?: number;
-    min_stock?: number;
-    is_active?: number;
-  } {
-    const payload: {
-      barcode?: string;
-      name?: string;
-      description?: string;
-      category_id?: number;
-      cost_price?: number;
-      margin_percent?: number;
-      stock?: number;
-      min_stock?: number;
-      is_active?: number;
-    } = {};
+  }) {
+    const payload: typeof data = {};
 
     if (typeof data.barcode === 'string') payload.barcode = data.barcode;
     if (typeof data.name === 'string') payload.name = data.name;
-    if (typeof data.description === 'string' && data.description.trim()) payload.description = data.description;
-    if (typeof data.category_id === 'number' && Number.isInteger(data.category_id) && data.category_id > 0) {
+    if (data.description === null || (typeof data.description === 'string' && data.description.trim())) {
+      payload.description = data.description;
+    }
+    if (data.category_id === null || (typeof data.category_id === 'number' && Number.isSafeInteger(data.category_id) && data.category_id > 0)) {
       payload.category_id = data.category_id;
     }
     if (typeof data.cost_price === 'number') payload.cost_price = data.cost_price;
@@ -502,7 +484,8 @@ export class CloudApi {
     return this.request<Category>('POST', '/v1/categories', this.toCategoryWritePayload(data));
   }
 
-  updateCategory(id: number, data: { name?: string; parent_id?: number | null }): Promise<Category | undefined> {
+  async updateCategory(id: number, data: { name?: string; parent_id?: number | null }): Promise<Category | undefined> {
+    if (!Number.isSafeInteger(id) || id < 1) throw new Error('ID de categoría inválido');
     return this.request<Category>('PUT', `/v1/categories/${id}`, this.toCategoryWritePayload(data));
   }
 
@@ -598,7 +581,7 @@ export class CloudApi {
     return this.request<unknown>('POST', '/v1/products', this.toProductWritePayload(data)).then(normalizeProductRow);
   }
 
-  updateProduct(id: number, data: {
+  async updateProduct(id: number, data: {
     name?: string;
     description?: string | null;
     category_id?: number | null;
@@ -607,6 +590,7 @@ export class CloudApi {
     min_stock?: number;
     is_active?: number;
   }): Promise<Product | undefined> {
+    if (!Number.isSafeInteger(id) || id < 1) throw new Error('ID de producto inválido');
     return this.request<unknown>('PUT', `/v1/products/${id}`, this.toProductWritePayload(data)).then((raw) =>
       raw ? normalizeProductRow(raw) : undefined
     );
@@ -1006,15 +990,8 @@ export class CloudApi {
           String(c.sale_id).includes(search);
         if (!matchesSearch) return false;
       }
-      if (dateFrom) {
-        const createdDate = (c.created_at ?? '').slice(0, 10);
-        if (createdDate < dateFrom) return false;
-      }
-      if (dateTo) {
-        const createdDate = (c.created_at ?? '').slice(0, 10);
-        if (createdDate > dateTo) return false;
-      }
-      return true;
+      const createdDate = c.business_date ?? (c.created_at ?? '').slice(0, 10);
+      return (!dateFrom || createdDate >= dateFrom) && (!dateTo || createdDate <= dateTo);
     });
 
     const { slice, page, pageSize, total, hasMore } = paginateArray(filtered, query.page, query.pageSize);
