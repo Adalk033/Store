@@ -4,6 +4,7 @@ import { useInventory } from '../hooks/useInventory';
 import { useProducts } from '../hooks/useProducts';
 import { formatDateTime, formatInteger } from '../lib/formatters';
 import type { Product, PaginatedQuery, InventoryMovementListItem } from '../types';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './InventoryPage.module.css';
 
 type TabId = 'movements' | 'restock' | 'adjustment';
@@ -618,25 +619,14 @@ export function InventoryPage() {
             <span className={styles['pagination__meta']}>
               Mostrando {movementItems.length} de {totalMovements} movimientos
             </span>
-            <div className={styles['pagination__actions']}>
-              <button
-                className={styles['btn-secondary']}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage <= 1}
-              >
-                Anterior
-              </button>
-              <span className={styles['pagination__page']}>
-                Pagina {currentPage} de {totalPages}
-              </span>
-              <button
-                className={styles['btn-secondary']}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage >= totalPages}
-              >
-                Siguiente
-              </button>
-            </div>
+            <TablePagination
+              label="Paginación de movimientos de inventario"
+              className={styles['pagination__actions']}
+              page={currentPage}
+              totalPages={totalPages}
+              onPrevious={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              onNext={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            />
           </section>
         </>
       )}

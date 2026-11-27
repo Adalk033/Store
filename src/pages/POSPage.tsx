@@ -505,7 +505,7 @@ export function POSPage() {
             ref={searchInputRef}
             className={styles['pos__search-input']}
             type="text"
-            placeholder="Buscar producto o escanear codigo de barras..."
+            placeholder="Buscar o escanear un código"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}

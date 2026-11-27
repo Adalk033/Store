@@ -64,14 +64,35 @@
   background-color: var(--color-primary);
 }
 
-.connection-status-legend__label {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .connection-status-legend__value {
   color: var(--color-text);
   font-weight: 600;
+}
+
+.connection-status-legend--compact {
+  justify-content: flex-start;
+}
+
+.connection-status-legend--compact .connection-status-legend__item {
+  gap: calc(var(--spacing-xs) / 2);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--color-card) 65%, transparent);
+  font-size: var(--font-size-xs);
+}
+
+.connection-status-legend--compact .connection-status-legend__value {
+  color: inherit;
+  font-weight: inherit;
+}
+
+.connection-status-legend--compact .connection-status-legend__dot {
+  width: calc(var(--spacing-xs) * 0.75);
+  height: calc(var(--spacing-xs) * 0.75);
+}
+
+.connection-status-legend--compact .connection-status-legend__item--info .connection-status-legend__dot {
+  background-color: currentColor;
 }

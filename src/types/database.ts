@@ -103,6 +103,7 @@ export interface CreditPayment {
 
 export interface CreditListItem extends Credit {
   customer_name: string | null;
+  business_date?: string;
 }
 
 export interface CustomerListItem extends Customer {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Layers, X } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 import { useCategories } from '../hooks/useCategories';
 import { useSettings } from '../hooks/useSettings';
@@ -7,6 +7,10 @@ import { formatCurrency, formatInteger } from '../lib/formatters';
 import { ProductForm } from '../components/products/ProductForm';
 import { CategoryManager } from '../components/categories/CategoryManager';
 import type { Product, PaginatedResponse } from '../types';
+import { ScrollableTable } from '../components/layout/ScrollableTable';
+import tableStyles from '../components/layout/ScrollableTable.module.css';
+import { TableButton } from '../components/layout/TableButton';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './ProductsPage.module.css';
 
 type ViewMode = 'list' | 'form' | 'categories';
@@ -482,7 +486,7 @@ export function ProductsPage() {
           <input
             className={styles['toolbar__search-input']}
             type="text"
-            placeholder="Buscar por nombre, codigo de barras..."
+            placeholder="Buscar por nombre o código de barras"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -555,22 +559,11 @@ export function ProductsPage() {
           disabled={filterStockMode === 'all'}
           title="Numero de stock"
         />
-        <select
-          className={styles['toolbar__filter']}
-          value={rowsPerPage}
-          onChange={(e) => void handleRowsPerPageChange(Number(e.target.value))}
-        >
-          {ROWS_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option} filas
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Products table */}
       <div className={styles['table-card']}>
-        <table className={styles.table}>
+        <ScrollableTable className={styles.table}>
           <thead>
             <tr>
               <th style={{ textAlign: 'center' }}>Stock</th>
@@ -580,7 +573,7 @@ export function ProductsPage() {
               <th style={{ textAlign: 'center' }}>%</th>
               <th style={{ textAlign: 'right' }}>Precio venta</th>
               <th>Estado</th>
-              <th style={{ textAlign: 'right' }}>Acciones</th>
+              <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -624,19 +617,19 @@ export function ProductsPage() {
                       {product.is_active === 1 ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td>
-                    <div className={styles['table__actions']}>
-                      <button className={styles['btn-icon']} onClick={() => handleEditProduct(product)} title="Editar">
+                  <td className={tableStyles['scrollable-table__action-cell']}>
+                    <div className={tableStyles['scrollable-table__actions']}>
+                      <TableButton variant="icon" onClick={() => handleEditProduct(product)} title="Editar">
                         <Pencil size={16} strokeWidth={1.5} />
-                      </button>
+                      </TableButton>
                       {product.is_active === 1 && (
-                        <button
-                          className={`${styles['btn-icon']} ${styles['btn-icon--danger']}`}
+                        <TableButton
+                          variant="icon" tone="danger"
                           onClick={() => handleDeleteProduct(product)}
                           title="Desactivar"
                         >
                           <Trash2 size={16} strokeWidth={1.5} />
-                        </button>
+                        </TableButton>
                       )}
                     </div>
                   </td>
@@ -644,7 +637,7 @@ export function ProductsPage() {
               ))
             )}
           </tbody>
-        </table>
+        </ScrollableTable>
       </div>
 
       {/* Pagination */}
@@ -653,25 +646,23 @@ export function ProductsPage() {
           Mostrando {displayedProducts.length} de {totalProducts} productos
         </span>
         <div className={styles['pagination__actions']}>
-          <button
-            className={styles['pagination__btn']}
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage <= 1}
+          <select
+            aria-label="Filas por página"
+            className={styles['pagination__rows-select']}
+            value={rowsPerPage}
+            onChange={e => handleRowsPerPageChange(Number(e.target.value))}
           >
-            <ChevronLeft size={16} strokeWidth={1.5} />
-            Anterior
-          </button>
-          <span className={styles['pagination__page']}>
-            Pagina {currentPage} de {totalPages}
-          </span>
-          <button
-            className={styles['pagination__btn']}
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage >= totalPages}
-          >
-            Siguiente
-            <ChevronRight size={16} strokeWidth={1.5} />
-          </button>
+            {ROWS_OPTIONS.map(option => (
+              <option key={option} value={option}>{option} filas</option>
+            ))}
+          </select>
+          <TablePagination
+            label="Paginación de productos"
+            page={currentPage}
+            totalPages={totalPages}
+            onPrevious={() => setCurrentPage(p => Math.max(1, p - 1))}
+            onNext={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          />
         </div>
       </section>
 

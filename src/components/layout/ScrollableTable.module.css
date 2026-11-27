@@ -1,0 +1,16 @@
+.scrollable-table {
+  overflow-x: auto;
+}
+
+.scrollable-table .scrollable-table__action-cell {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.scrollable-table__actions {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  gap: var(--spacing-xs);
+}

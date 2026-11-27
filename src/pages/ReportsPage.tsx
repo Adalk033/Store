@@ -15,6 +15,7 @@ import type {
 } from '../types/database';
 import type { PieLabelRenderProps } from 'recharts';
 import type { PaginatedResponse } from '../types';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './ReportsPage.module.css';
 
 type ReportTab = 'sales' | 'products' | 'profit' | 'inventory' | 'credits';
@@ -498,42 +499,6 @@ export function ReportsPage() {
               value={salesTopSearch}
               onChange={e => setSalesTopSearch(e.target.value)}
             />
-
-            <div className={styles['table-controls__right']}>
-              <label className={styles['table-controls__label']}>
-                Filas
-                <select
-                  className={styles['table-controls__select']}
-                  value={salesTopRowsPerPage}
-                  onChange={e => { setSalesTopRowsPerPage(Number(e.target.value)); setSalesTopPage(1); }}
-                >
-                  {TABLE_ROWS_OPTIONS.map(n => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div className={styles.pager}>
-                <button
-                  className={styles['pager__btn']}
-                  onClick={() => setSalesTopPage(p => Math.max(1, p - 1))}
-                  disabled={salesTopPage <= 1}
-                >
-                  Anterior
-                </button>
-                <span className={styles['pager__text']}>
-                  Pagina {salesTopPage} de {Math.max(1, Math.ceil((salesTopPaginatedData?.total ?? 0) / salesTopRowsPerPage))}
-                  {salesTopPaginatedData ? ` (${salesTopPaginatedData.total})` : ''}
-                </span>
-                <button
-                  className={styles['pager__btn']}
-                  onClick={() => setSalesTopPage(p => p + 1)}
-                  disabled={!salesTopPaginatedData?.hasMore}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
           </div>
 
           <table className={styles.table}>
@@ -562,6 +527,30 @@ export function ReportsPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className={styles['table-pagination']}>
+          <label className={styles['table-pagination__label']}>
+            Filas
+            <select
+              className={styles['table-pagination__select']}
+              value={salesTopRowsPerPage}
+              onChange={e => { setSalesTopRowsPerPage(Number(e.target.value)); setSalesTopPage(1); }}
+            >
+              {TABLE_ROWS_OPTIONS.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+
+          <TablePagination
+            label="Paginación de productos más vendidos"
+            page={salesTopPage}
+            totalPages={Math.max(1, Math.ceil((salesTopPaginatedData?.total ?? 0) / salesTopRowsPerPage))}
+            totalRows={salesTopPaginatedData?.total}
+            hasNext={salesTopPaginatedData?.hasMore ?? false}
+            onPrevious={() => setSalesTopPage(p => Math.max(1, p - 1))}
+            onNext={() => setSalesTopPage(p => p + 1)}
+          />
         </div>
       </>
     );
@@ -638,42 +627,6 @@ export function ReportsPage() {
               value={productsDetailSearch}
               onChange={e => setProductsDetailSearch(e.target.value)}
             />
-
-            <div className={styles['table-controls__right']}>
-              <label className={styles['table-controls__label']}>
-                Filas
-                <select
-                  className={styles['table-controls__select']}
-                  value={productsDetailRowsPerPage}
-                  onChange={e => { setProductsDetailRowsPerPage(Number(e.target.value)); setProductsDetailPage(1); }}
-                >
-                  {TABLE_ROWS_OPTIONS.map(n => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div className={styles.pager}>
-                <button
-                  className={styles['pager__btn']}
-                  onClick={() => setProductsDetailPage(p => Math.max(1, p - 1))}
-                  disabled={productsDetailPage <= 1}
-                >
-                  Anterior
-                </button>
-                <span className={styles['pager__text']}>
-                  Pagina {productsDetailPage} de {Math.max(1, Math.ceil((productsDetailPaginatedData?.total ?? 0) / productsDetailRowsPerPage))}
-                  {productsDetailPaginatedData ? ` (${productsDetailPaginatedData.total})` : ''}
-                </span>
-                <button
-                  className={styles['pager__btn']}
-                  onClick={() => setProductsDetailPage(p => p + 1)}
-                  disabled={!productsDetailPaginatedData?.hasMore}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
           </div>
 
           <table className={styles.table}>
@@ -702,6 +655,30 @@ export function ReportsPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className={styles['table-pagination']}>
+          <label className={styles['table-pagination__label']}>
+            Filas
+            <select
+              className={styles['table-pagination__select']}
+              value={productsDetailRowsPerPage}
+              onChange={e => { setProductsDetailRowsPerPage(Number(e.target.value)); setProductsDetailPage(1); }}
+            >
+              {TABLE_ROWS_OPTIONS.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+
+          <TablePagination
+            label="Paginación de productos vendidos"
+            page={productsDetailPage}
+            totalPages={Math.max(1, Math.ceil((productsDetailPaginatedData?.total ?? 0) / productsDetailRowsPerPage))}
+            totalRows={productsDetailPaginatedData?.total}
+            hasNext={productsDetailPaginatedData?.hasMore ?? false}
+            onPrevious={() => setProductsDetailPage(p => Math.max(1, p - 1))}
+            onNext={() => setProductsDetailPage(p => p + 1)}
+          />
         </div>
       </>
     );
@@ -764,42 +741,6 @@ export function ReportsPage() {
                   value={profitDetailSearch}
                   onChange={e => setProfitDetailSearch(e.target.value)}
                 />
-
-                <div className={styles['table-controls__right']}>
-                  <label className={styles['table-controls__label']}>
-                    Filas
-                    <select
-                      className={styles['table-controls__select']}
-                      value={profitDetailRowsPerPage}
-                      onChange={e => { setProfitDetailRowsPerPage(Number(e.target.value)); setProfitDetailPage(1); }}
-                    >
-                      {TABLE_ROWS_OPTIONS.map(n => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className={styles.pager}>
-                    <button
-                      className={styles['pager__btn']}
-                      onClick={() => setProfitDetailPage(p => Math.max(1, p - 1))}
-                      disabled={profitDetailPage <= 1}
-                    >
-                      Anterior
-                    </button>
-                    <span className={styles['pager__text']}>
-                      Pagina {profitDetailPage} de {Math.max(1, Math.ceil((profitDetailPaginatedData?.total ?? 0) / profitDetailRowsPerPage))}
-                      {profitDetailPaginatedData ? ` (${profitDetailPaginatedData.total})` : ''}
-                    </span>
-                    <button
-                      className={styles['pager__btn']}
-                      onClick={() => setProfitDetailPage(p => p + 1)}
-                      disabled={!profitDetailPaginatedData?.hasMore}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                </div>
               </div>
 
               <table className={styles.table}>
@@ -836,6 +777,30 @@ export function ReportsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className={styles['table-pagination']}>
+              <label className={styles['table-pagination__label']}>
+                Filas
+                <select
+                  className={styles['table-pagination__select']}
+                  value={profitDetailRowsPerPage}
+                  onChange={e => { setProfitDetailRowsPerPage(Number(e.target.value)); setProfitDetailPage(1); }}
+                >
+                  {TABLE_ROWS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+
+              <TablePagination
+                label="Paginación de utilidades"
+                page={profitDetailPage}
+                totalPages={Math.max(1, Math.ceil((profitDetailPaginatedData?.total ?? 0) / profitDetailRowsPerPage))}
+                totalRows={profitDetailPaginatedData?.total}
+                hasNext={profitDetailPaginatedData?.hasMore ?? false}
+                onPrevious={() => setProfitDetailPage(p => Math.max(1, p - 1))}
+                onNext={() => setProfitDetailPage(p => p + 1)}
+              />
             </div>
           </>
         ) : (
@@ -914,42 +879,6 @@ export function ReportsPage() {
                   value={inventoryDetailSearch}
                   onChange={e => setInventoryDetailSearch(e.target.value)}
                 />
-
-                <div className={styles['table-controls__right']}>
-                  <label className={styles['table-controls__label']}>
-                    Filas
-                    <select
-                      className={styles['table-controls__select']}
-                      value={inventoryDetailRowsPerPage}
-                      onChange={e => { setInventoryDetailRowsPerPage(Number(e.target.value)); setInventoryDetailPage(1); }}
-                    >
-                      {TABLE_ROWS_OPTIONS.map(n => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className={styles.pager}>
-                    <button
-                      className={styles['pager__btn']}
-                      onClick={() => setInventoryDetailPage(p => Math.max(1, p - 1))}
-                      disabled={inventoryDetailPage <= 1}
-                    >
-                      Anterior
-                    </button>
-                    <span className={styles['pager__text']}>
-                      Pagina {inventoryDetailPage} de {Math.max(1, Math.ceil((inventoryDetailPaginatedData?.total ?? 0) / inventoryDetailRowsPerPage))}
-                      {inventoryDetailPaginatedData ? ` (${inventoryDetailPaginatedData.total})` : ''}
-                    </span>
-                    <button
-                      className={styles['pager__btn']}
-                      onClick={() => setInventoryDetailPage(p => p + 1)}
-                      disabled={!inventoryDetailPaginatedData?.hasMore}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                </div>
               </div>
 
               <table className={styles.table}>
@@ -995,6 +924,30 @@ export function ReportsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className={styles['table-pagination']}>
+              <label className={styles['table-pagination__label']}>
+                Filas
+                <select
+                  className={styles['table-pagination__select']}
+                  value={inventoryDetailRowsPerPage}
+                  onChange={e => { setInventoryDetailRowsPerPage(Number(e.target.value)); setInventoryDetailPage(1); }}
+                >
+                  {TABLE_ROWS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+
+              <TablePagination
+                label="Paginación del inventario"
+                page={inventoryDetailPage}
+                totalPages={Math.max(1, Math.ceil((inventoryDetailPaginatedData?.total ?? 0) / inventoryDetailRowsPerPage))}
+                totalRows={inventoryDetailPaginatedData?.total}
+                hasNext={inventoryDetailPaginatedData?.hasMore ?? false}
+                onPrevious={() => setInventoryDetailPage(p => Math.max(1, p - 1))}
+                onNext={() => setInventoryDetailPage(p => p + 1)}
+              />
             </div>
           </>
         ) : (
@@ -1089,88 +1042,78 @@ export function ReportsPage() {
         )}
 
         {creditsData.length > 0 && (
-          <div className={styles['table-card']}>
-            <h3 className={styles['table-card__title']}>Resumen por Estado</h3>
+          <>
+            <div className={styles['table-card']}>
+              <h3 className={styles['table-card__title']}>Resumen por Estado</h3>
 
-            <div className={styles['table-controls']}>
-              <input
-                type="text"
-                className={styles['table-controls__search']}
-                placeholder="Buscar..."
-                value={creditsSummarySearch}
-                onChange={e => { setCreditsSummarySearch(e.target.value); setCreditsSummaryPage(1); }}
-              />
-
-              <div className={styles['table-controls__right']}>
-                <label className={styles['table-controls__label']}>
-                  Filas
-                  <select
-                    className={styles['table-controls__select']}
-                    value={creditsSummaryRowsPerPage}
-                    onChange={e => { setCreditsSummaryRowsPerPage(Number(e.target.value)); setCreditsSummaryPage(1); }}
-                  >
-                    {TABLE_ROWS_OPTIONS.map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className={styles.pager}>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setCreditsSummaryPage(p => Math.max(1, p - 1))}
-                    disabled={creditsSummaryPage <= 1}
-                  >
-                    Anterior
-                  </button>
-                  <span className={styles['pager__text']}>
-                    Pagina {creditsSummaryPage} de {Math.max(1, Math.ceil((creditsSummaryPaginatedData?.total ?? 0) / creditsSummaryRowsPerPage))}
-                    {creditsSummaryPaginatedData ? ` (${creditsSummaryPaginatedData.total})` : ''}
-                  </span>
-                  <button
-                    className={styles['pager__btn']}
-                    onClick={() => setCreditsSummaryPage(p => p + 1)}
-                    disabled={!creditsSummaryPaginatedData?.hasMore}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+              <div className={styles['table-controls']}>
+                <input
+                  type="text"
+                  className={styles['table-controls__search']}
+                  placeholder="Buscar..."
+                  value={creditsSummarySearch}
+                  onChange={e => { setCreditsSummarySearch(e.target.value); setCreditsSummaryPage(1); }}
+                />
               </div>
-            </div>
 
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Estado</th>
-                  <th>Cantidad</th>
-                  <th>Total Adeudo</th>
-                  <th>Pagado</th>
-                  <th>Restante</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(creditsSummaryPaginatedData?.items ?? []).length > 0 ? (
-                  (creditsSummaryPaginatedData?.items ?? []).map(d => (
-                    <tr key={d.status}>
-                      <td>
-                        <span className={`${styles.badge} ${styles[`badge--${d.status}`]}`}>
-                          {CREDIT_STATUS_LABELS[d.status] || d.status}
-                        </span>
-                      </td>
-                      <td>{d.count}</td>
-                      <td>{formatCurrency(d.total_due)}</td>
-                      <td>{formatCurrency(d.total_paid)}</td>
-                      <td>{formatCurrency(d.total_remaining)}</td>
-                    </tr>
-                  ))
-                ) : (
+              <table className={styles.table}>
+                <thead>
                   <tr>
-                    <td className={styles.table__empty} colSpan={5}>No hay resultados</td>
+                    <th>Estado</th>
+                    <th>Cantidad</th>
+                    <th>Total Adeudo</th>
+                    <th>Pagado</th>
+                    <th>Restante</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {(creditsSummaryPaginatedData?.items ?? []).length > 0 ? (
+                    (creditsSummaryPaginatedData?.items ?? []).map(d => (
+                      <tr key={d.status}>
+                        <td>
+                          <span className={`${styles.badge} ${styles[`badge--${d.status}`]}`}>
+                            {CREDIT_STATUS_LABELS[d.status] || d.status}
+                          </span>
+                        </td>
+                        <td>{d.count}</td>
+                        <td>{formatCurrency(d.total_due)}</td>
+                        <td>{formatCurrency(d.total_paid)}</td>
+                        <td>{formatCurrency(d.total_remaining)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className={styles.table__empty} colSpan={5}>No hay resultados</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className={styles['table-pagination']}>
+              <label className={styles['table-pagination__label']}>
+                Filas
+                <select
+                  className={styles['table-pagination__select']}
+                  value={creditsSummaryRowsPerPage}
+                  onChange={e => { setCreditsSummaryRowsPerPage(Number(e.target.value)); setCreditsSummaryPage(1); }}
+                >
+                  {TABLE_ROWS_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+
+              <TablePagination
+                label="Paginación del resumen de créditos"
+                page={creditsSummaryPage}
+                totalPages={Math.max(1, Math.ceil((creditsSummaryPaginatedData?.total ?? 0) / creditsSummaryRowsPerPage))}
+                totalRows={creditsSummaryPaginatedData?.total}
+                hasNext={creditsSummaryPaginatedData?.hasMore ?? false}
+                onPrevious={() => setCreditsSummaryPage(p => Math.max(1, p - 1))}
+                onNext={() => setCreditsSummaryPage(p => p + 1)}
+              />
+            </div>
+          </>
         )}
       </>
     );

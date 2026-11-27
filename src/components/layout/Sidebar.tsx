@@ -1,4 +1,5 @@
 import { Package, Archive, ShoppingCart, Users, User, Calculator, BarChart3, Tag, Settings, Receipt, HelpCircle } from 'lucide-react';
+import { ConnectionStatusLegend, type ConnectionStatusItem } from './ConnectionStatusLegend';
 import styles from './Sidebar.module.css';
 
 export type PageId = 'products' | 'inventory' | 'pos' | 'sales' | 'credits' | 'customers' | 'cashRegister' | 'reports' | 'barcodeLabels' | 'settings' | 'help';
@@ -7,6 +8,7 @@ interface SidebarProps {
   currentPage: PageId;
   onNavigate: (page: PageId) => void;
   storeName: string;
+  connectionItems: ConnectionStatusItem[];
 }
 
 const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabled?: boolean }> = [
@@ -23,10 +25,11 @@ const NAV_ITEMS: Array<{ id: PageId; label: string; icon: typeof Package; disabl
   { id: 'help', label: 'Ayuda', icon: HelpCircle },
 ];
 
-export function Sidebar({ currentPage, onNavigate, storeName }: SidebarProps) {
+export function Sidebar({ currentPage, onNavigate, storeName, connectionItems }: SidebarProps) {
   return (
     <aside className={styles.sidebar}>
       <div className={styles['sidebar__logo']}>
+        <ConnectionStatusLegend items={connectionItems} compact />
         <div className={styles['sidebar__logo-text']}>{storeName}</div>
       </div>
       <nav className={styles['sidebar__nav']}>

@@ -5,6 +5,10 @@ import { formatCurrency, formatCalendarDate, formatDateTime, getBusinessTodayDat
 import type { CashRegisterPeriod, CashMovement, CreditPaymentListItem, SaleListItem, PaginatedResponse } from '../types';
 import { CashCorrectionForm, type CashCorrectionSelection } from '../components/cashRegister/CashCorrectionForm';
 import { expectedCashInPeriod } from '../lib/cashReconciliation';
+import { ScrollableTable } from '../components/layout/ScrollableTable';
+import tableStyles from '../components/layout/ScrollableTable.module.css';
+import { TableButton } from '../components/layout/TableButton';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './CashRegisterPage.module.css';
 
 type ViewMode = 'current' | 'history' | 'detail';
@@ -248,10 +252,10 @@ export function CashRegisterPage() {
     const endIndex = Math.min(startIndex + pageSize, totalRows);
 
     return (
-      <div className={styles['table-card']}>
-        <div className={styles['table-card__header']}>
-          <div className={styles['table-card__title']}>{title}</div>
-          <div className={styles['table-card__toolbar']}>
+      <>
+        <div className={styles['table-card']}>
+          <div className={styles['table-card__header']}>
+            <div className={styles['table-card__title']}>{title}</div>
             <input
               type="text"
               className={styles['table-card__search']}
@@ -262,89 +266,84 @@ export function CashRegisterPage() {
                 onPageChange(1);
               }}
             />
+          </div>
+          {meta ? <div className={styles['table-card__meta']}>{meta}</div> : null}
+          <ScrollableTable className={styles.table}>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Tipo</th>
+                <th>Cliente</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Fecha</th>
+                <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className={styles['table__empty']}>
+                    {searchValue.trim()
+                      ? 'Sin resultados para la busqueda'
+                      : 'No hay ventas asociadas a este periodo'}
+                  </td>
+                </tr>
+              ) : (
+                data.items.map(s => (
+                  <tr key={s.id}>
+                    <td><span className={styles['table__strong']}>#{s.id}</span></td>
+                    <td>{getSaleTypeLabel(s.sale_type)}</td>
+                    <td>{s.customer_name || '-'}</td>
+                    <td>{s.item_count}</td>
+                    <td>{formatCurrency(s.total)}</td>
+                    <td>
+                      {formatDateTime(s.created_at)}
+                      {s.captured_at && formatDateTime(s.captured_at) !== formatDateTime(s.created_at) &&
+                        <small className={styles['sale-capture']}>Capturada el {formatDateTime(s.captured_at)}</small>}
+                    </td>
+                    <td className={tableStyles['scrollable-table__action-cell']}>
+                      <TableButton onClick={() => {
+                        const source = viewMode === 'detail' ? selectedPeriod : currentPeriod;
+                        if (source) setCorrection({ period: source, sale: s });
+                      }}>Mover venta</TableButton>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </ScrollableTable>
+        </div>
+        <div className={styles.pagination}>
+          <span className={styles['pagination__meta']}>
+            {totalRows === 0
+              ? 'Sin resultados'
+              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
+          </span>
+          <div className={styles['pagination__actions']}>
             <select
-              className={styles['table-card__rows-select']}
+              aria-label="Filas por página"
+              className={styles['pagination__rows-select']}
               value={String(pageSize)}
               onChange={event => {
                 onPageSizeChange(Number(event.target.value));
                 onPageChange(1);
               }}
             >
-              {PAGE_SIZE_OPTIONS.map(size => (
-                <option key={size} value={size}>{size} por pagina</option>
+              {PAGE_SIZE_OPTIONS.map(option => (
+                <option key={option} value={option}>{option} filas</option>
               ))}
             </select>
+            <TablePagination
+              label={`Paginación de ${title.toLowerCase()}`}
+              page={safePage}
+              totalPages={totalPages}
+              onPrevious={() => onPageChange(safePage - 1)}
+              onNext={() => onPageChange(safePage + 1)}
+            />
           </div>
         </div>
-        {meta ? <div className={styles['table-card__meta']}>{meta}</div> : null}
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Tipo</th>
-              <th>Cliente</th>
-              <th>Items</th>
-              <th>Total</th>
-              <th>Fecha</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.length === 0 ? (
-              <tr>
-                <td colSpan={7} className={styles['table__empty']}>
-                  {searchValue.trim()
-                    ? 'Sin resultados para la busqueda'
-                    : 'No hay ventas asociadas a este periodo'}
-                </td>
-              </tr>
-            ) : (
-              data.items.map(s => (
-                <tr key={s.id}>
-                  <td><span className={styles['table__strong']}>#{s.id}</span></td>
-                  <td>{getSaleTypeLabel(s.sale_type)}</td>
-                  <td>{s.customer_name || '-'}</td>
-                  <td>{s.item_count}</td>
-                  <td>{formatCurrency(s.total)}</td>
-                  <td>
-                    {formatDateTime(s.created_at)}
-                    {s.captured_at && formatDateTime(s.captured_at) !== formatDateTime(s.created_at) &&
-                      <small className={styles['sale-capture']}>Capturada el {formatDateTime(s.captured_at)}</small>}
-                  </td>
-                  <td><button className={styles['btn-secondary']} onClick={() => {
-                    const source = viewMode === 'detail' ? selectedPeriod : currentPeriod;
-                    if (source) setCorrection({ period: source, sale: s });
-                  }}>Mover venta</button></td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className={styles['table-card__pagination']}>
-          <span className={styles['table-card__pagination-meta']}>
-            {totalRows === 0
-              ? 'Sin resultados'
-              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
-          </span>
-          <div className={styles['table-card__pagination-actions']}>
-            <button
-              className={styles['btn-secondary']}
-              onClick={() => onPageChange(safePage - 1)}
-              disabled={safePage <= 1}
-            >
-              Anterior
-            </button>
-            <span className={styles['table-card__pagination-page']}>Pagina {safePage} de {totalPages}</span>
-            <button
-              className={styles['btn-secondary']}
-              onClick={() => onPageChange(safePage + 1)}
-              disabled={safePage >= totalPages}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      </div>
+      </>
     );
   }
 
@@ -378,10 +377,10 @@ export function CashRegisterPage() {
     const endIndex = Math.min(startIndex + pageSize, totalRows);
 
     return (
-      <div className={styles['table-card']}>
-        <div className={styles['table-card__header']}>
-          <div className={styles['table-card__title']}>{title}</div>
-          <div className={styles['table-card__toolbar']}>
+      <>
+        <div className={styles['table-card']}>
+          <div className={styles['table-card__header']}>
+            <div className={styles['table-card__title']}>{title}</div>
             <input
               type="text"
               className={styles['table-card__search']}
@@ -392,80 +391,73 @@ export function CashRegisterPage() {
                 onPageChange(1);
               }}
             />
+          </div>
+          {meta ? <div className={styles['table-card__meta']}>{meta}</div> : null}
+          <ScrollableTable className={styles.table}>
+            <thead>
+              <tr>
+                <th>ID Abono</th>
+                <th>Credito</th>
+                <th>Venta</th>
+                <th>Cliente</th>
+                <th>Monto</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className={styles['table__empty']}>
+                    {searchValue.trim()
+                      ? 'Sin resultados para la búsqueda actual'
+                      : 'No hay abonos de credito asociados a este periodo'}
+                  </td>
+                </tr>
+              ) : (
+                data.items.map(payment => (
+                  <tr key={payment.id}>
+                    <td><span className={styles['table__strong']}>#{payment.id}</span></td>
+                    <td>#{payment.credit_id}</td>
+                    <td>#{payment.sale_id}</td>
+                    <td>{payment.customer_name || '-'}</td>
+                    <td>{formatCurrency(payment.amount)}</td>
+                    <td>{formatDateTime(payment.created_at)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </ScrollableTable>
+        </div>
+        <div className={styles.pagination}>
+          <span className={styles['pagination__meta']}>
+            {totalRows === 0
+              ? 'Sin resultados'
+              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
+          </span>
+          <div className={styles['pagination__actions']}>
             <select
-              className={styles['table-card__rows-select']}
+              aria-label="Filas por página"
+              className={styles['pagination__rows-select']}
               value={String(pageSize)}
               onChange={event => {
                 onPageSizeChange(Number(event.target.value));
                 onPageChange(1);
               }}
             >
-              {PAGE_SIZE_OPTIONS.map(size => (
-                <option key={size} value={size}>{size} por pagina</option>
+              {PAGE_SIZE_OPTIONS.map(option => (
+                <option key={option} value={option}>{option} filas</option>
               ))}
             </select>
+            <TablePagination
+              label={`Paginación de ${title.toLowerCase()}`}
+              page={safePage}
+              totalPages={totalPages}
+              onPrevious={() => onPageChange(safePage - 1)}
+              onNext={() => onPageChange(safePage + 1)}
+            />
           </div>
         </div>
-        {meta ? <div className={styles['table-card__meta']}>{meta}</div> : null}
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>ID Abono</th>
-              <th>Credito</th>
-              <th>Venta</th>
-              <th>Cliente</th>
-              <th>Monto</th>
-              <th>Fecha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.length === 0 ? (
-              <tr>
-                <td colSpan={6} className={styles['table__empty']}>
-                  {searchValue.trim()
-                    ? 'Sin resultados para la búsqueda actual'
-                    : 'No hay abonos de credito asociados a este periodo'}
-                </td>
-              </tr>
-            ) : (
-              data.items.map(payment => (
-                <tr key={payment.id}>
-                  <td><span className={styles['table__strong']}>#{payment.id}</span></td>
-                  <td>#{payment.credit_id}</td>
-                  <td>#{payment.sale_id}</td>
-                  <td>{payment.customer_name || '-'}</td>
-                  <td>{formatCurrency(payment.amount)}</td>
-                  <td>{formatDateTime(payment.created_at)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className={styles['table-card__pagination']}>
-          <span className={styles['table-card__pagination-meta']}>
-            {totalRows === 0
-              ? 'Sin resultados'
-              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRows}`}
-          </span>
-          <div className={styles['table-card__pagination-actions']}>
-            <button
-              className={styles['btn-secondary']}
-              onClick={() => onPageChange(safePage - 1)}
-              disabled={safePage <= 1}
-            >
-              Anterior
-            </button>
-            <span className={styles['table-card__pagination-page']}>Pagina {safePage} de {totalPages}</span>
-            <button
-              className={styles['btn-secondary']}
-              onClick={() => onPageChange(safePage + 1)}
-              disabled={safePage >= totalPages}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      </div>
+      </>
     );
   }
 
@@ -916,13 +908,14 @@ export function CashRegisterPage() {
                 />
               </div>
               <div className={styles['form-field']}>
-                <label className={styles['form-field__label']}>Descripcion (opcional)</label>
-                <input
-                  type="text"
+                <label className={styles['form-field__label']} htmlFor="cash-movement-description">Descripción (opcional)</label>
+                <textarea
+                  id="cash-movement-description"
                   className={styles['form-field__input']}
+                  rows={3}
                   value={movementDescription}
                   onChange={e => setMovementDescription(e.target.value)}
-                  placeholder="Ej. Compra de papeleria, pago de luz..."
+                  placeholder="Ej. Compra de papelería o pago de luz"
                 />
               </div>
               {movementError && <span className={styles['form-field__error']}>{movementError}</span>}
@@ -939,14 +932,14 @@ export function CashRegisterPage() {
 
           {/* Movements List */}
           <div className={styles['table-card']}>
-            <table className={styles.table}>
+            <ScrollableTable className={styles.table}>
               <thead>
                 <tr>
                   <th>Tipo</th>
                   <th>Monto</th>
                   <th>Descripcion</th>
                   <th>Fecha</th>
-                  <th style={{ textAlign: 'center' }}>Acciones</th>
+                  <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -967,29 +960,31 @@ export function CashRegisterPage() {
                       <td>{formatCurrency(m.amount)}</td>
                       <td>{m.description || '-'}</td>
                       <td>{formatDateTime(m.created_at)}</td>
-                      <td style={{ textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button
-                          className={styles['btn-icon']}
-                          onClick={() => openEditMovementModal(m)}
-                          title="Editar"
-                          disabled={submitting}
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          className={`${styles['btn-icon']} ${styles['btn-icon--danger']}`}
-                          onClick={() => handleDeleteMovement(m.id)}
-                          title="Eliminar"
-                          disabled={submitting}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                      <td className={tableStyles['scrollable-table__action-cell']}>
+                        <div className={tableStyles['scrollable-table__actions']}>
+                          <TableButton
+                            variant="icon"
+                            onClick={() => openEditMovementModal(m)}
+                            title="Editar"
+                            disabled={submitting}
+                          >
+                            <Edit2 size={16} />
+                          </TableButton>
+                          <TableButton
+                            variant="icon" tone="danger"
+                            onClick={() => handleDeleteMovement(m.id)}
+                            title="Eliminar"
+                            disabled={submitting}
+                          >
+                            <Trash2 size={16} />
+                          </TableButton>
+                        </div>
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
-            </table>
+            </ScrollableTable>
           </div>
         </div>
 
@@ -1090,7 +1085,7 @@ export function CashRegisterPage() {
   function renderHistory() {
     return (
       <div className={styles['table-card']}>
-        <table className={styles.table}>
+        <ScrollableTable className={styles.table}>
           <thead>
             <tr>
               <th>Periodo</th>
@@ -1131,7 +1126,7 @@ export function CashRegisterPage() {
               ))
             )}
           </tbody>
-        </table>
+        </ScrollableTable>
       </div>
     );
   }
@@ -1264,7 +1259,7 @@ export function CashRegisterPage() {
 
         {/* Period Movements */}
         <div className={styles['table-card']}>
-          <table className={styles.table}>
+          <ScrollableTable className={styles.table}>
             <thead>
               <tr>
                 <th>Tipo</th>
@@ -1295,7 +1290,7 @@ export function CashRegisterPage() {
                 ))
               )}
             </tbody>
-          </table>
+          </ScrollableTable>
         </div>
       </div>
     );
@@ -1394,13 +1389,14 @@ export function CashRegisterPage() {
                 />
               </div>
               <div className={styles['form-field']}>
-                <label className={styles['form-field__label']}>Descripcion (opcional)</label>
-                <input
-                  type="text"
+                <label className={styles['form-field__label']} htmlFor="cash-movement-edit-description">Descripción (opcional)</label>
+                <textarea
+                  id="cash-movement-edit-description"
                   className={styles['form-field__input']}
+                  rows={3}
                   value={editDescription}
                   onChange={e => setEditDescription(e.target.value)}
-                  placeholder="Descripcion"
+                  placeholder="Descripción del movimiento"
                 />
               </div>
               {editError && <span className={styles['form-field__error']}>{editError}</span>}

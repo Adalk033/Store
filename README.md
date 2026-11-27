@@ -2,12 +2,12 @@
 
 Aplicación de punto de venta (POS) para papelería. El cliente Electron consulta y registra las operaciones mediante la API de AWS.
 
-## Caracteristicas
+## Características
 
 - Gestion de productos y categorias
 - Control de inventario
 - Ventas de mostrador y ventas a credito
-- Caja mensual
+- Caja mensual con ventas históricas, edición de cortes cerrados y traslado de ventas entre cajas. Consulta las [reglas de Caja, Ventas y Créditos](docs/reglas-caja-ventas-creditos.md).
 - Reportes basicos
 
 ## Stack
@@ -44,6 +44,17 @@ si `node_modules` no coincide con el lockfile.
 ```bash
 pnpm run dev
 ```
+
+### Pruebas locales
+
+Las suites de Caja y del prototipo de DynamoDB usan datos sintéticos y servicios simulados.
+
+```bash
+pnpm exec node --test tests/cashCorrections.test.mjs tests/cashRegisterDates.test.mjs
+pnpm exec node --test cloud/prototype-dynamodb/contract.test.mjs cloud/prototype-dynamodb/migration.test.mjs
+```
+
+La [documentación del prototipo de DynamoDB](cloud/prototype-dynamodb/README.md) describe su contrato, su entorno de pruebas y los ensayos de migración y recuperación.
 
 ## Build
 

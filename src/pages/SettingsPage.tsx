@@ -345,8 +345,10 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
         </div>
 
         <div className={styles.field}>
-          <label className={styles['field__label']}>API Key</label>
+          <label className={styles['field__label']} htmlFor="cloud-api-key">API Key</label>
           <input
+            id="cloud-api-key"
+            aria-describedby="cloud-api-key-hint"
             className={styles['field__input']}
             type="password"
             value={cloudApiKey}
@@ -354,11 +356,11 @@ export function SettingsPage({ onStoreNameChange }: SettingsPageProps) {
               setCloudApiKeyInput(e.target.value);
               setCloudApiKeyDirty(true);
             }}
-            placeholder={hasStoredCloudApiKey ? 'API key guardada (escribe para reemplazar o deja vacio para eliminar)' : 'Pega tu API key'}
+            placeholder={hasStoredCloudApiKey ? 'Nueva API key' : 'Pega tu API key'}
           />
-          <span className={styles['field__hint']}>
+          <span id="cloud-api-key-hint" className={styles['field__hint']}>
             {hasStoredCloudApiKey
-              ? 'Actualmente existe una API key guardada de forma cifrada local.'
+              ? 'Hay una API key cifrada en este equipo. Escribe una nueva para reemplazarla o usa el botón para eliminarla.'
               : 'No hay API key guardada.'}
           </span>
           {hasStoredCloudApiKey && (

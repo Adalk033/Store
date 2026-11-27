@@ -4,6 +4,10 @@ import { useCustomers } from '../hooks/useCustomers';
 import { useCredits } from '../hooks/useCredits';
 import { formatCurrency, formatDate, formatDateTime } from '../lib/formatters';
 import type { Credit, CreditPayment, CreditListItem, Customer, CustomerListItem, CustomersPaginatedQuery } from '../types';
+import { ScrollableTable } from '../components/layout/ScrollableTable';
+import tableStyles from '../components/layout/ScrollableTable.module.css';
+import { TableButton } from '../components/layout/TableButton';
+import { TablePagination } from '../components/layout/TablePagination';
 import styles from './CustomersPage.module.css';
 
 type ViewMode = 'list' | 'profile';
@@ -483,7 +487,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
 
         <section className={styles['table-card']}>
           <div className={styles['table-card__title']}>Historial de creditos</div>
-          <table className={styles.table}>
+          <ScrollableTable className={styles.table}>
             <thead>
               <tr>
                 <th>#</th>
@@ -495,7 +499,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                 <th>Saldo</th>
                 <th>Progreso</th>
                 <th>Estado</th>
-                <th></th>
+                <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -539,9 +543,8 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                           {STATUS_LABELS[credit.status]}
                         </span>
                       </td>
-                      <td>
-                        <button
-                          className={styles['btn-secondary']}
+                      <td className={tableStyles['scrollable-table__action-cell']}>
+                        <TableButton
                           onClick={(event) => {
                             event.stopPropagation();
                             if (onViewCreditDetail) {
@@ -552,50 +555,39 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                           }}
                         >
                           Ver detalle
-                        </button>
+                        </TableButton>
                       </td>
                     </tr>
                   );
                 })
               )}
             </tbody>
-          </table>
-
-          {profileCreditsTotal > ROWS_PER_PAGE && (
-            <div className={styles.pagination}>
-              <span className={styles['pagination__meta']}>
-                {profileCreditsTotal} creditos en total
-              </span>
-              <div className={styles['pagination__actions']}>
-                <button
-                  className={styles['btn-secondary']}
-                  disabled={profileCreditsPage <= 1}
-                  onClick={() => {
-                    const newPage = profileCreditsPage - 1;
-                    setProfileCreditsPage(newPage);
-                    void loadProfileCredits(selectedCustomer.id, newPage);
-                  }}
-                >
-                  Anterior
-                </button>
-                <span className={styles['pagination__page']}>
-                  Pagina {profileCreditsPage} de {profileTotalPages}
-                </span>
-                <button
-                  className={styles['btn-secondary']}
-                  disabled={profileCreditsPage >= profileTotalPages}
-                  onClick={() => {
-                    const newPage = profileCreditsPage + 1;
-                    setProfileCreditsPage(newPage);
-                    void loadProfileCredits(selectedCustomer.id, newPage);
-                  }}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
-          )}
+          </ScrollableTable>
         </section>
+
+        {profileCreditsTotal > ROWS_PER_PAGE && (
+          <div className={styles.pagination}>
+            <span className={styles['pagination__meta']}>
+              {profileCreditsTotal} creditos en total
+            </span>
+            <TablePagination
+              label="Paginación del historial de créditos"
+              className={styles['pagination__actions']}
+              page={profileCreditsPage}
+              totalPages={profileTotalPages}
+              onPrevious={() => {
+                const newPage = profileCreditsPage - 1;
+                setProfileCreditsPage(newPage);
+                void loadProfileCredits(selectedCustomer.id, newPage);
+              }}
+              onNext={() => {
+                const newPage = profileCreditsPage + 1;
+                setProfileCreditsPage(newPage);
+                void loadProfileCredits(selectedCustomer.id, newPage);
+              }}
+            />
+          </div>
+        )}
 
         {selectedCredit && (
           <section className={styles['detail-card']}>
@@ -608,7 +600,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
               <span>Saldo: {formatCurrency(selectedCredit.total_due - selectedCredit.amount_paid)}</span>
             </div>
 
-            <table className={styles.table}>
+            <ScrollableTable className={styles.table}>
               <thead>
                 <tr>
                   <th>Fecha y hora</th>
@@ -627,7 +619,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                   ))
                 )}
               </tbody>
-            </table>
+            </ScrollableTable>
           </section>
         )}
       </div>
@@ -674,7 +666,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
       </div>
 
       <div className={styles['table-card']}>
-        <table className={styles.table}>
+        <ScrollableTable className={styles.table}>
           <thead>
             <tr>
               <th>Cliente</th>
@@ -683,7 +675,7 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
               <th>Creditos activos</th>
               <th>Deuda actual</th>
               <th>Ultimo credito</th>
-              <th></th>
+              <th scope="col" className={tableStyles['scrollable-table__action-cell']}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -717,51 +709,39 @@ export function CustomersPage({ initialCustomerId, onInitialCustomerHandled, onV
                       {formatCurrency(customer.total_debt)}
                     </td>
                     <td>{customer.last_credit_date ? formatDate(customer.last_credit_date) : 'Sin creditos'}</td>
-                    <td>
-                      <button
-                        className={styles['btn-secondary']}
+                    <td className={tableStyles['scrollable-table__action-cell']}>
+                      <TableButton
                         onClick={(event) => {
                           event.stopPropagation();
                           openCustomerProfile(customer);
                         }}
                       >
                         Ver perfil
-                      </button>
+                      </TableButton>
                     </td>
                   </tr>
                 );
               })
             )}
           </tbody>
-        </table>
-
-        {totalCustomers > ROWS_PER_PAGE && (
-          <div className={styles.pagination}>
-            <span className={styles['pagination__meta']}>
-              {totalCustomers} clientes en total
-            </span>
-            <div className={styles['pagination__actions']}>
-              <button
-                className={styles['btn-secondary']}
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage(p => p - 1)}
-              >
-                Anterior
-              </button>
-              <span className={styles['pagination__page']}>
-                Pagina {currentPage} de {totalPages}
-              </span>
-              <button
-                className={styles['btn-secondary']}
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage(p => p + 1)}
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        )}
+        </ScrollableTable>
       </div>
+
+      {totalCustomers > ROWS_PER_PAGE && (
+        <div className={styles.pagination}>
+          <span className={styles['pagination__meta']}>
+            {totalCustomers} clientes en total
+          </span>
+          <TablePagination
+            label="Paginación de clientes"
+            className={styles['pagination__actions']}
+            page={currentPage}
+            totalPages={totalPages}
+            onPrevious={() => setCurrentPage(p => p - 1)}
+            onNext={() => setCurrentPage(p => p + 1)}
+          />
+        </div>
+      )}
     </div>
   );
 }
